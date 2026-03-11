@@ -6,3 +6,5 @@ python-multipart
 pytest
 httpx
 alembic
+authlib
+itsdangerous
