@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from backend.app.main import app
+from backend.app.main import fastapi_app, app
 from backend.app.database import Base, get_db
 from backend.app.auth import get_current_user
 
@@ -18,12 +18,12 @@ def override_get_db():
     finally:
         db.close()
 
-app.dependency_overrides[get_db] = override_get_db
+fastapi_app.dependency_overrides[get_db] = override_get_db
 
 def override_get_current_user():
     return {"email": "test@example.com", "name": "Test User"}
 
-app.dependency_overrides[get_current_user] = override_get_current_user
+fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
 
 client = TestClient(app)
 

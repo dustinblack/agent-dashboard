@@ -1,0 +1,2 @@
+python-socketio[asyncio_client]
+aiohttp
