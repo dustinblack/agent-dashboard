@@ -59,3 +59,27 @@ def test_read_sessions():
     response = client.get("/sessions")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+def test_cors_preflight():
+    """Test that the OPTIONS preflight request is properly handled by CORSMiddleware."""
+    headers = {
+        "Origin": "http://localhost:8080",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "Authorization",
+    }
+    response = client.options("/machines", headers=headers)
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:8080"
+    assert response.headers.get("access-control-allow-credentials") == "true"
+
+def test_cors_get_request():
+    """Test that a GET request returns the proper CORS headers."""
+    headers = {
+        "Origin": "http://localhost:8080",
+    }
+    response = client.get("/machines", headers=headers)
+    assert response.status_code == 200
+    assert "access-control-allow-origin" in response.headers
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:8080"
+    assert response.headers.get("access-control-allow-credentials") == "true"
+

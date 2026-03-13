@@ -18,8 +18,9 @@ async def connect(sid, environ, auth):
     machine_token = headers_str.get('x-machine-token') or (auth and auth.get('token'))
 
     if not machine_token:
-        # Reject connection
-        return False
+        # Allow UI clients to connect without a machine token
+        print(f"UI client connected: (SID: {sid})")
+        return True
         
     db = next(database.get_db())
     try:
@@ -38,7 +39,7 @@ async def connect(sid, environ, auth):
             session['db_session_id'] = new_session.id
             
         # Join a room specific to this session ID so the UI can subscribe to it
-        sio.enter_room(sid, sid, namespace='/terminal')
+        await sio.enter_room(sid, sid, namespace='/terminal')
         print(f"Agent connected: {machine.name} (SID: {sid})")
         
     finally:
@@ -94,7 +95,7 @@ async def handle_join_room(sid, data):
     """
     room = data.get('room')
     if room:
-        sio.enter_room(sid, room, namespace='/terminal')
+        await sio.enter_room(sid, room, namespace='/terminal')
         print(f"User SID {sid} joined room: {room}")
 
 @sio.on('terminal_input', namespace='/terminal')
