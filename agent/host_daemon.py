@@ -7,14 +7,19 @@ import socketio
 import select
 import signal
 from typing import Dict, Optional
+from collections import deque
 
 class HostDaemon:
     def __init__(self, server_url: str, host_token: str):
         self.server_url = server_url
         self.host_token = host_token
         self.sio = socketio.AsyncClient()
-        self.agents: Dict[str, Dict] = {} # agent_id -> {master_fd, pid, tool}
+        self.agents: Dict[str, Dict] = {} # agent_id -> {master_fd, pid, tool, history}
         self.running = True
+
+        @self.sio.on('*', namespace='/terminal')
+        async def catch_all(event, data):
+            print(f"DEBUG: Received event '{event}' with data: {data}")
 
         @self.sio.on('connect', namespace='/terminal')
         async def on_connect():
@@ -30,13 +35,47 @@ class HostDaemon:
             tool = data.get('tool', 'bash')
             await self.spawn_agent(agent_id, tool)
 
+        @self.sio.on('stop_agent', namespace='/terminal')
+        async def on_stop_agent(data):
+            """
+            Triggered by the server to stop an active AI agent session.
+            data: {'agent_id': '...'}
+            """
+            agent_id = data.get('agent_id')
+            print(f"Received remote stop request for agent: {agent_id}")
+            if agent_id in self.agents:
+                print(f"Stopping agent {agent_id} by request.")
+                pid = self.agents[agent_id]['pid']
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    print(f"Killed process {pid}")
+                except OSError as e:
+                    print(f"Failed to kill process {pid}: {e}")
+                self.close_agent(agent_id)
+            else:
+                print(f"Agent {agent_id} not found in active agents list.")
+
+        @self.sio.on('request_history', namespace='/terminal')
+        async def on_request_history(data):
+            """
+            Triggered when a UI client joins an agent room and needs past output.
+            data: {'agent_id': '...'}
+            """
+            agent_id = data.get('agent_id')
+            if agent_id in self.agents and self.sio.connected:
+                print(f"Replaying history for agent: {agent_id}")
+                for chunk in self.agents[agent_id]['history']:
+                    await self.sio.emit('terminal_output', {
+                        'sid': agent_id, 
+                        'output': chunk
+                    }, namespace='/terminal')
+
         @self.sio.on('terminal_input', namespace='/terminal')
         async def on_terminal_input(data):
             """
             Receives keystrokes from the UI and writes them to the pty.
             data: {'target_sid': '...', 'input': '...'}
             """
-            # Note: in this new model, target_sid is the agent_id
             agent_id = data.get('target_sid')
             user_input = data.get('input', '')
             
@@ -61,16 +100,22 @@ class HostDaemon:
 
         pid, fd = pty.fork()
         if pid == 0: # Child process
+            # Ensure the child inherits the daemon's environment variables (including API keys)
+            # Inject terminal capabilities for full color support
+            env = os.environ.copy()
+            env['TERM'] = 'xterm-256color'
+            env['COLORTERM'] = 'truecolor'
             try:
-                os.execvp(cmd[0], cmd)
+                os.execvpe(cmd[0], cmd, env)
             except Exception as e:
                 print(f"Failed to execute {cmd}: {e}")
-                sys.exit(1)
+                os._exit(1)
         else: # Parent process
             self.agents[agent_id] = {
                 'master_fd': fd,
                 'pid': pid,
-                'tool': tool
+                'tool': tool,
+                'history': deque(maxlen=1000) # Store last 1000 chunks of output
             }
             # Force an initial newline to trigger prompt rendering
             os.write(fd, b'\n')
@@ -93,8 +138,12 @@ class HostDaemon:
                 continue
 
             for fd in r:
-                # Find which agent this FD belongs to
-                agent_id = next(aid for aid, info in self.agents.items() if info['master_fd'] == fd)
+                # Find which agent this FD belongs to safely
+                agent_entry = next((item for item in self.agents.items() if item[1]['master_fd'] == fd), None)
+                if not agent_entry:
+                    continue
+                
+                agent_id, info = agent_entry
                 
                 try:
                     data = os.read(fd, 1024)
@@ -104,6 +153,9 @@ class HostDaemon:
                         
                     if self.sio.connected:
                         decoded_data = data.decode('utf-8', errors='replace')
+                        # Save to history buffer
+                        self.agents[agent_id]['history'].append(decoded_data)
+                        
                         await self.sio.emit('terminal_output', {
                             'sid': agent_id, 
                             'output': decoded_data
@@ -122,6 +174,9 @@ class HostDaemon:
             except OSError:
                 pass
             del self.agents[agent_id]
+            # Notify the server that this agent process has ended
+            if self.sio.connected:
+                asyncio.create_task(self.sio.emit('agent_exit', {'agent_id': agent_id}, namespace='/terminal'))
 
     def cleanup_closed_agents(self):
         to_delete = []
@@ -141,14 +196,25 @@ class HostDaemon:
                 headers={'X-Host-Token': self.host_token}
             )
             # Run the output watcher as a background task
-            watcher_task = asyncio.create_task(self.watch_agents())
-            await watcher_task
+            self.watcher_task = asyncio.create_task(self.watch_agents())
+            await self.watcher_task
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
             print(f"Daemon error: {e}")
         finally:
             self.running = False
+            for agent_id in list(self.agents.keys()):
+                self.close_agent(agent_id)
             if self.sio.connected:
                 await self.sio.disconnect()
+            print("Daemon stopped.")
+
+    def stop(self):
+        print("\nShutting down daemon...")
+        self.running = False
+        if hasattr(self, 'watcher_task') and not self.watcher_task.done():
+            self.watcher_task.cancel()
 
 async def main():
     SERVER_URL = os.getenv("DASHBOARD_URL", "http://localhost:8000")
@@ -160,15 +226,14 @@ async def main():
 
     daemon = HostDaemon(SERVER_URL, HOST_TOKEN)
     
-    # Handle termination signals
-    def stop_daemon(*args):
-        daemon.running = False
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, stop_daemon)
-    signal.signal(signal.SIGTERM, stop_daemon)
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, daemon.stop)
 
     await daemon.run()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass

@@ -30,9 +30,14 @@ async def connect(sid, environ, auth):
             session['host_id'] = host.id
             session['is_host'] = True
             
+        # Update host status in database
+        host.status = "online"
+        db.commit()
+
         # Join a room specific to this host's ID so we can send spawn commands to it
-        await sio.enter_room(sid, f"host_{host.id}", namespace='/terminal')
-        print(f"Host Daemon connected: {host.name} (SID: {sid})")
+        room_name = f"host_{host.id}"
+        await sio.enter_room(sid, room_name, namespace='/terminal')
+        print(f"Host Daemon connected: {host.name} (SID: {sid}) joined room: {room_name}")
         
     finally:
         db.close()
@@ -40,13 +45,20 @@ async def connect(sid, environ, auth):
 @sio.on('disconnect', namespace='/terminal')
 async def disconnect(sid):
     """
-    Handles disconnection. If it was a host, we could mark all its agents as closed.
+    Handles disconnection. If it was a host, mark it as offline.
     """
     async with sio.session(sid, namespace='/terminal') as session:
         if session.get('is_host'):
             host_id = session.get('host_id')
-            print(f"Host Daemon {host_id} disconnected (SID: {sid})")
-            # In a production app, we'd mark all agents for this host as 'closed' here.
+            db = next(database.get_db())
+            try:
+                host = db.query(models.Host).filter(models.Host.id == host_id).first()
+                if host:
+                    host.status = "offline"
+                    db.commit()
+                    print(f"Host Daemon {host.name} (ID: {host_id}) disconnected and marked offline.")
+            finally:
+                db.close()
 
 @sio.on('terminal_output', namespace='/terminal')
 async def handle_terminal_output(sid, data):
@@ -72,11 +84,35 @@ async def handle_join_room(sid, data):
     if agent_id:
         await sio.enter_room(sid, agent_id, namespace='/terminal')
         print(f"UI Client {sid} joined Agent room: {agent_id}")
-        # Signal the host daemon to force a prompt redraw for this agent
-        # We need to find which host SID is responsible for this agent_id.
-        # For simplicity in this refactor, we'll broadcast the redraw request
-        # to all hosts, or ideally the specific host if we had a mapping.
+        
+        # 1. Request history replay from the host daemon
+        await sio.emit('request_history', {'agent_id': agent_id}, namespace='/terminal')
+        
+        # 2. Also send a carriage return to force a fresh prompt redraw
         await sio.emit('terminal_input', {'target_sid': agent_id, 'input': '\r'}, namespace='/terminal')
+
+@sio.on('agent_exit', namespace='/terminal')
+async def handle_agent_exit(sid, data):
+    """
+    Called by the Host Daemon when an agent process terminates.
+    data: {'agent_id': '...'}
+    """
+    agent_id = data.get('agent_id')
+    if agent_id:
+        db = next(database.get_db())
+        try:
+            db_agent = db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
+            if db_agent:
+                db_agent.status = "closed"
+                from datetime import datetime, timezone
+                db_agent.ended_at = datetime.now(timezone.utc)
+                db.commit()
+                print(f"Agent {agent_id} exited and marked as closed in DB.")
+                
+                # Notify UI clients that the agent is gone
+                await sio.emit('agent_status_update', {'agent_id': agent_id, 'status': 'closed'}, namespace='/terminal')
+        finally:
+            db.close()
 
 @sio.on('terminal_input', namespace='/terminal')
 async def handle_terminal_input(sid, data):

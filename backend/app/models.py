@@ -12,6 +12,7 @@ class Host(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
     host_token = Column(String, unique=True, index=True, nullable=False)
+    status = Column(String, default="offline") # online, offline
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     agents = relationship("Agent", back_populates="host")

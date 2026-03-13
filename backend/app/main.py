@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
-from datetime import datetime
+from datetime import datetime, timezone
 
 from . import models, database, auth, socket
 import socketio
@@ -44,6 +44,7 @@ class HostSchema(HostBase):
 
     id: int
     name: str
+    status: str
     created_at: datetime
 
 class AgentBase(BaseModel):
@@ -60,6 +61,7 @@ class AgentSchema(AgentBase):
     id: int
     host_id: int
     status: str
+    tool_name: Optional[str] = None
     started_at: datetime
     ended_at: Optional[datetime] = None
 
@@ -134,6 +136,11 @@ async def spawn_agent(request: SpawnRequest, db: Session = Depends(database.get_
     """
     Commands a remote host to spawn a new AI agent session.
     """
+    # 0. Check if host is online
+    host = db.query(models.Host).filter(models.Host.id == request.host_id).first()
+    if not host or host.status != "online":
+        raise HTTPException(status_code=400, detail="Cannot spawn agent: Host is offline or does not exist.")
+
     import uuid
     agent_uuid = str(uuid.uuid4())
     
@@ -158,6 +165,40 @@ async def spawn_agent(request: SpawnRequest, db: Session = Depends(database.get_
     )
     
     return db_agent
+
+@fastapi_app.post("/agents/{agent_id}/stop")
+async def stop_agent(agent_id: str, db: Session = Depends(database.get_db), user: dict = Depends(auth.get_current_user)):
+    """
+    Commands a remote host to stop an active AI agent session.
+    """
+    db_agent = db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
+    if not db_agent:
+        raise HTTPException(status_code=404, detail="Agent not found.")
+    
+    if db_agent.status == "closed":
+        return {"status": "already closed"}
+
+    # 1. Update database immediately so the UI removes the card on next refresh
+    db_agent.status = "closed"
+    db_agent.ended_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # 2. Relay command to the specific host daemon to kill the actual process
+    await socket.sio.emit(
+        'stop_agent', 
+        {'agent_id': agent_id}, 
+        room=f"host_{db_agent.host_id}", 
+        namespace='/terminal'
+    )
+    
+    # 3. Notify all UI clients via Socket.IO for real-time removal
+    await socket.sio.emit(
+        'agent_status_update', 
+        {'agent_id': agent_id, 'status': 'closed'}, 
+        namespace='/terminal'
+    )
+    
+    return {"status": "stop command issued"}
 
 @fastapi_app.get("/health")
 def health_check():

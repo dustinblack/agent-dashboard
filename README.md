@@ -18,9 +18,9 @@ sudo dnf install podman podman-compose
 ```
 
 ### Running the Hub (Local Test Configuration)
-1. Build and start the containers:
+1. Build and start the containers (Always use `--no-cache` after code changes to ensure the latest version is built):
    ```bash
-   podman-compose up -d --build
+   podman-compose build --no-cache && podman-compose up -d
    ```
 2. Hub UI: `http://localhost:8080`
 3. Hub API: `http://localhost:8000`
@@ -40,15 +40,22 @@ curl -X POST http://localhost:8000/hosts \
 ```
 
 ### 2. Run the Host Daemon (Containerized)
+
+It is recommended to mount your local development directory and Gemini configuration folder so the spawned agents can access your code and maintain persistent settings.
+
 ```bash
 cd agent/
 podman build -t agent-dashboard-daemon -f Containerfile .
+
 podman run -it --rm --network=host \
   -e DASHBOARD_URL="http://127.0.0.1:8000" \
   -e HOST_TOKEN="secret-token-123" \
+  -e GEMINI_API_KEY="your-key-here" \
+  -v /path/to/your/git:/git:Z \
+  -v $HOME/.gemini/:/root/.gemini:Z \
   agent-dashboard-daemon
 ```
-*(Note: Use the Hub's IP address for `DASHBOARD_URL` if the daemon is on a different machine.)*
+*(Note: Use the `:Z` flag on RHEL/Fedora to handle SELinux permissions.)*
 
 ### 3. Spawn Agents
 Go to the Web UI (`http://localhost:8080`). You will see your workstation listed. Click **"Spawn Gemini"** or **"Spawn Claude"** to start a remote AI session. The UI will automatically attach you to the terminal.

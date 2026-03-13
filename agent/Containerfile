@@ -2,10 +2,23 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-# Install basic utilities
-RUN apt-get update && apt-get install -y --no-install-recommends bash curl && rm -rf /var/lib/apt/lists/*
+# Install basic utilities, nodejs, and npm
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    curl \
+    nodejs \
+    npm \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install
+# Install actual AI CLIs via npm
+RUN npm install -g @google/gemini-cli @anthropic-ai/claude-code
+
+# Pre-configure Gemini CLI to skip API key prompt
+RUN mkdir -p /root/.gemini && \
+    echo '{"security": {"auth": {"selectedType": "gemini-api"}}}' > /root/.gemini/settings.json
+
+# Copy requirements and install daemon python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

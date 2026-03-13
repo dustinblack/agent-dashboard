@@ -8,6 +8,7 @@ const api = axios.create({
 export interface Host {
   id: number;
   name: string;
+  status: string;
   created_at: string;
 }
 
@@ -35,6 +36,10 @@ export const getAgents = async (): Promise<Agent[]> => {
 export const spawnAgent = async (hostId: number, toolName: string): Promise<Agent> => {
   const response = await api.post('/agents/spawn', { host_id: hostId, tool_name: toolName });
   return response.data;
+};
+
+export const stopAgent = async (agentId: string): Promise<void> => {
+  await api.post(`/agents/${agentId}/stop`);
 };
 
 export const getMe = async () => {
