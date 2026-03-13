@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -10,3 +11,14 @@ ENV/
 *.db-shm
 *.db-wal
 .pytest_cache/
+
+# Node / React
+node_modules/
+dist/
+dist-ssr/
+*.local
+.eslintcache
+.stylelintcache
+.vite/
+.vercel
+.netlify

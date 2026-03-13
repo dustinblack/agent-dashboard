@@ -87,6 +87,16 @@ async def handle_terminal_output(sid, data):
                 finally:
                     db.close()
 
+@sio.on('join_room', namespace='/terminal')
+async def handle_join_room(sid, data):
+    """
+    Allows the UI to join a specific session's room to receive its output.
+    """
+    room = data.get('room')
+    if room:
+        sio.enter_room(sid, room, namespace='/terminal')
+        print(f"User SID {sid} joined room: {room}")
+
 @sio.on('terminal_input', namespace='/terminal')
 async def handle_terminal_input(sid, data):
     """

@@ -2,6 +2,11 @@
 
 This document establishes the baseline behavior and technical standards for AI agents collaborating on the Agent Dashboard project.
 
+## Inspiration
+
+This project is inspired by the following blog post:
+- [Building an AI Coding Agent Dashboard with React and FastAPI](https://blog.marcnuri.com/ai-coding-agent-dashboard)
+
 ## Core Technical Stack
 
 - **Backend**: Python 3.9+ with FastAPI and `python-socketio`.
