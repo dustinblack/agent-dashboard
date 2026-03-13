@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { getHosts, getAgents } from '../api';
+import { getHosts, getAgents, spawnAgent } from '../api';
 import type { Host, Agent } from '../api';
-import { Terminal, Cpu, Clock, Activity } from 'lucide-react';
+import { Terminal, Cpu, Clock, Activity, PlusCircle } from 'lucide-react';
 
 interface DashboardProps {
   onAttach: (agentId: string) => void;
@@ -27,13 +27,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
     }
   };
 
+  const handleSpawn = async (hostId: number, toolName: string) => {
+      try {
+          const newAgent = await spawnAgent(hostId, toolName);
+          await fetchData(); // Refresh to show the new agent card
+          onAttach(newAgent.agent_id); // Auto-attach to the new agent
+      } catch (err) {
+          console.error("Failed to spawn agent:", err);
+          alert("Failed to spawn agent. Check console for details.");
+      }
+  };
+
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 5000); // Refresh every 5s
     return () => clearInterval(interval);
   }, []);
 
-  if (loading) return <div className="p-8">Loading dashboard...</div>;
+  if (loading) return <div className="p-8 text-white">Loading dashboard...</div>;
   if (error) return (
     <div className="p-8">
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -74,7 +85,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
         <h2 className="text-xl font-semibold mb-4 text-slate-300">Active Agents</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {agents.filter(a => a.status === 'active').length === 0 && (
-            <p className="text-slate-500 italic">No active agents found.</p>
+            <p className="text-slate-500 italic">No active agents found. Spawn one below.</p>
           )}
           {agents.filter(a => a.status === 'active').map(agent => {
             const host = hosts.find(h => h.id === agent.host_id);
@@ -119,6 +130,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                 <th className="p-4 font-semibold">Name</th>
                 <th className="p-4 font-semibold">ID</th>
                 <th className="p-4 font-semibold">Registered At</th>
+                <th className="p-4 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -127,6 +139,28 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                   <td className="p-4 font-medium">{host.name}</td>
                   <td className="p-4 font-mono text-xs">{host.id}</td>
                   <td className="p-4 text-sm">{new Date(host.created_at).toLocaleString()}</td>
+                  <td className="p-4">
+                      <div className="flex gap-2">
+                        <button 
+                            onClick={() => handleSpawn(host.id, 'gemini')}
+                            className="text-xs bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 px-3 py-1.5 rounded-md border border-blue-500/30 transition-colors flex items-center gap-1.5"
+                        >
+                            <PlusCircle size={14} /> Spawn Gemini
+                        </button>
+                        <button 
+                            onClick={() => handleSpawn(host.id, 'claude')}
+                            className="text-xs bg-purple-500/20 hover:bg-purple-500/40 text-purple-400 px-3 py-1.5 rounded-md border border-purple-500/30 transition-colors flex items-center gap-1.5"
+                        >
+                            <PlusCircle size={14} /> Spawn Claude
+                        </button>
+                        <button 
+                            onClick={() => handleSpawn(host.id, 'bash')}
+                            className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-md border border-slate-600 transition-colors flex items-center gap-1.5"
+                        >
+                            <PlusCircle size={14} /> Spawn Bash
+                        </button>
+                      </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

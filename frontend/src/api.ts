@@ -32,6 +32,11 @@ export const getAgents = async (): Promise<Agent[]> => {
   return response.data;
 };
 
+export const spawnAgent = async (hostId: number, toolName: string): Promise<Agent> => {
+  const response = await api.post('/agents/spawn', { host_id: hostId, tool_name: toolName });
+  return response.data;
+};
+
 export const getMe = async () => {
   const response = await api.get('/me');
   return response.data;
