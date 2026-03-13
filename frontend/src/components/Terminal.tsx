@@ -32,9 +32,9 @@ const Terminal: React.FC<TerminalProps> = ({ sessionId, onClose }) => {
     xtermRef.current = term;
 
     // Initialize Socket.IO
-    const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:8000', {
+    const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const socket = io(`${baseURL}/terminal`, {
       path: '/socket.io',
-      namespace: '/terminal',
       transports: ['websocket'],
     });
     socketRef.current = socket;

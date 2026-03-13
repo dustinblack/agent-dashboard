@@ -27,7 +27,7 @@ sudo dnf install podman podman-compose
    ```
 
 2. The application will be accessible at:
-   - Frontend: `http://localhost:80` (or the IP of your RHEL server)
+   - Frontend: `http://localhost:8080` (or the IP of your RHEL server)
    - Backend API: `http://localhost:8000`
 
 ### Persistence
