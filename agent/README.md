@@ -17,7 +17,26 @@ The wrapper relies on two environment variables:
 - `MACHINE_TOKEN`: (Required) The pre-shared API key for this specific machine, obtained from the Dashboard.
 - `DASHBOARD_URL`: (Optional) The URL of the central Dashboard Backend. Defaults to `http://localhost:8000`.
 
-## Usage
+## Containerized Usage (Podman / Docker)
+
+You can also run the agent as a container so that all dependencies are included without polluting your local environment.
+
+1. Build the container image:
+   ```bash
+   cd agent/
+   podman build -t agent-dashboard-agent -f Containerfile .
+   ```
+
+2. Run the agent container interactively:
+   ```bash
+   podman run -it --rm \
+     -e DASHBOARD_URL="http://<HOST_IP>:8000/terminal" \
+     -e MACHINE_TOKEN="your-secret-token" \
+     agent-dashboard-agent bash
+   ```
+   *(Note: Use your actual host IP address for `DASHBOARD_URL` instead of `localhost` since `localhost` inside the container refers to the container itself.)*
+
+## Usage (Local)
 Simply prepend the wrapper script to your normal `gemini` CLI commands:
 ```bash
 export MACHINE_TOKEN="your-secret-token"
