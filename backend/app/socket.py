@@ -72,8 +72,6 @@ async def handle_terminal_output(sid, data):
     if agent_id and output:
         # Broadcast to the room dedicated to this agent's ID
         await sio.emit('terminal_output', {'sid': agent_id, 'output': output}, room=agent_id, namespace='/terminal')
-        
-        # We could also save logs to the database here if needed.
 
 @sio.on('join_room', namespace='/terminal')
 async def handle_join_room(sid, data):
@@ -90,6 +88,14 @@ async def handle_join_room(sid, data):
         
         # 2. Also send a carriage return to force a fresh prompt redraw
         await sio.emit('terminal_input', {'target_sid': agent_id, 'input': '\r'}, namespace='/terminal')
+
+@sio.on('request_projects', namespace='/terminal')
+async def handle_request_projects(sid, data):
+    """
+    Relays a UI request for available projects to all host daemons.
+    """
+    print(f"UI Client {sid} requested project lists.")
+    await sio.emit('request_projects', {}, namespace='/terminal')
 
 @sio.on('history_complete', namespace='/terminal')
 async def handle_history_complete(sid, data):
@@ -126,6 +132,31 @@ async def handle_agent_telemetry(sid, data):
                 }, namespace='/terminal')
         finally:
             db.close()
+
+@sio.on('host_telemetry', namespace='/terminal')
+async def handle_host_telemetry(sid, data):
+    """
+    Receives host-wide configuration (like project list) and broadcasts it.
+    data: {'projects_root': '...', 'available_projects': [...]}
+    """
+    async with sio.session(sid, namespace='/terminal') as session:
+        host_id = session.get('host_id')
+        print(f"Received host_telemetry from SID {sid} (Host ID: {host_id}): {data}")
+        if host_id:
+            db = next(database.get_db())
+            try:
+                host = db.query(models.Host).filter(models.Host.id == host_id).first()
+                if host:
+                    host.last_projects_json = data
+                    db.commit()
+            finally:
+                db.close()
+
+            # Broadcast to UI clients so they can update pickers
+            await sio.emit('host_telemetry_update', {
+                'host_id': host_id,
+                'telemetry': data
+            }, namespace='/terminal')
 
 @sio.on('agent_exit', namespace='/terminal')
 async def handle_agent_exit(sid, data):

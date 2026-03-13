@@ -8,13 +8,14 @@ import select
 import signal
 import subprocess
 import re
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from collections import deque
 
 class HostDaemon:
     def __init__(self, server_url: str, host_token: str):
         self.server_url = server_url
         self.host_token = host_token
+        self.projects_root = os.getenv("PROJECTS_ROOT", "/git")
         self.sio = socketio.AsyncClient()
         self.agents: Dict[str, Dict] = {} # agent_id -> {master_fd, pid, tool, history, telemetry}
         self.running = True
@@ -28,6 +29,12 @@ class HostDaemon:
         @self.sio.on('connect', namespace='/terminal')
         async def on_connect():
             print(f"Connected to dashboard at {self.server_url}")
+            # Report available projects immediately on connection
+            await self.report_projects()
+
+        @self.sio.on('request_projects', namespace='/terminal')
+        async def on_request_projects(data):
+            await self.report_projects()
 
         @self.sio.on('spawn_agent', namespace='/terminal')
         async def on_spawn_agent(data):
@@ -76,6 +83,24 @@ class HostDaemon:
                 except OSError:
                     pass
 
+    async def report_projects(self):
+        """Scans PROJECTS_ROOT and reports available subdirectories to the Hub."""
+        projects = []
+        if os.path.exists(self.projects_root):
+            try:
+                # Only list directories
+                projects = [d for d in os.listdir(self.projects_root) 
+                            if os.path.isdir(os.path.join(self.projects_root, d))]
+                projects.sort()
+            except Exception as e:
+                print(f"Error scanning projects root {self.projects_root}: {e}")
+        
+        if self.sio.connected:
+            await self.sio.emit('host_telemetry', {
+                'projects_root': self.projects_root,
+                'available_projects': projects
+            }, namespace='/terminal')
+
     def get_git_info(self, path: str):
         """Extracts git branch and project name from a directory."""
         if not path or not os.path.exists(path):
@@ -90,7 +115,6 @@ class HostDaemon:
                 ["git", "config", "--get", "remote.origin.url"], 
                 cwd=path, stderr=subprocess.DEVNULL
             ).decode().strip()
-            # Extract project name from URL (e.g., user/repo.git -> repo)
             project = origin.split("/")[-1].replace(".git", "")
             return branch, project
         except Exception:
@@ -98,12 +122,16 @@ class HostDaemon:
 
     async def spawn_agent(self, agent_id: str, tool: str, project_dir: Optional[str] = None, task: Optional[str] = None):
         """Spawns a new process in a pseudo-terminal with environmental context."""
-        print(f"Spawning agent {agent_id} with tool: {tool} in {project_dir}")
+        # Resolve full path if only relative project name provided
+        full_path = project_dir
+        if project_dir and not project_dir.startswith('/'):
+            full_path = os.path.join(self.projects_root, project_dir)
+
+        print(f"Spawning agent {agent_id} with tool: {tool} in {full_path}")
         
-        # 1. Gather Initial Telemetry
-        branch, project = self.get_git_info(project_dir)
+        branch, project = self.get_git_info(full_path)
         telemetry = {
-            "project_dir": project_dir,
+            "project_dir": full_path,
             "task_description": task,
             "git_branch": branch,
             "git_project": project,
@@ -111,15 +139,13 @@ class HostDaemon:
             "tokens": 0
         }
 
-        # 2. Command mapping
         cmd_map = {'gemini': ['gemini'], 'claude': ['claude'], 'bash': ['bash']}
         cmd = cmd_map.get(tool, [tool])
 
-        # 3. Fork and Exec
         pid, fd = pty.fork()
         if pid == 0: # Child process
-            if project_dir and os.path.exists(project_dir):
-                os.chdir(project_dir)
+            if full_path and os.path.exists(full_path):
+                os.chdir(full_path)
             
             env = os.environ.copy()
             env['TERM'] = 'xterm-256color'
@@ -137,82 +163,56 @@ class HostDaemon:
                 'history': deque(maxlen=1000),
                 'telemetry': telemetry
             }
-            # Send initial telemetry to Hub
             if self.sio.connected:
                 await self.sio.emit('agent_telemetry', {'agent_id': agent_id, 'telemetry': telemetry}, namespace='/terminal')
-            
             os.write(fd, b'\n')
 
     def parse_telemetry(self, agent_id: str, text: str):
-        """Parses terminal output for live telemetry updates (tokens, models)."""
         changed = False
         tel = self.agents[agent_id]['telemetry']
-
-        # Example patterns for Gemini/Claude (adjust as they evolve)
-        # Match model name: e.g. "Using model: gemini-2.0-flash"
         model_match = re.search(r"model:?\s*([a-zA-Z0-9\-\.]+)", text, re.IGNORECASE)
         if model_match:
             new_model = model_match.group(1)
             if tel.get('model') != new_model:
                 tel['model'] = new_model
                 changed = True
-
-        # Match token usage: e.g. "Tokens: 1250" or "Usage: 450 tokens"
         token_match = re.search(r"(?:tokens|usage):?\s*(\d+)", text, re.IGNORECASE)
         if token_match:
             new_tokens = int(token_match.group(1))
             if tel.get('tokens') != new_tokens:
                 tel['tokens'] = new_tokens
                 changed = True
-
         return changed
 
     async def watch_agents(self):
-        """Continuously polls all active agent FDs for output."""
         loop = asyncio.get_running_loop()
         while self.running:
             if not self.agents:
                 await asyncio.sleep(0.5)
                 continue
-
             fds = [a['master_fd'] for a in self.agents.values()]
-            
             try:
                 r, _, _ = await loop.run_in_executor(None, select.select, fds, [], [], 0.1)
             except ValueError:
                 self.cleanup_closed_agents()
                 continue
-
             for fd in r:
                 agent_entry = next((item for item in self.agents.items() if item[1]['master_fd'] == fd), None)
                 if not agent_entry: continue
-                
                 agent_id, info = agent_entry
-                
                 try:
                     data = os.read(fd, 1024)
                     if not data:
                         self.close_agent(agent_id)
                         continue
-                        
                     if self.sio.connected:
                         decoded_data = data.decode('utf-8', errors='replace')
                         self.agents[agent_id]['history'].append(decoded_data)
-                        
-                        # Live stream parsing for rich context
                         if self.parse_telemetry(agent_id, decoded_data):
-                            await self.sio.emit('agent_telemetry', {
-                                'agent_id': agent_id, 
-                                'telemetry': self.agents[agent_id]['telemetry']
-                            }, namespace='/terminal')
-
-                        await self.sio.emit('terminal_output', {
-                            'sid': agent_id, 
-                            'output': decoded_data
-                        }, namespace='/terminal')
+                            await self.sio.emit('agent_telemetry', {'agent_id': agent_id, 'telemetry': self.agents[agent_id]['telemetry']}, namespace='/terminal')
+                        await self.sio.emit('terminal_output', {'sid': agent_id, 'output': decoded_data}, namespace='/terminal')
                 except OSError:
                     self.close_agent(agent_id)
-
             await asyncio.sleep(0.01)
 
     def close_agent(self, agent_id: str):
@@ -267,17 +267,13 @@ class HostDaemon:
 async def main():
     SERVER_URL = os.getenv("DASHBOARD_URL", "http://localhost:8000")
     HOST_TOKEN = os.getenv("HOST_TOKEN")
-
     if not HOST_TOKEN:
         print("Error: HOST_TOKEN environment variable is required.")
         sys.exit(1)
-
     daemon = HostDaemon(SERVER_URL, HOST_TOKEN)
-    
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, daemon.stop)
-
     await daemon.run()
 
 if __name__ == '__main__':

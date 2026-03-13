@@ -45,7 +45,14 @@ class HostSchema(HostBase):
     id: int
     name: str
     status: str
+    projects: Optional[dict] = None
     created_at: datetime
+
+    @classmethod
+    def from_orm(cls, obj):
+        data = super().from_orm(obj)
+        data.projects = obj.last_projects_json
+        return data
 
 class AgentBase(BaseModel):
     agent_id: str

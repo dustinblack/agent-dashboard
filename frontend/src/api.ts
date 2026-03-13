@@ -10,6 +10,10 @@ export interface Host {
   name: string;
   status: string;
   created_at: string;
+  projects?: {
+      projects_root: string;
+      available_projects: string[];
+  };
 }
 
 export interface Agent {
@@ -21,6 +25,14 @@ export interface Agent {
   pid?: number;
   started_at: string;
   ended_at?: string;
+  telemetry?: {
+      project_dir?: string;
+      task_description?: string;
+      git_branch?: string;
+      git_project?: string;
+      model?: string;
+      tokens?: number;
+  };
 }
 
 export const getHosts = async (): Promise<Host[]> => {
@@ -33,8 +45,13 @@ export const getAgents = async (): Promise<Agent[]> => {
   return response.data;
 };
 
-export const spawnAgent = async (hostId: number, toolName: string): Promise<Agent> => {
-  const response = await api.post('/agents/spawn', { host_id: hostId, tool_name: toolName });
+export const spawnAgent = async (hostId: number, toolName: string, projectDir?: string, taskDescription?: string): Promise<Agent> => {
+  const response = await api.post('/agents/spawn', { 
+      host_id: hostId, 
+      tool_name: toolName,
+      project_dir: projectDir,
+      task_description: taskDescription
+  });
   return response.data;
 };
 
