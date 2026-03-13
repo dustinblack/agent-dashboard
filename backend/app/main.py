@@ -51,6 +51,7 @@ class AgentBase(BaseModel):
     agent_id: str
     tool_name: Optional[str] = None
     pid: Optional[int] = None
+    telemetry: dict = {}
 
 class AgentCreate(AgentBase):
     host_id: int
@@ -65,9 +66,18 @@ class AgentSchema(AgentBase):
     started_at: datetime
     ended_at: Optional[datetime] = None
 
+    # Map telemetry_json to telemetry field
+    @classmethod
+    def from_orm(cls, obj):
+        data = super().from_orm(obj)
+        data.telemetry = obj.telemetry_json
+        return data
+
 class SpawnRequest(BaseModel):
     host_id: int
     tool_name: str
+    project_dir: Optional[str] = None
+    task_description: Optional[str] = None
 
 # Authentication Endpoints
 @fastapi_app.get("/login")
@@ -149,7 +159,11 @@ async def spawn_agent(request: SpawnRequest, db: Session = Depends(database.get_
         host_id=request.host_id,
         agent_id=agent_uuid,
         tool_name=request.tool_name,
-        status="active"
+        status="active",
+        telemetry_json={
+            "project_dir": request.project_dir,
+            "task_description": request.task_description
+        }
     )
     db.add(db_agent)
     db.commit()
@@ -159,7 +173,12 @@ async def spawn_agent(request: SpawnRequest, db: Session = Depends(database.get_
     # The host daemon should be in a room named "host_{id}"
     await socket.sio.emit(
         'spawn_agent', 
-        {'agent_id': agent_uuid, 'tool': request.tool_name}, 
+        {
+            'agent_id': agent_uuid, 
+            'tool': request.tool_name,
+            'project_dir': request.project_dir,
+            'task_description': request.task_description
+        }, 
         room=f"host_{request.host_id}", 
         namespace='/terminal'
     )

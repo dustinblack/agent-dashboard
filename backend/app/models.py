@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from .database import Base
@@ -29,6 +29,7 @@ class Agent(Base):
     tool_name = Column(String, nullable=True) # gemini, claude, etc.
     pid = Column(Integer, nullable=True)     # Process ID on the host
     status = Column(String, default="active") # active, closed
+    telemetry_json = Column(JSON, default=dict) # Rich telemetry context
     started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     ended_at = Column(DateTime, nullable=True)
 
