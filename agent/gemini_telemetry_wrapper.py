@@ -10,32 +10,40 @@ import select
 from typing import Optional
 
 # Socket.IO Client
-sio = socketio.AsyncClient()
+sio: Optional[socketio.AsyncClient] = None
 
 # Global reference to the pty master fd
 master_fd: Optional[int] = None
 
-@sio.event(namespace='/terminal')
-async def connect():
-    """Event handler for successful connection to the dashboard."""
-    pass
+def get_sio():
+    global sio
+    if sio is None:
+        sio = socketio.AsyncClient()
+        
+        @sio.event(namespace='/terminal')
+        async def connect():
+            """Event handler for successful connection to the dashboard."""
+            pass
 
-@sio.event(namespace='/terminal')
-async def disconnect():
-    """Event handler for disconnection."""
-    pass
+        @sio.event(namespace='/terminal')
+        async def disconnect():
+            """Event handler for disconnection."""
+            pass
 
-@sio.on('terminal_input', namespace='/terminal')
-async def on_terminal_input(data):
-    """Receive keystrokes from the dashboard and write to the pty."""
-    global master_fd
-    if master_fd is not None:
-        user_input = data.get('input', '')
-        if user_input:
-            os.write(master_fd, user_input.encode('utf-8'))
+        @sio.on('terminal_input', namespace='/terminal')
+        async def on_terminal_input(data):
+            """Receive keystrokes from the dashboard and write to the pty."""
+            global master_fd
+            if master_fd is not None:
+                user_input = data.get('input', '')
+                if user_input:
+                    os.write(master_fd, user_input.encode('utf-8'))
+    return sio
 
 async def main():
     global master_fd
+    
+    sio_client = get_sio()
     
     DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8000")
     MACHINE_TOKEN = os.getenv("MACHINE_TOKEN")
@@ -49,7 +57,7 @@ async def main():
         cmd = ["bash"]
 
     try:
-        await sio.connect(
+        await sio_client.connect(
             DASHBOARD_URL, 
             namespaces=['/terminal'],
             headers={'X-Machine-Token': MACHINE_TOKEN}
@@ -75,7 +83,7 @@ async def main():
         try:
             loop = asyncio.get_running_loop()
             while True:
-                r, w, e = await loop.run_in_executor(None, select.select, [sys.stdin, master_fd], [], [])
+                r, w, e = await loop.run_in_executor(None, select.select, [sys.stdin, master_fd], [], [], 0.1)
                 
                 if sys.stdin in r:
                     data = os.read(sys.stdin.fileno(), 1024)
@@ -93,10 +101,10 @@ async def main():
                         
                     os.write(sys.stdout.fileno(), data)
                     
-                    if sio.connected:
+                    if sio_client.connected:
                         try:
                             decoded_data = data.decode('utf-8', errors='replace')
-                            asyncio.create_task(sio.emit('terminal_output', {'output': decoded_data}, namespace='/terminal'))
+                            asyncio.create_task(sio_client.emit('terminal_output', {'output': decoded_data}, namespace='/terminal'))
                         except Exception:
                             pass
 
@@ -105,8 +113,8 @@ async def main():
         finally:
             if old_tty:
                 termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_tty)
-            if sio.connected:
-                await sio.disconnect()
+            if sio_client.connected:
+                await sio_client.disconnect()
 
 if __name__ == '__main__':
     asyncio.run(main())
