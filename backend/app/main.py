@@ -10,10 +10,21 @@ from datetime import datetime
 from . import models, database, auth, socket
 import socketio
 
+from fastapi.middleware.cors import CORSMiddleware
+
 # Initialize the database
 models.Base.metadata.create_all(bind=database.engine)
 
 fastapi_app = FastAPI(title="Gemini AI Coding Agent Dashboard API")
+
+# Add CORS Middleware
+fastapi_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],  # Explicit origins for credentials
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 # Add Session Middleware for OIDC
 fastapi_app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY", "super-secret-default-key"))

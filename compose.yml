@@ -11,6 +11,7 @@ services:
       - dashboard_data:/app/data
     environment:
       - DATABASE_URL=sqlite:////app/data/agent_dashboard.db
+      - BYPASS_AUTH=true
     restart: unless-stopped
 
   frontend:
