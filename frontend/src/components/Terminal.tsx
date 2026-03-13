@@ -46,8 +46,6 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     };
 
     setTimeout(performFit, 50);
-    setTimeout(performFit, 250);
-    
     xtermRef.current = term;
 
     // Initialize Socket.IO
@@ -62,13 +60,24 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     socket.on('connect', () => {
       term.writeln('\x1b[1;32mConnected to session relay...\x1b[0m');
       
-      // Block automatic responses during history replay
+      // Start blocking input immediately upon connection for history replay
       isReplaying.current = true;
       socket.emit('join_room', { room: agentId });
       
+      // Safety fallback: unlock input after 3 seconds even if history_complete is lost
       setTimeout(() => {
-          isReplaying.current = false;
-      }, 1000); // 1 second input lock
+          if (isReplaying.current) {
+              isReplaying.current = false;
+              console.log("Terminal safety-unlocked (timeout).");
+          }
+      }, 3000);
+    });
+
+    socket.on('history_complete', (data: { agent_id: string }) => {
+        if (data.agent_id === agentId) {
+            isReplaying.current = false;
+            console.log("Terminal unlocked: History replay finished.");
+        }
     });
 
     socket.on('terminal_output', (data: { sid: string; output: string }) => {
@@ -78,7 +87,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     });
 
     term.onData((data) => {
-      // Discard all input (including automatic DSR responses) during the replay window
+      // Discard all input (especially automatic DSR responses) during the replay window
       if (isReplaying.current) return;
       
       socket.emit('terminal_input', { target_sid: agentId, input: data });
@@ -96,6 +105,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-black overflow-hidden">
+      {/* Header Bar */}
       <div className="flex items-center justify-between bg-slate-800 border-b border-slate-700 px-4 py-2 shrink-0">
         <div className="flex items-center gap-4">
             <div className="flex flex-col">
@@ -103,6 +113,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
                 <span className="text-xs font-bold text-white font-mono">{agentId}</span>
             </div>
         </div>
+        
         <button 
           onClick={onClose}
           className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 px-3 py-1 rounded-md transition-colors border border-red-500/20 cursor-pointer"
@@ -111,6 +122,8 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
           <span className="font-semibold text-xs">Close Window</span>
         </button>
       </div>
+
+      {/* Terminal Container - Edge to Edge */}
       <div className="flex-1 w-full h-full overflow-hidden relative">
           <div ref={terminalRef} className="absolute inset-0" />
       </div>

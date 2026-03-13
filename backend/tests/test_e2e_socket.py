@@ -128,10 +128,15 @@ def test_socketio_relay_multiplex_e2e(live_server):
     
     host_sio = socketio.Client()
     host_received_input = []
+    host_received_events = []
     
     @host_sio.on("terminal_input", namespace="/terminal")
     def on_input(data):
         host_received_input.append(data)
+
+    @host_sio.on("request_history", namespace="/terminal")
+    def on_history(data):
+        host_received_events.append(("request_history", data))
 
     host_sio.connect(
         live_server, 
@@ -154,8 +159,17 @@ def test_socketio_relay_multiplex_e2e(live_server):
     
     # UI joins the specific agent's room
     ui_sio.emit("join_room", {"room": agent_id}, namespace="/terminal")
-    time.sleep(0.2)
     
+    # 2.5 Verify host received request_history and initial \r
+    for _ in range(20):
+        if any(e[0] == "request_history" for e in host_received_events) and \
+           any(d.get("input") == "\r" for d in host_received_input):
+            break
+        time.sleep(0.1)
+    
+    assert any(e[0] == "request_history" for e in host_received_events)
+    assert any(d.get("input") == "\r" for d in host_received_input)
+
     # 3. Host Daemon sends output for that agent_id
     test_output = "Multi-agent output"
     host_sio.emit("terminal_output", {"sid": agent_id, "output": test_output}, namespace="/terminal")

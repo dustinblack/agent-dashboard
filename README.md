@@ -58,7 +58,12 @@ podman run -it --rm --network=host \
 *(Note: Use the `:Z` flag on RHEL/Fedora to handle SELinux permissions.)*
 
 ### 3. Spawn Agents
-Go to the Web UI (`http://localhost:8080`). You will see your workstation listed. Click **"Spawn Gemini"** or **"Spawn Claude"** to start a remote AI session. The UI will automatically attach you to the terminal.
+Go to the Web UI (`http://localhost:8080`). You will see your workstation listed. Click **"Spawn Gemini"** or **"Spawn Claude"** to start a remote AI session. 
+
+**Note on Console UX:**
+- **Detached Windows:** Attaching to a terminal now opens a standalone browser popup window with minimal interface, allowing for side-by-side multi-tasking across different agents.
+- **History Replay:** If you close a terminal window and re-attach later, the dashboard automatically replays the recent session history so you can pick up exactly where you left off.
+- **Color Support:** Terminals are configured with `xterm-256color` support for rich CLI output.
 
 ---
 

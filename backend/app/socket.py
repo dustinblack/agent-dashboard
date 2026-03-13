@@ -91,6 +91,15 @@ async def handle_join_room(sid, data):
         # 2. Also send a carriage return to force a fresh prompt redraw
         await sio.emit('terminal_input', {'target_sid': agent_id, 'input': '\r'}, namespace='/terminal')
 
+@sio.on('history_complete', namespace='/terminal')
+async def handle_history_complete(sid, data):
+    """
+    Relays the history completion signal to the UI.
+    """
+    agent_id = data.get('agent_id')
+    if agent_id:
+        await sio.emit('history_complete', data, room=agent_id, namespace='/terminal')
+
 @sio.on('agent_exit', namespace='/terminal')
 async def handle_agent_exit(sid, data):
     """

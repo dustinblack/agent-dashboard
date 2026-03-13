@@ -69,6 +69,8 @@ class HostDaemon:
                         'sid': agent_id, 
                         'output': chunk
                     }, namespace='/terminal')
+                # Signal that replay is finished
+                await self.sio.emit('history_complete', {'agent_id': agent_id}, namespace='/terminal')
 
         @self.sio.on('terminal_input', namespace='/terminal')
         async def on_terminal_input(data):
