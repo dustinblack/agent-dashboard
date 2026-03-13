@@ -5,28 +5,30 @@ const api = axios.create({
   withCredentials: true, // Required for session cookies from OIDC
 });
 
-export interface Machine {
+export interface Host {
   id: number;
   name: string;
   created_at: string;
 }
 
-export interface Session {
+export interface Agent {
   id: number;
-  session_id: string;
-  machine_id: number;
+  agent_id: string;
+  host_id: number;
   status: string;
+  tool_name?: string;
+  pid?: number;
   started_at: string;
   ended_at?: string;
 }
 
-export const getMachines = async (): Promise<Machine[]> => {
-  const response = await api.get('/machines');
+export const getHosts = async (): Promise<Host[]> => {
+  const response = await api.get('/hosts');
   return response.data;
 };
 
-export const getSessions = async (): Promise<Session[]> => {
-  const response = await api.get('/sessions');
+export const getAgents = async (): Promise<Agent[]> => {
+  const response = await api.get('/agents');
   return response.data;
 };
 

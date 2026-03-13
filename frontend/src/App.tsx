@@ -4,18 +4,18 @@ import Terminal from './components/Terminal';
 import './App.css';
 
 function App() {
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
 
   return (
     <div className="bg-slate-900 text-slate-100 font-sans h-screen w-screen overflow-hidden">
-      {!activeSessionId ? (
+      {!activeAgentId ? (
         <div className="h-full w-full overflow-y-auto">
-            <Dashboard onAttach={(id) => setActiveSessionId(id)} />
+            <Dashboard onAttach={(id) => setActiveAgentId(id)} />
         </div>
       ) : (
         <Terminal 
-          sessionId={activeSessionId} 
-          onClose={() => setActiveSessionId(null)} 
+          agentId={activeAgentId} 
+          onClose={() => setActiveAgentId(null)} 
         />
       )}
     </div>

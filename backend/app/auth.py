@@ -6,31 +6,31 @@ from . import models, database
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 
-# API Key Authentication for Agents
-API_KEY_NAME = "X-Machine-Token"
+# API Key Authentication for Host Daemons
+API_KEY_NAME = "X-Host-Token"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
-def get_current_machine(
+def get_current_host(
     api_key_header: str = Security(api_key_header),
     db: Session = Depends(database.get_db)
-) -> models.Machine:
+) -> models.Host:
     """
-    Validates the machine token passed in the header and returns the corresponding Machine model.
+    Validates the host token passed in the header and returns the corresponding Host model.
     """
     if not api_key_header:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing machine token",
+            detail="Missing host token",
         )
     
-    machine = db.query(models.Machine).filter(models.Machine.machine_token == api_key_header).first()
-    if not machine:
+    host = db.query(models.Host).filter(models.Host.host_token == api_key_header).first()
+    if not host:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid machine token",
+            detail="Invalid host token",
         )
     
-    return machine
+    return host
 
 # OIDC Authentication for Dashboard UI
 # Using dummy defaults for local development. In production, these should be set via environment variables.

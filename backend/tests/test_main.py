@@ -38,25 +38,25 @@ def test_health_check():
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
 
-def test_create_machine():
+def test_create_host():
     response = client.post(
-        "/machines",
-        json={"name": "test-machine", "machine_token": "test-token"}
+        "/hosts",
+        json={"name": "test-host", "host_token": "test-token"}
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["name"] == "test-machine"
+    assert data["name"] == "test-host"
     assert "id" in data
 
-def test_read_machines():
-    response = client.get("/machines")
+def test_read_hosts():
+    response = client.get("/hosts")
     assert response.status_code == 200
     data = response.json()
     assert len(data) >= 1
-    assert data[0]["name"] == "test-machine"
+    assert data[0]["name"] == "test-host"
 
-def test_read_sessions():
-    response = client.get("/sessions")
+def test_read_agents():
+    response = client.get("/agents")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
@@ -67,7 +67,7 @@ def test_cors_preflight():
         "Access-Control-Request-Method": "GET",
         "Access-Control-Request-Headers": "Authorization",
     }
-    response = client.options("/machines", headers=headers)
+    response = client.options("/hosts", headers=headers)
     assert response.status_code == 200
     assert response.headers.get("access-control-allow-origin") == "http://localhost:8080"
     assert response.headers.get("access-control-allow-credentials") == "true"
@@ -77,9 +77,8 @@ def test_cors_get_request():
     headers = {
         "Origin": "http://localhost:8080",
     }
-    response = client.get("/machines", headers=headers)
+    response = client.get("/hosts", headers=headers)
     assert response.status_code == 200
     assert "access-control-allow-origin" in response.headers
     assert response.headers.get("access-control-allow-origin") == "http://localhost:8080"
     assert response.headers.get("access-control-allow-credentials") == "true"
-

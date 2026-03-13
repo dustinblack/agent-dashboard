@@ -58,29 +58,29 @@ def test_api_and_cors_e2e(live_server):
     """Test standard API and CORS headers on a live server."""
     headers = {"Origin": "http://localhost:8080"}
     
-    # Create a machine via API (simulating UI interaction)
+    # Create a host via API (simulating UI interaction)
     r_post = httpx.post(
-        f"{live_server}/machines", 
-        json={"name": "e2e-machine", "machine_token": "e2e-token"},
+        f"{live_server}/hosts", 
+        json={"name": "e2e-host", "host_token": "e2e-token"},
         headers=headers
     )
     assert r_post.status_code == 200
     assert r_post.headers.get("access-control-allow-origin") == "http://localhost:8080"
     
-    machine_data = r_post.json()
-    assert machine_data["name"] == "e2e-machine"
+    host_data = r_post.json()
+    assert host_data["name"] == "e2e-host"
 
 
 def test_socketio_relay_e2e(live_server):
     """Test end-to-end Socket.IO relay between an Agent and the UI."""
     
-    # 1. First register the machine token via API
+    # 1. First register the host token via API
     httpx.post(
-        f"{live_server}/machines", 
-        json={"name": "socket-machine", "machine_token": "socket-token"}
+        f"{live_server}/hosts", 
+        json={"name": "socket-host", "host_token": "socket-token"}
     )
     
-    # 2. Agent connects
+    # 2. Agent Daemon connects
     agent_sio = socketio.Client()
     agent_connected = False
     
@@ -95,11 +95,11 @@ def test_socketio_relay_e2e(live_server):
     def on_terminal_input(data):
         agent_received_input.append(data)
         
-    # Agent authenticates via header
+    # Agent Daemon authenticates via header
     agent_sio.connect(
         live_server, 
         namespaces=["/terminal"], 
-        headers={"x-machine-token": "socket-token"}
+        headers={"x-host-token": "socket-token"}
     )
     
     # Wait for connection

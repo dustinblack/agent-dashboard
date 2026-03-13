@@ -6,11 +6,11 @@ import { ArrowLeft, XCircle } from 'lucide-react';
 import 'xterm/css/xterm.css';
 
 interface TerminalProps {
-  sessionId: string;
+  agentId: string;
   onClose: () => void;
 }
 
-const Terminal: React.FC<TerminalProps> = ({ sessionId, onClose }) => {
+const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -54,18 +54,18 @@ const Terminal: React.FC<TerminalProps> = ({ sessionId, onClose }) => {
 
     socket.on('connect', () => {
       term.writeln('\x1b[1;32mConnected to session relay...\x1b[0m');
-      // Request to join the room for this specific session output
-      socket.emit('join_room', { room: sessionId });
+      // Request to join the room for this specific agent output
+      socket.emit('join_room', { room: agentId });
     });
 
     socket.on('terminal_output', (data: { sid: string; output: string }) => {
-      if (data.sid === sessionId) {
+      if (data.sid === agentId) {
         term.write(data.output);
       }
     });
 
     term.onData((data) => {
-      socket.emit('terminal_input', { target_sid: sessionId, input: data });
+      socket.emit('terminal_input', { target_sid: agentId, input: data });
     });
 
     const handleResize = () => {
@@ -80,7 +80,7 @@ const Terminal: React.FC<TerminalProps> = ({ sessionId, onClose }) => {
       socket.disconnect();
       term.dispose();
     };
-  }, [sessionId]);
+  }, [agentId]);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-slate-900 overflow-hidden">
@@ -97,8 +97,8 @@ const Terminal: React.FC<TerminalProps> = ({ sessionId, onClose }) => {
             </button>
             <div className="h-6 w-px bg-slate-700"></div>
             <div className="flex flex-col">
-                <span className="text-xs text-slate-400 font-mono">Session ID</span>
-                <span className="text-sm font-bold text-white font-mono">{sessionId}</span>
+                <span className="text-xs text-slate-400 font-mono">Agent ID</span>
+                <span className="text-sm font-bold text-white font-mono">{agentId}</span>
             </div>
         </div>
         

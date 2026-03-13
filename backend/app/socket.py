@@ -9,38 +9,38 @@ sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 async def connect(sid, environ, auth):
     """
     Handles new Socket.IO connections on the /terminal namespace.
-    Authenticates the agent using the X-Machine-Token header.
+    Authenticates the host or agent using the X-Host-Token header.
     """
     headers = dict(environ.get('asgi.scope', {}).get('headers', []))
     # headers are byte strings, need to decode
     headers_str = {k.decode('utf-8').lower(): v.decode('utf-8') for k, v in headers.items()}
     
-    machine_token = headers_str.get('x-machine-token') or (auth and auth.get('token'))
+    host_token = headers_str.get('x-host-token') or (auth and auth.get('token'))
 
-    if not machine_token:
-        # Allow UI clients to connect without a machine token
+    if not host_token:
+        # Allow UI clients to connect without a host token
         print(f"UI client connected: (SID: {sid})")
         return True
         
     db = next(database.get_db())
     try:
-        machine = db.query(models.Machine).filter(models.Machine.machine_token == machine_token).first()
-        if not machine:
+        host = db.query(models.Host).filter(models.Host.host_token == host_token).first()
+        if not host:
             return False
             
-        # Create a new session for this connection
-        new_session = models.Session(machine_id=machine.id, session_id=sid, status="active")
-        db.add(new_session)
+        # Create a new agent session for this connection (Temporary logic until Phase 3)
+        new_agent = models.Agent(host_id=host.id, agent_id=sid, status="active", tool_name="gemini")
+        db.add(new_agent)
         db.commit()
         
-        # Save machine info in the session environment for later use
+        # Save host info in the session environment for later use
         async with sio.session(sid, namespace='/terminal') as session:
-            session['machine_id'] = machine.id
-            session['db_session_id'] = new_session.id
+            session['host_id'] = host.id
+            session['db_agent_id'] = new_agent.id
             
-        # Join a room specific to this session ID so the UI can subscribe to it
+        # Join a room specific to this agent ID so the UI can subscribe to it
         await sio.enter_room(sid, sid, namespace='/terminal')
-        print(f"Agent connected: {machine.name} (SID: {sid})")
+        print(f"Agent connected from host: {host.name} (SID: {sid})")
         
     finally:
         db.close()
@@ -48,18 +48,18 @@ async def connect(sid, environ, auth):
 @sio.on('disconnect', namespace='/terminal')
 async def disconnect(sid):
     """
-    Handles agent disconnection. Marks the session as closed.
+    Handles agent or UI disconnection. Marks the agent as closed if it was an agent.
     """
     async with sio.session(sid, namespace='/terminal') as session:
-        db_session_id = session.get('db_session_id')
-        if db_session_id:
+        db_agent_id = session.get('db_agent_id')
+        if db_agent_id:
             db = next(database.get_db())
             try:
-                db_session = db.query(models.Session).filter(models.Session.id == db_session_id).first()
-                if db_session:
-                    db_session.status = "closed"
+                db_agent = db.query(models.Agent).filter(models.Agent.id == db_agent_id).first()
+                if db_agent:
+                    db_agent.status = "closed"
                     from datetime import datetime, timezone
-                    db_session.ended_at = datetime.now(timezone.utc)
+                    db_agent.ended_at = datetime.now(timezone.utc)
                     db.commit()
                     print(f"Agent disconnected: SID {sid} marked as closed.")
             finally:
@@ -73,16 +73,16 @@ async def handle_terminal_output(sid, data):
     # data is expected to be a dict: {'output': '...text...'}
     output = data.get('output', '')
     if output:
-        # Broadcast to anyone listening to this specific session's room (e.g., the UI)
+        # Broadcast to anyone listening to this specific agent's room (e.g., the UI)
         await sio.emit('terminal_output', {'sid': sid, 'output': output}, room=sid, namespace='/terminal')
         
         # Optional: Save to Log table for historical purposes
         async with sio.session(sid, namespace='/terminal') as session:
-            db_session_id = session.get('db_session_id')
-            if db_session_id:
+            db_agent_id = session.get('db_agent_id')
+            if db_agent_id:
                 db = next(database.get_db())
                 try:
-                    new_log = models.Log(session_id=db_session_id, content=output)
+                    new_log = models.Log(agent_id=db_agent_id, content=output)
                     db.add(new_log)
                     db.commit()
                 finally:
@@ -91,7 +91,7 @@ async def handle_terminal_output(sid, data):
 @sio.on('join_room', namespace='/terminal')
 async def handle_join_room(sid, data):
     """
-    Allows the UI to join a specific session's room to receive its output.
+    Allows the UI to join a specific agent's room to receive its output.
     """
     room = data.get('room')
     if room:
@@ -111,5 +111,5 @@ async def handle_terminal_input(sid, data):
     user_input = data.get('input')
     
     if target_sid and user_input:
-        # Emit 'terminal_input' back to the specific agent wrapper
+        # Emit 'terminal_input' back to the specific agent daemon
         await sio.emit('terminal_input', {'input': user_input}, room=target_sid, namespace='/terminal')

@@ -15,49 +15,50 @@ from fastapi.middleware.cors import CORSMiddleware
 # Initialize the database
 models.Base.metadata.create_all(bind=database.engine)
 
-fastapi_app = FastAPI(title="Gemini AI Coding Agent Dashboard API")
+fastapi_app = FastAPI(title="AI Coding Agent Dashboard API")
 
 # Add Session Middleware for OIDC
 fastapi_app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY", "super-secret-default-key"))
 
-# Add CORS Middleware (must be added last so it is the outermost middleware)
+# Add CORS Middleware
 fastapi_app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],  # Explicit origins for credentials
+    allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Mount Socket.IO
 app = socketio.ASGIApp(socket.sio, fastapi_app)
 
 # Pydantic Schemas
-class MachineBase(BaseModel):
+class HostBase(BaseModel):
     name: str
 
-class MachineCreate(MachineBase):
-    machine_token: str
+class HostCreate(HostBase):
+    host_token: str
 
-class Machine(MachineBase):
+class HostSchema(HostBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
     created_at: datetime
 
-class SessionBase(BaseModel):
-    session_id: str
+class AgentBase(BaseModel):
+    agent_id: str
+    tool_name: Optional[str] = None
+    pid: Optional[int] = None
 
-class SessionCreate(SessionBase):
-    machine_id: int
+class AgentCreate(AgentBase):
+    host_id: int
 
-class SessionSchema(SessionBase):
+class AgentSchema(AgentBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    session_id: str
-    machine_id: int
+    host_id: int
     status: str
     started_at: datetime
     ended_at: Optional[datetime] = None
@@ -93,36 +94,36 @@ async def me(user: dict = Depends(auth.get_current_user)):
     return user
 
 # Protected API Endpoints
-@fastapi_app.get("/machines", response_model=List[Machine])
-def read_machines(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db), user: dict = Depends(auth.get_current_user)):
+@fastapi_app.get("/hosts", response_model=List[HostSchema])
+def read_hosts(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db), user: dict = Depends(auth.get_current_user)):
     """
-    List all registered machines. Requires UI login.
+    List all registered hosts. Requires UI login.
     """
-    machines = db.query(models.Machine).offset(skip).limit(limit).all()
-    return machines
+    hosts = db.query(models.Host).offset(skip).limit(limit).all()
+    return hosts
 
-@fastapi_app.post("/machines", response_model=Machine)
-def create_machine(machine: MachineCreate, db: Session = Depends(database.get_db), user: dict = Depends(auth.get_current_user)):
+@fastapi_app.post("/hosts", response_model=HostSchema)
+def create_host(host: HostCreate, db: Session = Depends(database.get_db), user: dict = Depends(auth.get_current_user)):
     """
-    Register a new machine. Requires UI login.
+    Register a new host. Requires UI login.
     """
-    db_machine = models.Machine(name=machine.name, machine_token=machine.machine_token)
-    db.add(db_machine)
+    db_host = models.Host(name=host.name, host_token=host.host_token)
+    db.add(db_host)
     try:
         db.commit()
-        db.refresh(db_machine)
+        db.refresh(db_host)
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail="Machine registration failed. Name or token might already exist.")
-    return db_machine
+        raise HTTPException(status_code=400, detail="Host registration failed. Name or token might already exist.")
+    return db_host
 
-@fastapi_app.get("/sessions", response_model=List[SessionSchema])
-def read_sessions(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db), user: dict = Depends(auth.get_current_user)):
+@fastapi_app.get("/agents", response_model=List[AgentSchema])
+def read_agents(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db), user: dict = Depends(auth.get_current_user)):
     """
-    List all active and historical sessions. Requires UI login.
+    List all active and historical agent sessions. Requires UI login.
     """
-    sessions = db.query(models.Session).offset(skip).limit(limit).all()
-    return sessions
+    agents = db.query(models.Agent).offset(skip).limit(limit).all()
+    return agents
 
 @fastapi_app.get("/health")
 def health_check():
