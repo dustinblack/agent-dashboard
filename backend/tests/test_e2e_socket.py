@@ -141,6 +141,16 @@ def test_socketio_relay_e2e(live_server):
     ui_sio.emit("join_room", {"room": agent_sid}, namespace="/terminal")
     time.sleep(0.2) # Allow time for join
     
+    # The server should have immediately sent a carriage return (\r) to the agent upon join
+    # Wait for Agent to receive it
+    for _ in range(10):
+        if agent_received_input:
+            break
+        time.sleep(0.1)
+        
+    assert len(agent_received_input) >= 1
+    assert agent_received_input[0]["input"] == "\r"
+    
     # 4. Agent sends output
     test_output = "Hello from agent!"
     agent_sio.emit("terminal_output", {"output": test_output}, namespace="/terminal")
@@ -161,12 +171,12 @@ def test_socketio_relay_e2e(live_server):
     
     # Wait for Agent to receive it
     for _ in range(10):
-        if agent_received_input:
+        if len(agent_received_input) > 1:
             break
         time.sleep(0.1)
         
-    assert len(agent_received_input) == 1
-    assert agent_received_input[0]["input"] == test_input
+    assert len(agent_received_input) == 2
+    assert agent_received_input[1]["input"] == test_input
     
     # Cleanup
     agent_sio.disconnect()

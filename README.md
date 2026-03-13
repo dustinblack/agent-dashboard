@@ -19,7 +19,9 @@ Ensure you have `podman` and `podman-compose` installed:
 sudo dnf install podman podman-compose
 ```
 
-### Running the Application
+### Running the Application (Local Test Configuration)
+
+For local development and testing, you can bypass the OIDC authentication requirement by passing the `BYPASS_AUTH=true` environment variable to the backend. This is already configured in the default `compose.yml`.
 
 1. Build and start the containers in the background:
    ```bash
@@ -29,6 +31,36 @@ sudo dnf install podman podman-compose
 2. The application will be accessible at:
    - Frontend: `http://localhost:8080` (or the IP of your RHEL server)
    - Backend API: `http://localhost:8000`
+
+### Simulating a Connected Agent
+
+To see the dashboard in action locally, you can run the agent wrapper script as a container, pointing it at your local backend.
+
+First, register a dummy token with your backend:
+```bash
+curl -X POST http://localhost:8000/machines \
+  -H "Content-Type: application/json" \
+  -d '{"name": "test-agent", "machine_token": "test-token-123"}'
+```
+
+Then, run the agent container:
+```bash
+cd agent/
+podman build -t agent-dashboard-agent -f Containerfile .
+podman run -it --rm --network=host \
+  -e DASHBOARD_URL="http://127.0.0.1:8000" \
+  -e MACHINE_TOKEN="test-token-123" \
+  -e MACHINE_NAME="containerized-agent" \
+  agent-dashboard-agent bash
+```
+Navigate to `http://localhost:8080` to attach to the terminal!
+
+### Running in Production
+
+To run the application securely in production:
+1. Edit `compose.yml` and **remove** the `BYPASS_AUTH=true` environment variable.
+2. Provide real OIDC provider credentials as environment variables to the backend container (e.g., `CLIENT_ID`, `CLIENT_SECRET`, `OIDC_DISCOVERY_URL`).
+3. Set up a reverse proxy (like NGINX or Traefik) to handle HTTPS termination for both the frontend (`:8080`) and the WebSocket connections to the backend (`:8000/socket.io`).
 
 ### Persistence
 

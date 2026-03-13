@@ -97,7 +97,7 @@ async def handle_join_room(sid, data):
     if room:
         await sio.enter_room(sid, room, namespace='/terminal')
         print(f"User SID {sid} joined room: {room}")
-        # Send a blank line/return to the agent so it redraws its prompt for the newly attached UI
+        # Send a carriage return to the agent so it redraws its prompt for the newly attached UI
         await sio.emit('terminal_input', {'input': '\r'}, room=room, namespace='/terminal')
 
 @sio.on('terminal_input', namespace='/terminal')
