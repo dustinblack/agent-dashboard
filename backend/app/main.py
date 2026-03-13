@@ -63,6 +63,10 @@ class AgentSchema(AgentBase):
     started_at: datetime
     ended_at: Optional[datetime] = None
 
+class SpawnRequest(BaseModel):
+    host_id: int
+    tool_name: str
+
 # Authentication Endpoints
 @fastapi_app.get("/login")
 async def login(request: Request):
@@ -124,6 +128,36 @@ def read_agents(skip: int = 0, limit: int = 100, db: Session = Depends(database.
     """
     agents = db.query(models.Agent).offset(skip).limit(limit).all()
     return agents
+
+@fastapi_app.post("/agents/spawn", response_model=AgentSchema)
+async def spawn_agent(request: SpawnRequest, db: Session = Depends(database.get_db), user: dict = Depends(auth.get_current_user)):
+    """
+    Commands a remote host to spawn a new AI agent session.
+    """
+    import uuid
+    agent_uuid = str(uuid.uuid4())
+    
+    # 1. Create database record
+    db_agent = models.Agent(
+        host_id=request.host_id,
+        agent_id=agent_uuid,
+        tool_name=request.tool_name,
+        status="active"
+    )
+    db.add(db_agent)
+    db.commit()
+    db.refresh(db_agent)
+
+    # 2. Relay command to the specific host daemon via Socket.IO
+    # The host daemon should be in a room named "host_{id}"
+    await socket.sio.emit(
+        'spawn_agent', 
+        {'agent_id': agent_uuid, 'tool': request.tool_name}, 
+        room=f"host_{request.host_id}", 
+        namespace='/terminal'
+    )
+    
+    return db_agent
 
 @fastapi_app.get("/health")
 def health_check():

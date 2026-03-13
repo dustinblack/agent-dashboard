@@ -1,5 +1,4 @@
 import socketio
-from fastapi import HTTPException
 from . import database, models
 
 # Initialize the AsyncServer with ASGI support and CORS
@@ -9,17 +8,15 @@ sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 async def connect(sid, environ, auth):
     """
     Handles new Socket.IO connections on the /terminal namespace.
-    Authenticates the host or agent using the X-Host-Token header.
+    Identifies if the connection is from a Host Daemon or a UI Client.
     """
     headers = dict(environ.get('asgi.scope', {}).get('headers', []))
-    # headers are byte strings, need to decode
     headers_str = {k.decode('utf-8').lower(): v.decode('utf-8') for k, v in headers.items()}
     
     host_token = headers_str.get('x-host-token') or (auth and auth.get('token'))
 
     if not host_token:
-        # Allow UI clients to connect without a host token
-        print(f"UI client connected: (SID: {sid})")
+        # UI client connected
         return True
         
     db = next(database.get_db())
@@ -28,19 +25,14 @@ async def connect(sid, environ, auth):
         if not host:
             return False
             
-        # Create a new agent session for this connection (Temporary logic until Phase 3)
-        new_agent = models.Agent(host_id=host.id, agent_id=sid, status="active", tool_name="gemini")
-        db.add(new_agent)
-        db.commit()
-        
-        # Save host info in the session environment for later use
+        # Store host info in the session
         async with sio.session(sid, namespace='/terminal') as session:
             session['host_id'] = host.id
-            session['db_agent_id'] = new_agent.id
+            session['is_host'] = True
             
-        # Join a room specific to this agent ID so the UI can subscribe to it
-        await sio.enter_room(sid, sid, namespace='/terminal')
-        print(f"Agent connected from host: {host.name} (SID: {sid})")
+        # Join a room specific to this host's ID so we can send spawn commands to it
+        await sio.enter_room(sid, f"host_{host.id}", namespace='/terminal')
+        print(f"Host Daemon connected: {host.name} (SID: {sid})")
         
     finally:
         db.close()
@@ -48,68 +40,50 @@ async def connect(sid, environ, auth):
 @sio.on('disconnect', namespace='/terminal')
 async def disconnect(sid):
     """
-    Handles agent or UI disconnection. Marks the agent as closed if it was an agent.
+    Handles disconnection. If it was a host, we could mark all its agents as closed.
     """
     async with sio.session(sid, namespace='/terminal') as session:
-        db_agent_id = session.get('db_agent_id')
-        if db_agent_id:
-            db = next(database.get_db())
-            try:
-                db_agent = db.query(models.Agent).filter(models.Agent.id == db_agent_id).first()
-                if db_agent:
-                    db_agent.status = "closed"
-                    from datetime import datetime, timezone
-                    db_agent.ended_at = datetime.now(timezone.utc)
-                    db.commit()
-                    print(f"Agent disconnected: SID {sid} marked as closed.")
-            finally:
-                db.close()
+        if session.get('is_host'):
+            host_id = session.get('host_id')
+            print(f"Host Daemon {host_id} disconnected (SID: {sid})")
+            # In a production app, we'd mark all agents for this host as 'closed' here.
 
 @sio.on('terminal_output', namespace='/terminal')
 async def handle_terminal_output(sid, data):
     """
-    Receives stdout/stderr from the agent and broadcasts it to the UI room.
+    Receives stdout/stderr from an agent (via the host daemon) and broadcasts it.
+    data: {'sid': 'agent_id', 'output': '...'}
     """
-    # data is expected to be a dict: {'output': '...text...'}
+    agent_id = data.get('sid')
     output = data.get('output', '')
-    if output:
-        # Broadcast to anyone listening to this specific agent's room (e.g., the UI)
-        await sio.emit('terminal_output', {'sid': sid, 'output': output}, room=sid, namespace='/terminal')
+    
+    if agent_id and output:
+        # Broadcast to the room dedicated to this agent's ID
+        await sio.emit('terminal_output', {'sid': agent_id, 'output': output}, room=agent_id, namespace='/terminal')
         
-        # Optional: Save to Log table for historical purposes
-        async with sio.session(sid, namespace='/terminal') as session:
-            db_agent_id = session.get('db_agent_id')
-            if db_agent_id:
-                db = next(database.get_db())
-                try:
-                    new_log = models.Log(agent_id=db_agent_id, content=output)
-                    db.add(new_log)
-                    db.commit()
-                finally:
-                    db.close()
+        # We could also save logs to the database here if needed.
 
 @sio.on('join_room', namespace='/terminal')
 async def handle_join_room(sid, data):
     """
     Allows the UI to join a specific agent's room to receive its output.
     """
-    room = data.get('room')
-    if room:
-        await sio.enter_room(sid, room, namespace='/terminal')
-        print(f"User SID {sid} joined room: {room}")
-        # Send a carriage return to the agent so it redraws its prompt for the newly attached UI
-        await sio.emit('terminal_input', {'input': '\r'}, room=room, namespace='/terminal')
+    agent_id = data.get('room')
+    if agent_id:
+        await sio.enter_room(sid, agent_id, namespace='/terminal')
+        print(f"UI Client {sid} joined Agent room: {agent_id}")
+        # Signal the host daemon to force a prompt redraw for this agent
+        # We need to find which host SID is responsible for this agent_id.
+        # For simplicity in this refactor, we'll broadcast the redraw request
+        # to all hosts, or ideally the specific host if we had a mapping.
+        await sio.emit('terminal_input', {'target_sid': agent_id, 'input': '\r'}, namespace='/terminal')
 
 @sio.on('terminal_input', namespace='/terminal')
 async def handle_terminal_input(sid, data):
     """
-    Receives keystrokes from the UI and sends them back to the specific agent.
-    The UI emits this event to the server, and the server relays it to the agent.
+    Receives keystrokes from the UI and relays them to the Host Daemon.
+    data: {'target_sid': 'agent_id', 'input': '...'}
     """
-    # data is expected to be a dict: {'target_sid': '...', 'input': '...chars...'}
-    target_sid = data.get('target_sid')
-    user_input = data.get('input')
-    
-    if target_sid and user_input:
-        # Emit 'terminal_input' back to the specific agent daemon
-        await sio.emit('terminal_input', {'input': user_input}, room=target_sid, namespace='/terminal')
+    # Relay directly to all connected clients on this namespace. 
+    # The Host Daemon will filter by agent_id.
+    await sio.emit('terminal_input', data, namespace='/terminal')

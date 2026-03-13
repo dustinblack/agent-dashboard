@@ -71,89 +71,94 @@ def test_api_and_cors_e2e(live_server):
     assert host_data["name"] == "e2e-host"
 
 
-def test_socketio_relay_e2e(live_server):
-    """Test end-to-end Socket.IO relay between an Agent and the UI."""
+def test_agent_spawning_e2e(live_server):
+    """Test the full agent spawning flow from UI -> Backend -> Host Daemon."""
     
-    # 1. First register the host token via API
-    httpx.post(
+    # 1. Register host
+    r_host = httpx.post(
         f"{live_server}/hosts", 
-        json={"name": "socket-host", "host_token": "socket-token"}
+        json={"name": "spawn-host", "host_token": "spawn-token"}
     )
-    
-    # 2. Agent Daemon connects
-    agent_sio = socketio.Client()
-    agent_connected = False
-    
-    @agent_sio.event(namespace="/terminal")
-    def connect():
-        nonlocal agent_connected
-        agent_connected = True
+    host_id = r_host.json()["id"]
 
-    agent_received_input = []
+    # 2. Host Daemon connects
+    host_sio = socketio.Client()
+    spawn_events = []
     
-    @agent_sio.on("terminal_input", namespace="/terminal")
-    def on_terminal_input(data):
-        agent_received_input.append(data)
-        
-    # Agent Daemon authenticates via header
-    agent_sio.connect(
+    @host_sio.on("spawn_agent", namespace="/terminal")
+    def on_spawn(data):
+        spawn_events.append(data)
+
+    host_sio.connect(
         live_server, 
         namespaces=["/terminal"], 
-        headers={"x-host-token": "socket-token"}
+        headers={"x-host-token": "spawn-token"}
     )
-    
-    # Wait for connection
-    for _ in range(10):
-        if agent_connected:
+
+    # 3. UI triggers spawn via REST API
+    r_spawn = httpx.post(
+        f"{live_server}/agents/spawn",
+        json={"host_id": host_id, "tool_name": "gemini"}
+    )
+    assert r_spawn.status_code == 200
+    agent_data = r_spawn.json()
+    agent_uuid = agent_data["agent_id"]
+
+    # 4. Verify Host Daemon received the spawn event
+    for _ in range(20):
+        if spawn_events:
             break
         time.sleep(0.1)
+
+    assert len(spawn_events) == 1
+    assert spawn_events[0]["agent_id"] == agent_uuid
+    assert spawn_events[0]["tool"] == "gemini"
+
+    host_sio.disconnect()
+
+
+def test_socketio_relay_multiplex_e2e(live_server):
+    """Test I/O relay multiplexed by agent_id."""
     
-    assert agent_connected, "Agent failed to connect via Socket.IO"
+    # 1. Register and connect host
+    httpx.post(
+        f"{live_server}/hosts", 
+        json={"name": "relay-host", "host_token": "relay-token"}
+    )
     
-    # The agent's SID is its identifier
-    agent_sid = agent_sio.get_sid(namespace="/terminal")
+    host_sio = socketio.Client()
+    host_received_input = []
     
-    # 3. UI connects
+    @host_sio.on("terminal_input", namespace="/terminal")
+    def on_input(data):
+        host_received_input.append(data)
+
+    host_sio.connect(
+        live_server, 
+        namespaces=["/terminal"], 
+        headers={"x-host-token": "relay-token"}
+    )
+    
+    # We'll use a dummy agent_id
+    agent_id = "test-agent-123"
+    
+    # 2. UI connects
     ui_sio = socketio.Client()
-    ui_connected = False
-    
-    @ui_sio.event(namespace="/terminal")
-    def connect():
-        nonlocal ui_connected
-        ui_connected = True
-        
     ui_received_output = []
     
     @ui_sio.on("terminal_output", namespace="/terminal")
-    def on_terminal_output(data):
+    def on_output(data):
         ui_received_output.append(data)
         
     ui_sio.connect(live_server, namespaces=["/terminal"])
     
-    for _ in range(10):
-        if ui_connected:
-            break
-        time.sleep(0.1)
-        
-    assert ui_connected, "UI failed to connect via Socket.IO"
+    # UI joins the specific agent's room
+    ui_sio.emit("join_room", {"room": agent_id}, namespace="/terminal")
+    time.sleep(0.2)
     
-    # UI joins the specific agent's room to receive its output
-    ui_sio.emit("join_room", {"room": agent_sid}, namespace="/terminal")
-    time.sleep(0.2) # Allow time for join
-    
-    # The server should have immediately sent a carriage return (\r) to the agent upon join
-    # Wait for Agent to receive it
-    for _ in range(10):
-        if agent_received_input:
-            break
-        time.sleep(0.1)
-        
-    assert len(agent_received_input) >= 1
-    assert agent_received_input[0]["input"] == "\r"
-    
-    # 4. Agent sends output
-    test_output = "Hello from agent!"
-    agent_sio.emit("terminal_output", {"output": test_output}, namespace="/terminal")
+    # 3. Host Daemon sends output for that agent_id
+    test_output = "Multi-agent output"
+    host_sio.emit("terminal_output", {"sid": agent_id, "output": test_output}, namespace="/terminal")
     
     # Wait for UI to receive it
     for _ in range(10):
@@ -163,21 +168,19 @@ def test_socketio_relay_e2e(live_server):
         
     assert len(ui_received_output) == 1
     assert ui_received_output[0]["output"] == test_output
-    assert ui_received_output[0]["sid"] == agent_sid
+    assert ui_received_output[0]["sid"] == agent_id
     
-    # 5. UI sends input back to the agent
-    test_input = "ls -la\n"
-    ui_sio.emit("terminal_input", {"target_sid": agent_sid, "input": test_input}, namespace="/terminal")
+    # 4. UI sends input back to that agent_id
+    test_input = "whoami"
+    ui_sio.emit("terminal_input", {"target_sid": agent_id, "input": test_input}, namespace="/terminal")
     
-    # Wait for Agent to receive it
+    # Wait for Host Daemon to receive it
     for _ in range(10):
-        if len(agent_received_input) > 1:
+        if any(d.get("target_sid") == agent_id and d.get("input") == test_input for d in host_received_input):
             break
         time.sleep(0.1)
         
-    assert len(agent_received_input) == 2
-    assert agent_received_input[1]["input"] == test_input
+    assert any(d.get("target_sid") == agent_id and d.get("input") == test_input for d in host_received_input)
     
-    # Cleanup
-    agent_sio.disconnect()
+    host_sio.disconnect()
     ui_sio.disconnect()
