@@ -17,7 +17,10 @@ models.Base.metadata.create_all(bind=database.engine)
 
 fastapi_app = FastAPI(title="Gemini AI Coding Agent Dashboard API")
 
-# Add CORS Middleware
+# Add Session Middleware for OIDC
+fastapi_app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY", "super-secret-default-key"))
+
+# Add CORS Middleware (must be added last so it is the outermost middleware)
 fastapi_app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],  # Explicit origins for credentials
@@ -25,9 +28,6 @@ fastapi_app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
-
-# Add Session Middleware for OIDC
-fastapi_app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY", "super-secret-default-key"))
 
 # Mount Socket.IO
 app = socketio.ASGIApp(socket.sio, fastapi_app)
