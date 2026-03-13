@@ -6,6 +6,8 @@ import asyncio
 import socketio
 import select
 import signal
+import subprocess
+import re
 from typing import Dict, Optional
 from collections import deque
 
@@ -14,12 +16,14 @@ class HostDaemon:
         self.server_url = server_url
         self.host_token = host_token
         self.sio = socketio.AsyncClient()
-        self.agents: Dict[str, Dict] = {} # agent_id -> {master_fd, pid, tool, history}
+        self.agents: Dict[str, Dict] = {} # agent_id -> {master_fd, pid, tool, history, telemetry}
         self.running = True
 
         @self.sio.on('*', namespace='/terminal')
         async def catch_all(event, data):
-            print(f"DEBUG: Received event '{event}' with data: {data}")
+            # Suppress noisy heartbeat/terminal output logs in debug
+            if event not in ['terminal_output', 'terminal_input']:
+                print(f"DEBUG: Received event '{event}' with data: {data}")
 
         @self.sio.on('connect', namespace='/terminal')
         async def on_connect():
@@ -29,38 +33,28 @@ class HostDaemon:
         async def on_spawn_agent(data):
             """
             Triggered by the server to start a new AI agent session.
-            data: {'agent_id': '...', 'tool': 'gemini|claude'}
+            data: {'agent_id': '...', 'tool': 'gemini|claude', 'project_dir': '...', 'task_description': '...'}
             """
             agent_id = data.get('agent_id')
             tool = data.get('tool', 'bash')
-            await self.spawn_agent(agent_id, tool)
+            project_dir = data.get('project_dir')
+            task_description = data.get('task_description')
+            await self.spawn_agent(agent_id, tool, project_dir, task_description)
 
         @self.sio.on('stop_agent', namespace='/terminal')
         async def on_stop_agent(data):
-            """
-            Triggered by the server to stop an active AI agent session.
-            data: {'agent_id': '...'}
-            """
             agent_id = data.get('agent_id')
-            print(f"Received remote stop request for agent: {agent_id}")
             if agent_id in self.agents:
                 print(f"Stopping agent {agent_id} by request.")
                 pid = self.agents[agent_id]['pid']
                 try:
                     os.kill(pid, signal.SIGTERM)
-                    print(f"Killed process {pid}")
-                except OSError as e:
-                    print(f"Failed to kill process {pid}: {e}")
+                except OSError:
+                    pass
                 self.close_agent(agent_id)
-            else:
-                print(f"Agent {agent_id} not found in active agents list.")
 
         @self.sio.on('request_history', namespace='/terminal')
         async def on_request_history(data):
-            """
-            Triggered when a UI client joins an agent room and needs past output.
-            data: {'agent_id': '...'}
-            """
             agent_id = data.get('agent_id')
             if agent_id in self.agents and self.sio.connected:
                 print(f"Replaying history for agent: {agent_id}")
@@ -69,18 +63,12 @@ class HostDaemon:
                         'sid': agent_id, 
                         'output': chunk
                     }, namespace='/terminal')
-                # Signal that replay is finished
                 await self.sio.emit('history_complete', {'agent_id': agent_id}, namespace='/terminal')
 
         @self.sio.on('terminal_input', namespace='/terminal')
         async def on_terminal_input(data):
-            """
-            Receives keystrokes from the UI and writes them to the pty.
-            data: {'target_sid': '...', 'input': '...'}
-            """
             agent_id = data.get('target_sid')
             user_input = data.get('input', '')
-            
             if agent_id in self.agents and user_input:
                 master_fd = self.agents[agent_id]['master_fd']
                 try:
@@ -88,22 +76,51 @@ class HostDaemon:
                 except OSError:
                     pass
 
-    async def spawn_agent(self, agent_id: str, tool: str):
-        """Spawns a new process in a pseudo-terminal."""
-        print(f"Spawning agent {agent_id} with tool: {tool}")
+    def get_git_info(self, path: str):
+        """Extracts git branch and project name from a directory."""
+        if not path or not os.path.exists(path):
+            return None, None
+        try:
+            branch = subprocess.check_output(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"], 
+                cwd=path, stderr=subprocess.DEVNULL
+            ).decode().strip()
+            
+            origin = subprocess.check_output(
+                ["git", "config", "--get", "remote.origin.url"], 
+                cwd=path, stderr=subprocess.DEVNULL
+            ).decode().strip()
+            # Extract project name from URL (e.g., user/repo.git -> repo)
+            project = origin.split("/")[-1].replace(".git", "")
+            return branch, project
+        except Exception:
+            return None, None
+
+    async def spawn_agent(self, agent_id: str, tool: str, project_dir: Optional[str] = None, task: Optional[str] = None):
+        """Spawns a new process in a pseudo-terminal with environmental context."""
+        print(f"Spawning agent {agent_id} with tool: {tool} in {project_dir}")
         
-        # Mapping tool names to actual commands
-        cmd_map = {
-            'gemini': ['gemini'],
-            'claude': ['claude'],
-            'bash': ['bash']
+        # 1. Gather Initial Telemetry
+        branch, project = self.get_git_info(project_dir)
+        telemetry = {
+            "project_dir": project_dir,
+            "task_description": task,
+            "git_branch": branch,
+            "git_project": project,
+            "model": "detecting...",
+            "tokens": 0
         }
+
+        # 2. Command mapping
+        cmd_map = {'gemini': ['gemini'], 'claude': ['claude'], 'bash': ['bash']}
         cmd = cmd_map.get(tool, [tool])
 
+        # 3. Fork and Exec
         pid, fd = pty.fork()
         if pid == 0: # Child process
-            # Ensure the child inherits the daemon's environment variables (including API keys)
-            # Inject terminal capabilities for full color support
+            if project_dir and os.path.exists(project_dir):
+                os.chdir(project_dir)
+            
             env = os.environ.copy()
             env['TERM'] = 'xterm-256color'
             env['COLORTERM'] = 'truecolor'
@@ -117,10 +134,38 @@ class HostDaemon:
                 'master_fd': fd,
                 'pid': pid,
                 'tool': tool,
-                'history': deque(maxlen=1000) # Store last 1000 chunks of output
+                'history': deque(maxlen=1000),
+                'telemetry': telemetry
             }
-            # Force an initial newline to trigger prompt rendering
+            # Send initial telemetry to Hub
+            if self.sio.connected:
+                await self.sio.emit('agent_telemetry', {'agent_id': agent_id, 'telemetry': telemetry}, namespace='/terminal')
+            
             os.write(fd, b'\n')
+
+    def parse_telemetry(self, agent_id: str, text: str):
+        """Parses terminal output for live telemetry updates (tokens, models)."""
+        changed = False
+        tel = self.agents[agent_id]['telemetry']
+
+        # Example patterns for Gemini/Claude (adjust as they evolve)
+        # Match model name: e.g. "Using model: gemini-2.0-flash"
+        model_match = re.search(r"model:?\s*([a-zA-Z0-9\-\.]+)", text, re.IGNORECASE)
+        if model_match:
+            new_model = model_match.group(1)
+            if tel.get('model') != new_model:
+                tel['model'] = new_model
+                changed = True
+
+        # Match token usage: e.g. "Tokens: 1250" or "Usage: 450 tokens"
+        token_match = re.search(r"(?:tokens|usage):?\s*(\d+)", text, re.IGNORECASE)
+        if token_match:
+            new_tokens = int(token_match.group(1))
+            if tel.get('tokens') != new_tokens:
+                tel['tokens'] = new_tokens
+                changed = True
+
+        return changed
 
     async def watch_agents(self):
         """Continuously polls all active agent FDs for output."""
@@ -132,18 +177,15 @@ class HostDaemon:
 
             fds = [a['master_fd'] for a in self.agents.values()]
             
-            # Non-blocking select
             try:
                 r, _, _ = await loop.run_in_executor(None, select.select, fds, [], [], 0.1)
-            except ValueError: # Occurs if an FD was closed
+            except ValueError:
                 self.cleanup_closed_agents()
                 continue
 
             for fd in r:
-                # Find which agent this FD belongs to safely
                 agent_entry = next((item for item in self.agents.items() if item[1]['master_fd'] == fd), None)
-                if not agent_entry:
-                    continue
+                if not agent_entry: continue
                 
                 agent_id, info = agent_entry
                 
@@ -155,9 +197,15 @@ class HostDaemon:
                         
                     if self.sio.connected:
                         decoded_data = data.decode('utf-8', errors='replace')
-                        # Save to history buffer
                         self.agents[agent_id]['history'].append(decoded_data)
                         
+                        # Live stream parsing for rich context
+                        if self.parse_telemetry(agent_id, decoded_data):
+                            await self.sio.emit('agent_telemetry', {
+                                'agent_id': agent_id, 
+                                'telemetry': self.agents[agent_id]['telemetry']
+                            }, namespace='/terminal')
+
                         await self.sio.emit('terminal_output', {
                             'sid': agent_id, 
                             'output': decoded_data
@@ -176,7 +224,6 @@ class HostDaemon:
             except OSError:
                 pass
             del self.agents[agent_id]
-            # Notify the server that this agent process has ended
             if self.sio.connected:
                 asyncio.create_task(self.sio.emit('agent_exit', {'agent_id': agent_id}, namespace='/terminal'))
 
@@ -197,7 +244,6 @@ class HostDaemon:
                 namespaces=['/terminal'],
                 headers={'X-Host-Token': self.host_token}
             )
-            # Run the output watcher as a background task
             self.watcher_task = asyncio.create_task(self.watch_agents())
             await self.watcher_task
         except asyncio.CancelledError:
