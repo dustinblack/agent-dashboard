@@ -100,6 +100,33 @@ async def handle_history_complete(sid, data):
     if agent_id:
         await sio.emit('history_complete', data, room=agent_id, namespace='/terminal')
 
+@sio.on('agent_telemetry', namespace='/terminal')
+async def handle_agent_telemetry(sid, data):
+    """
+    Receives rich telemetry from the host daemon and updates the database.
+    data: {'agent_id': '...', 'telemetry': {...}}
+    """
+    agent_id = data.get('agent_id')
+    telemetry = data.get('telemetry')
+    if agent_id and telemetry:
+        db = next(database.get_db())
+        try:
+            db_agent = db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
+            if db_agent:
+                # Merge new telemetry into existing
+                current_tel = db_agent.telemetry_json or {}
+                current_tel.update(telemetry)
+                db_agent.telemetry_json = current_tel
+                db.commit()
+                
+                # Broadcast update to all UI clients for real-time card refresh
+                await sio.emit('agent_telemetry_update', {
+                    'agent_id': agent_id, 
+                    'telemetry': current_tel
+                }, namespace='/terminal')
+        finally:
+            db.close()
+
 @sio.on('agent_exit', namespace='/terminal')
 async def handle_agent_exit(sid, data):
     """
