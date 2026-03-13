@@ -59,8 +59,8 @@ Based on your preferences, the system will be built using the following stack:
 3. Create the Terminal Component using `xterm.js` and the `xterm-addon-fit`. Connect this component to the Socket.IO `/terminal` namespace to render the remote shell and send keystrokes.
 
 ### Phase 5: Containerization for RHEL 9 (Podman)
-1. Write a `Dockerfile` for the Python backend.
-2. Write a `Dockerfile` for the React frontend (multi-stage build that serves the static assets via an NGINX container).
+1. Write a `Containerfile` for the Python backend.
+2. Write a `Containerfile` for the React frontend (multi-stage build that serves the static assets via an NGINX container).
 3. Author a `compose.yml` specifically tailored for Podman:
    - Mounts a local host directory into the Backend container for the SQLite `.db` file to ensure persistence across container restarts.
    - Exposes port `80`/`443` for the web UI and backend API.

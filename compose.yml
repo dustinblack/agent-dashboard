@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Containerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - dashboard_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/agent_dashboard.db
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Containerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    # Environment variables for build time would be passed here if needed
+
+volumes:
+  dashboard_data:
