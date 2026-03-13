@@ -13,6 +13,7 @@ class Host(Base):
     name = Column(String, unique=True, index=True, nullable=False)
     host_token = Column(String, unique=True, index=True, nullable=False)
     status = Column(String, default="offline") # online, offline
+    last_projects_json = Column(JSON, nullable=True) # Cached project list
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     agents = relationship("Agent", back_populates="host")

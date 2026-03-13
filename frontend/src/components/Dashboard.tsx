@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { getHosts, getAgents, spawnAgent, stopAgent } from '../api';
 import type { Host, Agent } from '../api';
-import { Terminal, Cpu, Activity, PlusCircle, Wifi, WifiOff, Square, GitBranch, Folder, Info, X, ChevronRight } from 'lucide-react';
+import { Terminal, Cpu, Activity, PlusCircle, Wifi, WifiOff, Square, GitBranch, Folder, Info, X, ChevronRight, RefreshCw } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface DashboardProps {
@@ -13,12 +13,20 @@ interface SpawnModalProps {
     tool: string;
     onClose: () => void;
     onSpawn: (dir: string, task: string) => void;
+    onRefresh: () => void;
 }
 
-const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn }) => {
+const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, onRefresh }) => {
     const projects = host.projects?.available_projects || [];
-    const [selectedProject, setSelectedProject] = useState(projects.length > 0 ? projects[0] : '');
+    const [selectedProject, setSelectedProject] = useState('');
     const [task, setTask] = useState('');
+
+    // Auto-select first project when list arrives
+    useEffect(() => {
+        if (projects.length > 0 && !selectedProject) {
+            setSelectedProject(projects[0]);
+        }
+    }, [projects, selectedProject]);
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -40,7 +48,15 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn })
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 text-blue-400">Select Project</label>
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest text-blue-400">Select Project</label>
+                            <button 
+                                onClick={onRefresh}
+                                className="text-[10px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-tighter transition-colors flex items-center gap-1"
+                            >
+                                <RefreshCw size={10} className="animate-spin-slow" /> Force Refresh
+                            </button>
+                        </div>
                         <div className="relative group">
                             <Folder className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-hover:text-blue-400 transition-colors" size={18} />
                             <select 
@@ -48,7 +64,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn })
                                 onChange={(e) => setSelectedProject(e.target.value)}
                                 className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-10 text-white focus:outline-none focus:border-blue-500 appearance-none transition-all cursor-pointer"
                             >
-                                {projects.length === 0 && <option value="">No projects found in {host.projects?.projects_root || '/git'}</option>}
+                                {projects.length === 0 && <option value="">Loading projects from {host.projects?.projects_root || '/git'}...</option>}
                                 {projects.map(p => (
                                     <option key={p} value={p}>{p}</option>
                                 ))}
@@ -56,7 +72,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn })
                             <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none group-hover:text-blue-400 rotate-90" size={18} />
                         </div>
                         <p className="text-[10px] text-slate-500 mt-1.5 italic">
-                            Projects are subdirectories found in <code className="bg-slate-900 px-1 rounded">{host.projects?.projects_root || '/git'}</code> on the remote host.
+                            Projects found in <code className="bg-slate-900 px-1 rounded">{host.projects?.projects_root || '/git'}</code>
                         </p>
                     </div>
 
@@ -101,21 +117,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const [activeSpawn, setActiveSpawn] = useState<{host: Host, tool: string} | null>(null);
+  const [activeSpawn, setActiveSpawn] = useState<{hostId: number, tool: string} | null>(null);
 
-  // We use a ref to store project telemetry so it isn't lost during periodic fetchData refreshes
   const projectsCache = useRef<Record<number, any>>({});
 
   const fetchData = async () => {
     try {
       const [h, a] = await Promise.all([getHosts(), getAgents()]);
-      
-      // Merge cached project telemetry back into the fresh host list
       const enrichedHosts = h.map(host => ({
           ...host,
           projects: projectsCache.current[host.id] || host.projects
       }));
-
       setHosts(enrichedHosts);
       setAgents(a);
       setError(null);
@@ -149,14 +161,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
       }
   };
 
+  const requestProjects = () => {
+      const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const socket = io(`${baseURL}/terminal`, { path: '/socket.io' });
+      socket.emit('request_projects', {});
+      console.log("Manual project refresh requested.");
+      setTimeout(() => socket.disconnect(), 1000);
+  };
+
   useEffect(() => {
     fetchData();
-    
     const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
     const socket = io(`${baseURL}/terminal`, { path: '/socket.io' });
     
     socket.on('connect', () => {
-        console.log("Dashboard connected to Socket.IO. Requesting host projects...");
         socket.emit('request_projects', {});
     });
 
@@ -177,10 +195,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
     });
 
     socket.on('host_telemetry_update', (data: { host_id: number, telemetry: any }) => {
-        console.log("Host telemetry update received:", data);
-        // Update cache
         projectsCache.current[data.host_id] = data.telemetry;
-        // Update state
         setHosts(prev => prev.map(h => 
             h.id === data.host_id ? { ...h, projects: data.telemetry } : h
         ));
@@ -342,7 +357,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                   <td className="p-4">
                       <div className="flex gap-2">
                         <button 
-                            onClick={() => setActiveSpawn({host, tool: 'gemini'})}
+                            onClick={() => setActiveSpawn({hostId: host.id, tool: 'gemini'})}
                             disabled={host.status !== 'online'}
                             className={`text-xs px-3 py-1.5 rounded-md border transition-colors flex items-center gap-1.5 ${
                                 host.status === 'online' 
@@ -353,7 +368,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                             <PlusCircle size={14} /> Spawn Gemini
                         </button>
                         <button 
-                            onClick={() => setActiveSpawn({host, tool: 'claude'})}
+                            onClick={() => setActiveSpawn({hostId: host.id, tool: 'claude'})}
                             disabled={host.status !== 'online'}
                             className={`text-xs px-3 py-1.5 rounded-md border transition-colors flex items-center gap-1.5 ${
                                 host.status === 'online' 
@@ -364,7 +379,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                             <PlusCircle size={14} /> Spawn Claude
                         </button>
                         <button 
-                            onClick={() => setActiveSpawn({host, tool: 'bash'})}
+                            onClick={() => setActiveSpawn({hostId: host.id, tool: 'bash'})}
                             disabled={host.status !== 'online'}
                             className={`text-xs px-3 py-1.5 rounded-md border transition-colors flex items-center gap-1.5 ${
                                 host.status === 'online' 
@@ -385,10 +400,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
 
       {activeSpawn && (
           <SpawnModal 
-            host={activeSpawn.host} 
+            host={hosts.find(h => h.id === activeSpawn.hostId)!} 
             tool={activeSpawn.tool} 
             onClose={() => setActiveSpawn(null)}
-            onSpawn={(dir, task) => handleSpawn(activeSpawn.host.id, activeSpawn.tool, dir, task)}
+            onSpawn={(dir, task) => handleSpawn(activeSpawn.hostId, activeSpawn.tool, dir, task)}
+            onRefresh={requestProjects}
           />
       )}
     </div>

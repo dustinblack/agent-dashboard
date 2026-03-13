@@ -84,13 +84,29 @@ class HostDaemon:
                     pass
 
     async def report_projects(self):
-        """Scans PROJECTS_ROOT and reports available subdirectories to the Hub."""
+        """Scans PROJECTS_ROOT for directories containing a .git folder (max depth 2)."""
         projects = []
         if os.path.exists(self.projects_root):
             try:
-                # Only list directories
-                projects = [d for d in os.listdir(self.projects_root) 
-                            if os.path.isdir(os.path.join(self.projects_root, d))]
+                # Walk the directory tree to find actual git repositories
+                # Depth 0: root, Depth 1: orgs/top-level, Depth 2: nested repos
+                for root, dirs, files in os.walk(self.projects_root):
+                    # Calculate current depth relative to projects_root
+                    rel_path = os.path.relpath(root, self.projects_root)
+                    depth = 0 if rel_path == "." else len(rel_path.split(os.sep))
+                    
+                    if depth > 2:
+                        # Don't go deeper than depth 2
+                        dirs[:] = [] 
+                        continue
+                    
+                    if ".git" in dirs:
+                        # Found a git repo!
+                        if rel_path != ".":
+                            projects.append(rel_path)
+                        # Don't scan inside the .git folder or deeper into this repo
+                        dirs[:] = [d for d in dirs if d != ".git"]
+                
                 projects.sort()
             except Exception as e:
                 print(f"Error scanning projects root {self.projects_root}: {e}")
@@ -122,10 +138,14 @@ class HostDaemon:
 
     async def spawn_agent(self, agent_id: str, tool: str, project_dir: Optional[str] = None, task: Optional[str] = None):
         """Spawns a new process in a pseudo-terminal with environmental context."""
-        # Resolve full path if only relative project name provided
+        # Resolve full path (handles both absolute and relative from projects_root)
         full_path = project_dir
         if project_dir and not project_dir.startswith('/'):
             full_path = os.path.join(self.projects_root, project_dir)
+        
+        # Ensure we use an absolute path for working directory
+        if full_path:
+            full_path = os.path.abspath(full_path)
 
         print(f"Spawning agent {agent_id} with tool: {tool} in {full_path}")
         
@@ -168,20 +188,43 @@ class HostDaemon:
             os.write(fd, b'\n')
 
     def parse_telemetry(self, agent_id: str, text: str):
+        """Parses terminal output for live telemetry updates (tokens, models)."""
         changed = False
         tel = self.agents[agent_id]['telemetry']
-        model_match = re.search(r"model:?\s*([a-zA-Z0-9\-\.]+)", text, re.IGNORECASE)
-        if model_match:
-            new_model = model_match.group(1)
-            if tel.get('model') != new_model:
-                tel['model'] = new_model
-                changed = True
-        token_match = re.search(r"(?:tokens|usage):?\s*(\d+)", text, re.IGNORECASE)
-        if token_match:
-            new_tokens = int(token_match.group(1))
-            if tel.get('tokens') != new_tokens:
-                tel['tokens'] = new_tokens
-                changed = True
+
+        # 1. Improved Model Detection
+        # Match "Model: name", "Using model: name", "Model name: name"
+        model_patterns = [
+            r"model:?\s*([a-zA-Z0-9\-\.]+)",
+            r"using\s+model:?\s*([a-zA-Z0-9\-\.]+)",
+            r"active\s+model:?\s*([a-zA-Z0-9\-\.]+)"
+        ]
+        for pattern in model_patterns:
+            model_match = re.search(pattern, text, re.IGNORECASE)
+            if model_match:
+                new_model = model_match.group(1)
+                if tel.get('model') != new_model:
+                    tel['model'] = new_model
+                    changed = True
+                break
+
+        # 2. Improved Token Detection
+        # Match "Tokens: 123", "Usage: 123 tokens", "123/1000000 tokens", etc.
+        token_patterns = [
+            r"(?:tokens|usage):?\s*(\d+)",
+            r"(\d+)\s*/\s*\d+\s+tokens",
+            r"(\d+)\s*tokens?\s+used"
+        ]
+        for pattern in token_patterns:
+            token_match = re.search(pattern, text, re.IGNORECASE)
+            if token_match:
+                new_tokens = int(token_match.group(1))
+                # Only update if tokens increased (ignore smaller replayed numbers)
+                if new_tokens > tel.get('tokens', 0):
+                    tel['tokens'] = new_tokens
+                    changed = True
+                break
+
         return changed
 
     async def watch_agents(self):

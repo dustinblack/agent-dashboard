@@ -123,6 +123,7 @@ def read_hosts(skip: int = 0, limit: int = 100, db: Session = Depends(database.g
     List all registered hosts. Requires UI login.
     """
     hosts = db.query(models.Host).offset(skip).limit(limit).all()
+    print(f"DEBUG: read_hosts returning {len(hosts)} hosts. Sample projects: {[h.last_projects_json for h in hosts]}")
     return hosts
 
 @fastapi_app.post("/hosts", response_model=HostSchema)

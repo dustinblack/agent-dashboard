@@ -138,6 +138,10 @@ def test_socketio_relay_multiplex_e2e(live_server):
     def on_history(data):
         host_received_events.append(("request_history", data))
 
+    @host_sio.on("request_projects", namespace="/terminal")
+    def on_request_projects(data):
+        host_received_events.append(("request_projects", data))
+
     host_sio.connect(
         live_server, 
         namespaces=["/terminal"], 
@@ -150,12 +154,35 @@ def test_socketio_relay_multiplex_e2e(live_server):
     # 2. UI connects
     ui_sio = socketio.Client()
     ui_received_output = []
+    ui_received_host_telemetry = []
     
     @ui_sio.on("terminal_output", namespace="/terminal")
     def on_output(data):
         ui_received_output.append(data)
         
+    @ui_sio.on("host_telemetry_update", namespace="/terminal")
+    def on_host_telemetry(data):
+        ui_received_host_telemetry.append(data)
+
     ui_sio.connect(live_server, namespaces=["/terminal"])
+
+    # 2.1 Verify UI can request projects and host receives it
+    ui_sio.emit("request_projects", {}, namespace="/terminal")
+    for _ in range(20):
+        if any(e[0] == "request_projects" for e in host_received_events):
+            break
+        time.sleep(0.1)
+    assert any(e[0] == "request_projects" for e in host_received_events)
+
+    # 2.2 Verify Host can emit telemetry and UI receives it
+    test_telemetry = {"projects_root": "/test", "available_projects": ["proj1", "proj2"]}
+    host_sio.emit("host_telemetry", test_telemetry, namespace="/terminal")
+    for _ in range(20):
+        if ui_received_host_telemetry:
+            break
+        time.sleep(0.1)
+    assert len(ui_received_host_telemetry) >= 1
+    assert ui_received_host_telemetry[-1]["telemetry"] == test_telemetry
     
     # UI joins the specific agent's room
     ui_sio.emit("join_room", {"room": agent_id}, namespace="/terminal")

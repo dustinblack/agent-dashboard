@@ -48,14 +48,16 @@ cd agent/
 podman build -t agent-dashboard-daemon -f Containerfile .
 
 podman run -it --rm --network=host \
+  --security-opt label=disable \
   -e DASHBOARD_URL="http://127.0.0.1:8000" \
   -e HOST_TOKEN="secret-token-123" \
   -e GEMINI_API_KEY="your-key-here" \
-  -v /path/to/your/git:/git:Z \
-  -v $HOME/.gemini/:/root/.gemini:Z \
+  -e PROJECTS_ROOT="/git" \
+  -v /path/to/your/git:/git \
+  -v $HOME/.gemini/:/root/.gemini \
   agent-dashboard-daemon
 ```
-*(Note: Use the `:Z` flag on RHEL/Fedora to handle SELinux permissions.)*
+*(Note: We use `--security-opt label=disable` instead of the `:Z` mount flag to safely grant the container access to your local files without recursively changing their SELinux labels, which can cause permission errors on large directories.)*
 
 ### 3. Spawn Agents
 Go to the Web UI (`http://localhost:8080`). You will see your workstation listed. Click **"Spawn Gemini"** or **"Spawn Claude"** to start a remote AI session. 
