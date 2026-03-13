@@ -47,7 +47,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
   );
 
   return (
-    <div className="p-8">
+    <div className="max-w-7xl mx-auto p-8">
       <header className="mb-8 flex justify-between items-center">
         <h1 className="text-3xl font-bold flex items-center gap-2 text-white">
           <Terminal size={32} /> Agent Dashboard

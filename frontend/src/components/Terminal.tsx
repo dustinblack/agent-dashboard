@@ -29,7 +29,6 @@ const Terminal: React.FC<TerminalProps> = ({ sessionId, onClose }) => {
       },
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
       fontSize: 14,
-      padding: 16,
     });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
@@ -45,9 +44,13 @@ const Terminal: React.FC<TerminalProps> = ({ sessionId, onClose }) => {
     const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
     const socket = io(`${baseURL}/terminal`, {
       path: '/socket.io',
-      transports: ['websocket'],
     });
     socketRef.current = socket;
+
+    socket.on('connect_error', (err) => {
+        console.error('Socket.IO Connection Error:', err);
+        term.writeln(`\x1b[1;31mConnection error: ${err.message}\x1b[0m`);
+    });
 
     socket.on('connect', () => {
       term.writeln('\x1b[1;32mConnected to session relay...\x1b[0m');

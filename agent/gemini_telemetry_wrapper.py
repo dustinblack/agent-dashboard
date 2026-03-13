@@ -19,11 +19,15 @@ def get_sio():
     global sio
     if sio is None:
         sio = socketio.AsyncClient()
-        
+
         @sio.event(namespace='/terminal')
         async def connect():
             """Event handler for successful connection to the dashboard."""
-            pass
+            # Send an initial newline to force the shell to print its prompt 
+            # so the UI isn't completely blank upon joining.
+            global master_fd
+            if master_fd is not None:
+                os.write(master_fd, b'\n')
 
         @sio.event(namespace='/terminal')
         async def disconnect():

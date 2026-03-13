@@ -15,14 +15,8 @@
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
-}
-
-#root {
-  width: 100%;
 }
 
 /* Utility Classes */
@@ -72,6 +66,8 @@ body {
 .italic { font-style: italic; }
 .underline { text-decoration: underline; }
 .w-full { width: 100%; }
+.max-w-7xl { max-width: 80rem; }
+.mx-auto { margin-left: auto; margin-right: auto; }
 .bg-blue-600 { background-color: #2563eb; }
 .hover\:bg-blue-500:hover { background-color: #3b82f6; }
 .transition-colors { transition-property: color, background-color, border-color, text-decoration-color, fill, stroke; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
