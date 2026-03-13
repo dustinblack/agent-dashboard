@@ -2,19 +2,15 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-# Install basic utilities if the agent needs to run commands like bash, ping, etc.
-# Feel free to add more packages here depending on what commands you want the agent to be able to wrap.
+# Install basic utilities
 RUN apt-get update && apt-get install -y --no-install-recommends bash curl && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the wrapper script
-COPY gemini_telemetry_wrapper.py .
+# Copy the daemon script
+COPY host_daemon.py .
 
-# Use the wrapper as the entrypoint
-ENTRYPOINT ["python", "gemini_telemetry_wrapper.py"]
-
-# Default command to run if none is provided
-CMD ["bash"]
+# Use the daemon as the entrypoint
+ENTRYPOINT ["python", "host_daemon.py"]
