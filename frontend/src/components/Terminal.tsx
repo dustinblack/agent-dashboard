@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { io, Socket } from 'socket.io-client';
+import { ArrowLeft, XCircle } from 'lucide-react';
 import 'xterm/css/xterm.css';
 
 interface TerminalProps {
@@ -21,14 +22,23 @@ const Terminal: React.FC<TerminalProps> = ({ sessionId, onClose }) => {
     const term = new XTerm({
       cursorBlink: true,
       theme: {
-        background: '#1a1b26',
-        foreground: '#a9b1d6',
+        background: '#0f172a', // matches slate-900
+        foreground: '#f1f5f9', // matches slate-100
+        cursor: '#60a5fa',     // matches blue-400
+        selectionBackground: '#334155', // matches slate-700
       },
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      fontSize: 14,
+      padding: 16,
     });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(terminalRef.current);
-    fitAddon.fit();
+    
+    // Slight delay to ensure DOM is ready before fitting
+    setTimeout(() => {
+        fitAddon.fit();
+    }, 10);
     xtermRef.current = term;
 
     // Initialize Socket.IO
@@ -55,7 +65,11 @@ const Terminal: React.FC<TerminalProps> = ({ sessionId, onClose }) => {
       socket.emit('terminal_input', { target_sid: sessionId, input: data });
     });
 
-    const handleResize = () => fitAddon.fit();
+    const handleResize = () => {
+        if (fitAddon) {
+            fitAddon.fit();
+        }
+    };
     window.addEventListener('resize', handleResize);
 
     return () => {
@@ -66,16 +80,38 @@ const Terminal: React.FC<TerminalProps> = ({ sessionId, onClose }) => {
   }, [sessionId]);
 
   return (
-    <div className="terminal-container" style={{ height: '100%', width: '100%', position: 'relative' }}>
-      <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 10 }}>
+    <div className="flex flex-col h-screen w-screen bg-slate-900 overflow-hidden">
+      {/* Header Bar */}
+      <div className="flex items-center justify-between bg-slate-800 border-b border-slate-700 px-6 py-3 shrink-0">
+        <div className="flex items-center gap-4">
+            <button 
+                onClick={onClose}
+                className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+                title="Back to Dashboard"
+            >
+                <ArrowLeft size={20} />
+                <span className="font-semibold text-sm">Dashboard</span>
+            </button>
+            <div className="h-6 w-px bg-slate-700"></div>
+            <div className="flex flex-col">
+                <span className="text-xs text-slate-400 font-mono">Session ID</span>
+                <span className="text-sm font-bold text-white font-mono">{sessionId}</span>
+            </div>
+        </div>
+        
         <button 
           onClick={onClose}
-          style={{ padding: '4px 8px', background: '#f44336', color: 'white', border: 'none', cursor: 'pointer' }}
+          className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 px-3 py-1.5 rounded-md transition-colors border border-red-500/20"
         >
-          Close
+          <XCircle size={16} />
+          <span className="font-semibold text-sm">Disconnect</span>
         </button>
       </div>
-      <div ref={terminalRef} style={{ height: '100%', width: '100%' }} />
+
+      {/* Terminal Container */}
+      <div className="flex-1 w-full h-full p-4 overflow-hidden relative">
+          <div ref={terminalRef} className="absolute inset-4 rounded-lg overflow-hidden border border-slate-800 shadow-xl" />
+      </div>
     </div>
   );
 };
