@@ -105,15 +105,16 @@ async def handle_history_complete(sid, data):
     agent_id = data.get('agent_id')
     if agent_id:
         await sio.emit('history_complete', data, room=agent_id, namespace='/terminal')
-
 @sio.on('agent_telemetry', namespace='/terminal')
 async def handle_agent_telemetry(sid, data):
     """
-    Receives rich telemetry from the host daemon and updates the database.
+    Receives live telemetry updates from host daemons and broadcasts them to UI clients.
+    Also persists the latest telemetry state in the database.
     data: {'agent_id': '...', 'telemetry': {...}}
     """
     agent_id = data.get('agent_id')
     telemetry = data.get('telemetry')
+    print(f"DEBUG: handle_agent_telemetry received for agent_id {agent_id}: {telemetry}")
     if agent_id and telemetry:
         db = next(database.get_db())
         try:
@@ -121,15 +122,20 @@ async def handle_agent_telemetry(sid, data):
             if db_agent:
                 # Merge new telemetry into existing
                 current_tel = db_agent.telemetry_json or {}
-                current_tel.update(telemetry)
-                db_agent.telemetry_json = current_tel
+                # Create a new dict to trigger SQLAlchemy's change detection on JSON columns
+                new_tel = dict(current_tel)
+                new_tel.update(telemetry)
+                db_agent.telemetry_json = new_tel
                 db.commit()
-                
+                print(f"DEBUG: successfully updated DB for agent {agent_id}")
+
                 # Broadcast update to all UI clients for real-time card refresh
                 await sio.emit('agent_telemetry_update', {
                     'agent_id': agent_id, 
-                    'telemetry': current_tel
+                    'telemetry': new_tel
                 }, namespace='/terminal')
+            else:
+                print(f"DEBUG: agent_id {agent_id} not found in DB")
         finally:
             db.close()
 

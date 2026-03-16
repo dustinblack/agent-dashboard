@@ -18,6 +18,10 @@ class Host(Base):
 
     agents = relationship("Agent", back_populates="host")
 
+    @property
+    def projects(self):
+        return self.last_projects_json
+
 class Agent(Base):
     """
     Represents an active or historical AI agent session (e.g. Gemini, Claude).
@@ -36,6 +40,10 @@ class Agent(Base):
 
     host = relationship("Host", back_populates="agents")
     logs = relationship("Log", back_populates="agent")
+
+    @property
+    def telemetry(self):
+        return self.telemetry_json or {}
 
 class Log(Base):
     """
