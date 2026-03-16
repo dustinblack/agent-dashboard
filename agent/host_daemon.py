@@ -19,6 +19,8 @@ class HostDaemon:
         self.sio = socketio.AsyncClient()
         self.agents: Dict[str, Dict] = {} # agent_id -> {master_fd, pid, tool, history, telemetry}
         self.running = True
+        self.cached_projects = []
+        self.projects_lock = asyncio.Lock()
 
         @self.sio.on('*', namespace='/terminal')
         async def catch_all(event, data):
@@ -83,34 +85,45 @@ class HostDaemon:
                 except OSError:
                     pass
 
-    async def report_projects(self):
-        """Scans PROJECTS_ROOT for directories containing a .git folder (max depth 2)."""
-        projects = []
-        if os.path.exists(self.projects_root):
-            try:
-                # Walk the directory tree to find actual git repositories
-                # Depth 0: root, Depth 1: orgs/top-level, Depth 2: nested repos
-                for root, dirs, files in os.walk(self.projects_root):
-                    # Calculate current depth relative to projects_root
-                    rel_path = os.path.relpath(root, self.projects_root)
-                    depth = 0 if rel_path == "." else len(rel_path.split(os.sep))
-                    
-                    if depth > 2:
-                        # Don't go deeper than depth 2
-                        dirs[:] = [] 
-                        continue
-                    
-                    if ".git" in dirs:
-                        # Found a git repo!
-                        if rel_path != ".":
-                            projects.append(rel_path)
-                        # Don't scan inside the .git folder or deeper into this repo
-                        dirs[:] = [d for d in dirs if d != ".git"]
+    async def update_projects_cache(self):
+        """Continuously updates the project cache in the background every 60 seconds."""
+        loop = asyncio.get_running_loop()
+        while self.running:
+            def _scan():
+                projects = []
+                if os.path.exists(self.projects_root):
+                    try:
+                        for root, dirs, files in os.walk(self.projects_root):
+                            rel_path = os.path.relpath(root, self.projects_root)
+                            depth = 0 if rel_path == "." else len(rel_path.split(os.sep))
+                            if depth > 2:
+                                dirs[:] = [] 
+                                continue
+                            if ".git" in dirs:
+                                if rel_path != ".":
+                                    projects.append(rel_path)
+                                dirs[:] = [d for d in dirs if d != ".git"]
+                        projects.sort()
+                    except Exception as e:
+                        print(f"Error scanning projects root {self.projects_root}: {e}")
+                return projects
                 
-                projects.sort()
-            except Exception as e:
-                print(f"Error scanning projects root {self.projects_root}: {e}")
-        
+            new_projects = await loop.run_in_executor(None, _scan)
+            async with self.projects_lock:
+                self.cached_projects = new_projects
+            
+            # Immediately report if connected
+            if self.sio.connected:
+                await self.report_projects()
+                
+            await asyncio.sleep(60)
+
+    async def report_projects(self):
+        """Instantly reports cached projects to the Hub."""
+        async with self.projects_lock:
+            projects = list(self.cached_projects)
+            
+        print(f"Reporting {len(projects)} available projects to Hub.")
         if self.sio.connected:
             await self.sio.emit('host_telemetry', {
                 'projects_root': self.projects_root,
@@ -288,7 +301,8 @@ class HostDaemon:
                 headers={'X-Host-Token': self.host_token}
             )
             self.watcher_task = asyncio.create_task(self.watch_agents())
-            await self.watcher_task
+            self.cache_task = asyncio.create_task(self.update_projects_cache())
+            await asyncio.gather(self.watcher_task, self.cache_task)
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -306,6 +320,8 @@ class HostDaemon:
         self.running = False
         if hasattr(self, 'watcher_task') and not self.watcher_task.done():
             self.watcher_task.cancel()
+        if hasattr(self, 'cache_task') and not self.cache_task.done():
+            self.cache_task.cancel()
 
 async def main():
     SERVER_URL = os.getenv("DASHBOARD_URL", "http://localhost:8000")

@@ -62,6 +62,9 @@ podman run -it --rm --network=host \
 ### 3. Spawn Agents
 Go to the Web UI (`http://localhost:8080`). You will see your workstation listed. Click **"Spawn Gemini"** or **"Spawn Claude"** to start a remote AI session. 
 
+**Note on Agent Spawning:**
+- **Project Selection:** The daemon automatically scans the `PROJECTS_ROOT` directory in the background every 60 seconds. You can select a project directory for the agent to start in via the dropdown menu. You can also force a refresh of this list if you've recently added a new project.
+
 **Note on Console UX:**
 - **Detached Windows:** Attaching to a terminal now opens a standalone browser popup window with minimal interface, allowing for side-by-side multi-tasking across different agents.
 - **History Replay:** If you close a terminal window and re-attach later, the dashboard automatically replays the recent session history so you can pick up exactly where you left off.
