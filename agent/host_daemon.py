@@ -187,6 +187,15 @@ class HostDaemon:
             env = os.environ.copy()
             env['TERM'] = 'xterm-256color'
             env['COLORTERM'] = 'truecolor'
+            
+            # Inject OpenTelemetry standard configuration
+            env['OTEL_EXPORTER_OTLP_ENDPOINT'] = "http://127.0.0.1:4318"
+            env['OTEL_RESOURCE_ATTRIBUTES'] = f"service.name={agent_id}"
+            
+            # Tool-specific OTel enablement
+            env['CLAUDE_CODE_ENABLE_TELEMETRY'] = '1'
+            env['GEMINI_CLI_TELEMETRY_ENABLED'] = 'true'
+            
             try:
                 os.execvpe(cmd[0], cmd, env)
             except Exception as e:
@@ -203,46 +212,6 @@ class HostDaemon:
             if self.sio.connected:
                 await self.sio.emit('agent_telemetry', {'agent_id': agent_id, 'telemetry': telemetry}, namespace='/terminal')
             os.write(fd, b'\n')
-
-    def parse_telemetry(self, agent_id: str, text: str):
-        """Parses terminal output for live telemetry updates (tokens, models)."""
-        changed = False
-        tel = self.agents[agent_id]['telemetry']
-
-        # 1. Improved Model Detection
-        # Match "Model: name", "Using model: name", "Model name: name"
-        model_patterns = [
-            r"model:?\s*([a-zA-Z0-9\-\.]+)",
-            r"using\s+model:?\s*([a-zA-Z0-9\-\.]+)",
-            r"active\s+model:?\s*([a-zA-Z0-9\-\.]+)"
-        ]
-        for pattern in model_patterns:
-            model_match = re.search(pattern, text, re.IGNORECASE)
-            if model_match:
-                new_model = model_match.group(1)
-                if tel.get('model') != new_model:
-                    tel['model'] = new_model
-                    changed = True
-                break
-
-        # 2. Improved Token Detection
-        # Match "Tokens: 123", "Usage: 123 tokens", "123/1000000 tokens", etc.
-        token_patterns = [
-            r"(?:tokens|usage):?\s*(\d+)",
-            r"(\d+)\s*/\s*\d+\s+tokens",
-            r"(\d+)\s*tokens?\s+used"
-        ]
-        for pattern in token_patterns:
-            token_match = re.search(pattern, text, re.IGNORECASE)
-            if token_match:
-                new_tokens = int(token_match.group(1))
-                # Only update if tokens increased (ignore smaller replayed numbers)
-                if new_tokens > tel.get('tokens', 0):
-                    tel['tokens'] = new_tokens
-                    changed = True
-                break
-
-        return changed
 
     async def watch_agents(self):
         loop = asyncio.get_running_loop()
@@ -268,8 +237,6 @@ class HostDaemon:
                     if self.sio.connected:
                         decoded_data = data.decode('utf-8', errors='replace')
                         self.agents[agent_id]['history'].append(decoded_data)
-                        if self.parse_telemetry(agent_id, decoded_data):
-                            await self.sio.emit('agent_telemetry', {'agent_id': agent_id, 'telemetry': self.agents[agent_id]['telemetry']}, namespace='/terminal')
                         await self.sio.emit('terminal_output', {'sid': agent_id, 'output': decoded_data}, namespace='/terminal')
                 except OSError:
                     self.close_agent(agent_id)
