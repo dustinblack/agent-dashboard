@@ -195,6 +195,11 @@ class HostDaemon:
             # Tool-specific OTel enablement
             env['CLAUDE_CODE_ENABLE_TELEMETRY'] = '1'
             env['GEMINI_CLI_TELEMETRY_ENABLED'] = 'true'
+            env['GEMINI_TELEMETRY_ENABLED'] = 'true'
+            env['GEMINI_TELEMETRY_OTLP_ENDPOINT'] = 'http://127.0.0.1:4318/v1/logs'
+            env['GEMINI_TELEMETRY_OTLP_PROTOCOL'] = 'http'
+            env['GEMINI_TELEMETRY_USE_COLLECTOR'] = 'true'
+            env['GEMINI_TELEMETRY_TARGET'] = 'local'
             
             try:
                 os.execvpe(cmd[0], cmd, env)
@@ -268,6 +273,7 @@ class HostDaemon:
         """Standardized OTLP HTTP receiver (JSON format)."""
         try:
             data = await request.json()
+            print(f"OTLP received data: {data}")
             # OTLP Logs usually arrive at /v1/logs
             # We look for agent_id in resource attributes (injected as service.name)
             # and token/model info in log attributes.
@@ -327,6 +333,32 @@ class HostDaemon:
         print("OTLP Receiver listening on http://127.0.0.1:4318")
         await site.start()
 
+    async def update_agents_git_info(self):
+        """Periodically checks the current working directory of each agent and updates git info."""
+        while self.running:
+            for agent_id, info in list(self.agents.items()):
+                try:
+                    pid = info['pid']
+                    if not pid: continue
+                    # Try to read the cwd of the child process
+                    cwd = os.readlink(f'/proc/{pid}/cwd')
+                    branch, project = self.get_git_info(cwd)
+                    
+                    tel = info['telemetry']
+                    changed = False
+                    if branch and tel.get('git_branch') != branch:
+                        tel['git_branch'] = branch
+                        changed = True
+                    if project and tel.get('git_project') != project:
+                        tel['git_project'] = project
+                        changed = True
+                    
+                    if changed and self.sio.connected:
+                        await self.sio.emit('agent_telemetry', {'agent_id': agent_id, 'telemetry': tel}, namespace='/terminal')
+                except Exception:
+                    pass # Process might have died or no permission
+            await asyncio.sleep(5)
+
     async def run(self):
         try:
             await self.sio.connect(
@@ -338,8 +370,9 @@ class HostDaemon:
             self.watcher_task = asyncio.create_task(self.watch_agents())
             self.cache_task = asyncio.create_task(self.update_projects_cache())
             self.otlp_task = asyncio.create_task(self.start_otlp_server())
+            self.git_task = asyncio.create_task(self.update_agents_git_info())
             
-            await asyncio.gather(self.watcher_task, self.cache_task, self.otlp_task)
+            await asyncio.gather(self.watcher_task, self.cache_task, self.otlp_task, self.git_task)
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -361,6 +394,8 @@ class HostDaemon:
             self.watcher_task.cancel()
         if hasattr(self, 'cache_task') and not self.cache_task.done():
             self.cache_task.cancel()
+        if hasattr(self, 'git_task') and not self.git_task.done():
+            self.git_task.cancel()
 
 async def main():
     SERVER_URL = os.getenv("DASHBOARD_URL", "http://localhost:8000")
