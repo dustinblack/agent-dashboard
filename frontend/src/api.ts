@@ -40,6 +40,10 @@ export const getHosts = async (): Promise<Host[]> => {
   return response.data;
 };
 
+export const deleteHost = async (id: number): Promise<void> => {
+  await api.delete(`/hosts/${id}`);
+};
+
 export const getAgents = async (): Promise<Agent[]> => {
   const response = await api.get('/agents');
   return response.data;

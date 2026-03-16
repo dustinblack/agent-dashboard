@@ -42,6 +42,20 @@ class HostDaemon:
         async def on_request_projects(data):
             await self.report_projects()
 
+        @self.sio.on('terminal_resize', namespace='/terminal')
+        async def on_terminal_resize(data):
+            agent_id = data.get('sid')
+            cols = data.get('cols')
+            rows = data.get('rows')
+            if agent_id in self.agents and cols and rows:
+                master_fd = self.agents[agent_id]['master_fd']
+                import fcntl, termios, struct
+                size = struct.pack('HHHH', rows, cols, 0, 0)
+                try:
+                    fcntl.ioctl(master_fd, termios.TIOCSWINSZ, size)
+                except Exception as e:
+                    print(f"Failed to resize terminal {agent_id}: {e}")
+
         @self.sio.on('spawn_agent', namespace='/terminal')
         async def on_spawn_agent(data):
             """

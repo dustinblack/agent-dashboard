@@ -16,7 +16,7 @@ class Host(Base):
     last_projects_json = Column(JSON, nullable=True) # Cached project list
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-    agents = relationship("Agent", back_populates="host")
+    agents = relationship("Agent", back_populates="host", cascade="all, delete-orphan")
 
     @property
     def projects(self):
@@ -39,7 +39,7 @@ class Agent(Base):
     ended_at = Column(DateTime, nullable=True)
 
     host = relationship("Host", back_populates="agents")
-    logs = relationship("Log", back_populates="agent")
+    logs = relationship("Log", back_populates="agent", cascade="all, delete-orphan")
 
     @property
     def telemetry(self):

@@ -55,6 +55,17 @@ def test_read_hosts():
     assert len(data) >= 1
     assert data[0]["name"] == "test-host"
 
+def test_delete_host():
+    r = client.post("/hosts", json={"name": "to-delete", "host_token": "del-token"})
+    assert r.status_code == 200
+    h_id = r.json()["id"]
+
+    r_del = client.delete(f"/hosts/{h_id}")
+    assert r_del.status_code == 200
+
+    r_list = client.get("/hosts")
+    assert not any(h["id"] == h_id for h in r_list.json())
+
 def test_read_agents():
     response = client.get("/agents")
     assert response.status_code == 200

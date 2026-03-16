@@ -60,16 +60,20 @@ podman run -it --rm --network=host \
 *(Note: We use `--security-opt label=disable` instead of the `:Z` mount flag to safely grant the container access to your local files without recursively changing their SELinux labels, which can cause permission errors on large directories.)*
 
 ### 3. Spawn Agents
-Go to the Web UI (`http://localhost:8080`). You will see your workstation listed. Click **"Spawn Gemini"** or **"Spawn Claude"** to start a remote AI session. 
+Go to the Web UI (`http://localhost:8080`). You will see your workstation listed. Click **"Spawn Gemini"**, **"Spawn Claude"**, or **"Spawn Bash"** to start a remote session.
+
+**Note on Host Management:**
+- **Host Deletion:** You can dynamically remove offline or retired hosts from the dashboard by clicking the "Delete" trash can icon. This will safely cascade and clean up all historical agent sessions and logs associated with that host.
 
 **Note on Agent Spawning:**
 - **Project Selection:** The daemon automatically scans the `PROJECTS_ROOT` directory in the background every 60 seconds. You can select a project directory for the agent to start in via the dropdown menu. You can also force a refresh of this list if you've recently added a new project.
 
 **Note on Console UX:**
 - **Detached Windows:** Attaching to a terminal now opens a standalone browser popup window with minimal interface, allowing for side-by-side multi-tasking across different agents.
+- **Dynamic Resizing:** Terminals perfectly scale to match the window viewport size in real-time, instantly relaying geometry changes back to the underlying remote PTY.
 - **History Replay:** If you close a terminal window and re-attach later, the dashboard automatically replays the recent session history so you can pick up exactly where you left off.
 - **Color Support:** Terminals are configured with `xterm-256color` support for rich CLI output.
-- **Live Telemetry (OTel):** The dashboard now uses standardized OpenTelemetry (OTLP) to capture model names and token usage. The Host Daemon runs a local OTLP receiver (port 4318) that child agents (Gemini, Claude) report to, ensuring 100% accurate stats without screen-scraping or interfering with terminal performance.
+- **Live Telemetry (OTel):** The dashboard now uses standardized OpenTelemetry (OTLP) to capture model names and token usage. The Host Daemon runs a local OTLP receiver (port 4318) that child agents (Gemini, Claude) report to, ensuring 100% accurate stats without screen-scraping or interfering with terminal performance. Bash agents omit these stat boxes dynamically.
 
 ---
 

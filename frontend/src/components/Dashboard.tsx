@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { getHosts, getAgents, spawnAgent, stopAgent } from '../api';
+import { getHosts, getAgents, spawnAgent, stopAgent, deleteHost } from '../api';
 import type { Host, Agent } from '../api';
-import { Terminal, Cpu, Activity, PlusCircle, Wifi, WifiOff, Square, GitBranch, Folder, Info, X, ChevronRight, RefreshCw } from 'lucide-react';
+import { Terminal, Cpu, Activity, PlusCircle, Wifi, WifiOff, Square, GitBranch, Folder, Info, X, ChevronRight, RefreshCw, Trash2 } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface DashboardProps {
@@ -161,6 +161,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
       }
   };
 
+  const handleDeleteHost = async (hostId: number) => {
+      if (!window.confirm("Are you sure you want to delete this host? All its agent sessions will also be removed.")) return;
+      try {
+          await deleteHost(hostId);
+          await fetchData();
+      } catch (err) {
+          console.error("Failed to delete host:", err);
+          alert("Failed to delete host. Check console for details.");
+      }
+  };
+
   const requestProjects = () => {
       const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       const socket = io(`${baseURL}/terminal`, { path: '/socket.io' });
@@ -290,16 +301,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                     </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3 mb-6">
-                    <div className="bg-slate-900/30 p-2 rounded border border-slate-700/30">
-                        <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Model</p>
-                        <p className="text-[11px] text-slate-200 font-mono truncate">{tel.model || '...'}</p>
+                {agent.tool_name !== 'bash' && (
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                        <div className="bg-slate-900/30 p-2 rounded border border-slate-700/30">
+                            <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Model</p>
+                            <p className="text-[11px] text-slate-200 font-mono truncate">{tel.model || '...'}</p>
+                        </div>
+                        <div className="bg-slate-900/30 p-2 rounded border border-slate-700/30">
+                            <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Context Usage</p>
+                            <p className="text-[11px] text-slate-200 font-mono truncate">{tel.tokens ? `${tel.tokens.toLocaleString()} tokens` : '...'}</p>
+                        </div>
                     </div>
-                    <div className="bg-slate-900/30 p-2 rounded border border-slate-700/30">
-                        <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Context Usage</p>
-                        <p className="text-[11px] text-slate-200 font-mono truncate">{tel.tokens ? `${tel.tokens.toLocaleString()} tokens` : '...'}</p>
-                    </div>
-                </div>
+                )}
                 
                 <div className="flex gap-2 mt-auto">
                     <button 
@@ -388,6 +401,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                             }`}
                         >
                             <PlusCircle size={14} /> Spawn Bash
+                        </button>
+                        <button 
+                            onClick={() => handleDeleteHost(host.id)}
+                            className="text-xs px-3 py-1.5 rounded-md border transition-colors flex items-center gap-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-400 border-red-500/30 cursor-pointer ml-auto"
+                            title="Delete Host"
+                        >
+                            <Trash2 size={14} /> Delete
                         </button>
                       </div>
                   </td>

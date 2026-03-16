@@ -128,6 +128,23 @@ def create_host(host: HostCreate, db: Session = Depends(database.get_db), user: 
         raise HTTPException(status_code=400, detail="Host registration failed. Name or token might already exist.")
     return db_host
 
+@fastapi_app.delete("/hosts/{host_id}")
+def delete_host(host_id: int, db: Session = Depends(database.get_db), user: dict = Depends(auth.get_current_user)):
+    """
+    Deletes a registered host and cascades to all its agents and logs. Requires UI login.
+    """
+    db_host = db.query(models.Host).filter(models.Host.id == host_id).first()
+    if not db_host:
+        raise HTTPException(status_code=404, detail="Host not found.")
+    
+    try:
+        db.delete(db_host)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete host: {e}")
+    return {"detail": "Host deleted successfully."}
+
 @fastapi_app.get("/agents", response_model=List[AgentSchema])
 def read_agents(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db), user: dict = Depends(auth.get_current_user)):
     """

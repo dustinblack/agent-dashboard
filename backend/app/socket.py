@@ -105,6 +105,15 @@ async def handle_history_complete(sid, data):
     agent_id = data.get('agent_id')
     if agent_id:
         await sio.emit('history_complete', data, room=agent_id, namespace='/terminal')
+
+@sio.on('terminal_resize', namespace='/terminal')
+async def handle_terminal_resize(sid, data):
+    """
+    Relays a terminal resize event from UI to all host daemons.
+    data: {'sid': 'agent_id', 'cols': 80, 'rows': 24}
+    """
+    await sio.emit('terminal_resize', data, namespace='/terminal')
+
 @sio.on('agent_telemetry', namespace='/terminal')
 async def handle_agent_telemetry(sid, data):
     """
