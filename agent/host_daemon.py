@@ -8,6 +8,9 @@ import select
 import signal
 import subprocess
 import re
+import asyncio
+import aiohttp
+from aiohttp import web
 from typing import Dict, Optional, List
 from collections import deque
 
@@ -21,6 +24,7 @@ class HostDaemon:
         self.running = True
         self.cached_projects = []
         self.projects_lock = asyncio.Lock()
+        self.otlp_runner = None
 
         @self.sio.on('*', namespace='/terminal')
         async def catch_all(event, data):
@@ -293,6 +297,69 @@ class HostDaemon:
         for aid in to_delete:
             self.close_agent(aid)
 
+    async def handle_otlp(self, request):
+        """Standardized OTLP HTTP receiver (JSON format)."""
+        try:
+            data = await request.json()
+            # OTLP Logs usually arrive at /v1/logs
+            # We look for agent_id in resource attributes (injected as service.name)
+            # and token/model info in log attributes.
+            resource_logs = data.get('resourceLogs', [])
+            for res_log in resource_logs:
+                resource = res_log.get('resource', {})
+                attributes = {a['key']: a['value'].get('stringValue') for a in resource.get('attributes', [])}
+                agent_id = attributes.get('service.name')
+                
+                if agent_id and agent_id in self.agents:
+                    changed = False
+                    tel = self.agents[agent_id]['telemetry']
+                    
+                    for scope_log in res_log.get('scopeLogs', []):
+                        for log_record in scope_log.get('logRecords', []):
+                            # Extract attributes from individual log records
+                            log_attrs = {a['key']: a['value'] for a in log_record.get('attributes', [])}
+                            
+                            # Model detection
+                            model = log_attrs.get('model', {}).get('stringValue')
+                            if model and tel.get('model') != model:
+                                tel['model'] = model
+                                changed = True
+                                
+                            # Token detection (Gemini/Claude use different OTel schemas)
+                            input_tokens = log_attrs.get('input_token_count', {}).get('intValue')
+                            output_tokens = log_attrs.get('output_token_count', {}).get('intValue')
+                            
+                            # Fallback for Claude OTel names
+                            if input_tokens is None:
+                                input_tokens = log_attrs.get('input_tokens', {}).get('intValue')
+                            if output_tokens is None:
+                                output_tokens = log_attrs.get('output_tokens', {}).get('intValue')
+                                
+                            if input_tokens is not None or output_tokens is not None:
+                                total = (int(input_tokens or 0) + int(output_tokens or 0))
+                                if total > tel.get('tokens', 0):
+                                    tel['tokens'] = total
+                                    changed = True
+                    
+                    if changed and self.sio.connected:
+                        await self.sio.emit('agent_telemetry', {'agent_id': agent_id, 'telemetry': tel}, namespace='/terminal')
+            
+            return web.Response(status=200)
+        except Exception as e:
+            print(f"OTLP Error: {e}")
+            return web.Response(status=400)
+
+    async def start_otlp_server(self):
+        """Starts a local HTTP server for OpenTelemetry data."""
+        app = web.Application()
+        app.router.add_post('/v1/logs', self.handle_otlp)
+        app.router.add_post('/v1/metrics', self.handle_otlp)
+        self.otlp_runner = web.AppRunner(app)
+        await self.otlp_runner.setup()
+        site = web.TCPSite(self.otlp_runner, '127.0.0.1', 4318)
+        print("OTLP Receiver listening on http://127.0.0.1:4318")
+        await site.start()
+
     async def run(self):
         try:
             await self.sio.connect(
@@ -300,15 +367,20 @@ class HostDaemon:
                 namespaces=['/terminal'],
                 headers={'X-Host-Token': self.host_token}
             )
+            # Start background tasks
             self.watcher_task = asyncio.create_task(self.watch_agents())
             self.cache_task = asyncio.create_task(self.update_projects_cache())
-            await asyncio.gather(self.watcher_task, self.cache_task)
+            self.otlp_task = asyncio.create_task(self.start_otlp_server())
+            
+            await asyncio.gather(self.watcher_task, self.cache_task, self.otlp_task)
         except asyncio.CancelledError:
             pass
         except Exception as e:
             print(f"Daemon error: {e}")
         finally:
             self.running = False
+            if self.otlp_runner:
+                await self.otlp_runner.cleanup()
             for agent_id in list(self.agents.keys()):
                 self.close_agent(agent_id)
             if self.sio.connected:
