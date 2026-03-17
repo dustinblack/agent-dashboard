@@ -55,6 +55,8 @@ podman run -d --name host-daemon --network=host \
   -e GEMINI_API_KEY="your-key-here" \
   -e PROJECTS_ROOT="/git" \
   -v /path/to/your/git:/git \
+  -v $HOME/.ssh:/root/.ssh:ro \
+  -v $HOME/.gitconfig:/root/.gitconfig:ro \
   -v $HOME/.gemini/:/root/.gemini \
   localhost/agent-dashboard-daemon:latest
 ```
@@ -83,6 +85,8 @@ Environment=PROJECTS_ROOT=/git
 
 # Volume Mounts (using %h for your home directory)
 Volume=%h/path/to/your/git:/git
+Volume=%h/.ssh:/root/.ssh:ro
+Volume=%h/.gitconfig:/root/.gitconfig:ro
 Volume=%h/.gemini/:/root/.gemini
 
 [Install]
