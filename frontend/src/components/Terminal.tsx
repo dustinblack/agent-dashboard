@@ -10,13 +10,8 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
-import {
-  AgentDetail,
-  Agent,
-  getAgentDetails,
-  getCompanions,
-  spawnAgent,
-} from '../api';
+import type { AgentDetail, Agent } from '../api';
+import { getAgentDetails, getCompanions, spawnAgent } from '../api';
 
 interface TerminalProps {
   agentId: string;
