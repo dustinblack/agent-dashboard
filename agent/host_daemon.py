@@ -283,54 +283,145 @@ class HostDaemon:
         for aid in to_delete:
             self.close_agent(aid)
 
+    def _extract_otel_value(self, value_obj):
+        """Extracts the actual value from an OTLP attribute value object.
+
+        OTLP attribute values are wrapped in type-specific keys like
+        'stringValue', 'intValue', 'doubleValue', etc. This helper
+        returns the first non-None value found.
+        """
+        for key in ('stringValue', 'intValue', 'doubleValue', 'boolValue'):
+            if key in value_obj:
+                return value_obj[key]
+        return None
+
+    def _process_otel_attributes(self, attrs_list):
+        """Converts a list of OTLP key/value attributes to a flat dict.
+
+        Args:
+            attrs_list: List of dicts with 'key' and 'value' fields
+                        in OTLP attribute format.
+
+        Returns:
+            A dict mapping attribute keys to their extracted values.
+        """
+        result = {}
+        for attr in attrs_list:
+            key = attr.get('key', '')
+            value = attr.get('value', {})
+            result[key] = self._extract_otel_value(value)
+        return result
+
+    def _update_telemetry_from_attrs(self, tel, attrs):
+        """Updates agent telemetry dict from parsed OTLP attributes.
+
+        Looks for model name and token usage attributes using multiple
+        naming conventions (Gemini and Claude use different schemas).
+
+        Args:
+            tel: The agent's telemetry dict to update in place.
+            attrs: Flat dict of parsed OTLP attributes.
+
+        Returns:
+            True if any telemetry value was updated, False otherwise.
+        """
+        changed = False
+
+        # Model detection — try common attribute names
+        for key in ('model', 'gen_ai.request.model',
+                     'gen_ai.response.model'):
+            model = attrs.get(key)
+            if model and isinstance(model, str) and tel.get('model') != model:
+                tel['model'] = model
+                changed = True
+                break
+
+        # Token detection — try common attribute names
+        input_tokens = None
+        output_tokens = None
+        for key in ('input_token_count', 'input_tokens',
+                     'gen_ai.usage.input_tokens'):
+            val = attrs.get(key)
+            if val is not None:
+                input_tokens = int(val)
+                break
+        for key in ('output_token_count', 'output_tokens',
+                     'gen_ai.usage.output_tokens'):
+            val = attrs.get(key)
+            if val is not None:
+                output_tokens = int(val)
+                break
+
+        if input_tokens is not None or output_tokens is not None:
+            total = (input_tokens or 0) + (output_tokens or 0)
+            if total > tel.get('tokens', 0):
+                tel['tokens'] = total
+                changed = True
+
+        return changed
+
     async def handle_otlp(self, request):
-        """Standardized OTLP HTTP receiver (JSON format)."""
+        """Standardized OTLP HTTP receiver (JSON format).
+
+        Handles logs (/v1/logs), traces (/v1/traces), and metrics
+        (/v1/metrics). Extracts agent_id from the resource
+        'service.name' attribute (injected at spawn time) and looks
+        for model/token info in record or span attributes.
+        """
         try:
             data = await request.json()
-            print(f"OTLP received data: {data}")
-            # OTLP Logs usually arrive at /v1/logs
-            # We look for agent_id in resource attributes (injected as service.name)
-            # and token/model info in log attributes.
-            resource_logs = data.get('resourceLogs', [])
-            for res_log in resource_logs:
+            print(f"OTLP received on {request.path}: {list(data.keys())}")
+
+            # Process OTLP Logs (resourceLogs → scopeLogs → logRecords)
+            for res_log in data.get('resourceLogs', []):
                 resource = res_log.get('resource', {})
-                attributes = {a['key']: a['value'].get('stringValue') for a in resource.get('attributes', [])}
-                agent_id = attributes.get('service.name')
-                
-                if agent_id and agent_id in self.agents:
-                    changed = False
-                    tel = self.agents[agent_id]['telemetry']
-                    
-                    for scope_log in res_log.get('scopeLogs', []):
-                        for log_record in scope_log.get('logRecords', []):
-                            # Extract attributes from individual log records
-                            log_attrs = {a['key']: a['value'] for a in log_record.get('attributes', [])}
-                            
-                            # Model detection
-                            model = log_attrs.get('model', {}).get('stringValue')
-                            if model and tel.get('model') != model:
-                                tel['model'] = model
-                                changed = True
-                                
-                            # Token detection (Gemini/Claude use different OTel schemas)
-                            input_tokens = log_attrs.get('input_token_count', {}).get('intValue')
-                            output_tokens = log_attrs.get('output_token_count', {}).get('intValue')
-                            
-                            # Fallback for Claude OTel names
-                            if input_tokens is None:
-                                input_tokens = log_attrs.get('input_tokens', {}).get('intValue')
-                            if output_tokens is None:
-                                output_tokens = log_attrs.get('output_tokens', {}).get('intValue')
-                                
-                            if input_tokens is not None or output_tokens is not None:
-                                total = (int(input_tokens or 0) + int(output_tokens or 0))
-                                if total > tel.get('tokens', 0):
-                                    tel['tokens'] = total
-                                    changed = True
-                    
-                    if changed and self.sio.connected:
-                        await self.sio.emit('agent_telemetry', {'agent_id': agent_id, 'telemetry': tel}, namespace='/terminal')
-            
+                res_attrs = self._process_otel_attributes(
+                    resource.get('attributes', []))
+                agent_id = res_attrs.get('service.name')
+
+                if not agent_id or agent_id not in self.agents:
+                    continue
+                tel = self.agents[agent_id]['telemetry']
+                changed = False
+
+                for scope_log in res_log.get('scopeLogs', []):
+                    for record in scope_log.get('logRecords', []):
+                        attrs = self._process_otel_attributes(
+                            record.get('attributes', []))
+                        if self._update_telemetry_from_attrs(tel, attrs):
+                            changed = True
+
+                if changed and self.sio.connected:
+                    await self.sio.emit(
+                        'agent_telemetry',
+                        {'agent_id': agent_id, 'telemetry': tel},
+                        namespace='/terminal')
+
+            # Process OTLP Traces (resourceSpans → scopeSpans → spans)
+            for res_span in data.get('resourceSpans', []):
+                resource = res_span.get('resource', {})
+                res_attrs = self._process_otel_attributes(
+                    resource.get('attributes', []))
+                agent_id = res_attrs.get('service.name')
+
+                if not agent_id or agent_id not in self.agents:
+                    continue
+                tel = self.agents[agent_id]['telemetry']
+                changed = False
+
+                for scope_span in res_span.get('scopeSpans', []):
+                    for span in scope_span.get('spans', []):
+                        attrs = self._process_otel_attributes(
+                            span.get('attributes', []))
+                        if self._update_telemetry_from_attrs(tel, attrs):
+                            changed = True
+
+                if changed and self.sio.connected:
+                    await self.sio.emit(
+                        'agent_telemetry',
+                        {'agent_id': agent_id, 'telemetry': tel},
+                        namespace='/terminal')
+
             return web.Response(status=200)
         except Exception as e:
             print(f"OTLP Error: {e}")
@@ -340,6 +431,7 @@ class HostDaemon:
         """Starts a local HTTP server for OpenTelemetry data."""
         app = web.Application()
         app.router.add_post('/v1/logs', self.handle_otlp)
+        app.router.add_post('/v1/traces', self.handle_otlp)
         app.router.add_post('/v1/metrics', self.handle_otlp)
         self.otlp_runner = web.AppRunner(app)
         await self.otlp_runner.setup()
