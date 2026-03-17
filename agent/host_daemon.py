@@ -204,6 +204,16 @@ class HostDaemon:
             except Exception:
                 pass
 
+            # Configure terminal modes to preserve raw output for proper spinner rendering
+            try:
+                attrs = termios.tcgetattr(0)
+                # Disable ONLCR (don't translate NL to CR-NL on output)
+                # Disable OCRNL (don't translate CR to NL on output)
+                attrs[1] &= ~(termios.ONLCR | termios.OCRNL)
+                termios.tcsetattr(0, termios.TCSANOW, attrs)
+            except Exception:
+                pass
+
             if full_path and os.path.exists(full_path):
                 os.chdir(full_path)
             

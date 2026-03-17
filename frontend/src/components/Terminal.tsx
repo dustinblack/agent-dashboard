@@ -107,6 +107,10 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
 
     socket.on('terminal_output', (data: { sid: string; output: string }) => {
       if (data.sid === agentId) {
+        // Debug: Log raw output to see what control characters we're receiving
+        if (data.output.includes('\r') || data.output.includes('\n')) {
+          console.log('Raw output:', JSON.stringify(data.output));
+        }
         term.write(data.output);
       }
     });
