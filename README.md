@@ -108,24 +108,16 @@ Then, update your `compose.yml` to pass this to the frontend build:
 The SQLite database is stored in the `dashboard_data` Podman volume.
 
 ### Running on Boot (Systemd for RHEL 9)
-To ensure the Hub containers start automatically on boot using rootless Podman:
+To ensure the Hub containers start automatically on boot as a system-wide service:
 
-1. **Create the user systemd directory:**
+1. **Generate the podman-compose systemd template:**
+   Run this command with `sudo` to install the generic template into the system directory (`/etc/systemd/system/`):
    ```bash
-   mkdir -p ~/.config/systemd/user/
+   sudo podman-compose systemd -a create-unit
+   sudo systemctl daemon-reload
    ```
-2. **Generate the podman-compose systemd template:**
-   ```bash
-   podman-compose systemd -a create-unit > ~/.config/systemd/user/podman-compose@.service
-   systemctl --user daemon-reload
-   ```
-3. **Enable and start the service for this project:**
+2. **Enable and start the service for this project:**
    Ensure you are in the directory containing the `compose.yml` file (e.g., `agent-dashboard`), then run:
    ```bash
-   systemctl --user enable --now podman-compose@agent-dashboard.service
-   ```
-4. **Enable Lingering:**
-   Crucial for rootless containers. This ensures the services start at boot without requiring you to log in, and keeps them running after you log out:
-   ```bash
-   sudo loginctl enable-linger $USER
+   sudo systemctl enable --now podman-compose@agent-dashboard.service
    ```
