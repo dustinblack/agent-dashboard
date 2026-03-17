@@ -204,16 +204,6 @@ class HostDaemon:
             except Exception:
                 pass
 
-            # Configure terminal modes to preserve raw output for proper spinner rendering
-            try:
-                attrs = termios.tcgetattr(0)
-                # Disable ONLCR (don't translate NL to CR-NL on output)
-                # Disable OCRNL (don't translate CR to NL on output)
-                attrs[1] &= ~(termios.ONLCR | termios.OCRNL)
-                termios.tcsetattr(0, termios.TCSANOW, attrs)
-            except Exception:
-                pass
-
             if full_path and os.path.exists(full_path):
                 os.chdir(full_path)
             
@@ -240,6 +230,14 @@ class HostDaemon:
                 print(f"Failed to execute {cmd}: {e}")
                 os._exit(1)
         else: # Parent process
+            # Set the master fd to raw mode so the terminal driver does
+            # not process any output (no ONLCR, no OPOST, etc).
+            # This ensures escape sequences and control characters like
+            # \r are passed through unmodified to xterm.js which handles
+            # all terminal emulation itself.
+            import tty
+            tty.setraw(fd)
+
             self.agents[agent_id] = {
                 'master_fd': fd,
                 'pid': pid,
@@ -268,7 +266,7 @@ class HostDaemon:
                 if not agent_entry: continue
                 agent_id, info = agent_entry
                 try:
-                    data = os.read(fd, 1024)
+                    data = os.read(fd, 4096)
                     if not data:
                         self.close_agent(agent_id)
                         continue
