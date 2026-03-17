@@ -4,9 +4,14 @@ This is the React frontend for the Gemini AI Coding Agent Dashboard, built with 
 
 ## Features
 - **Dashboard Grid**: View all registered machines and active agent sessions.
-- **Remote Terminal**: Attach to any active session using an embedded `xterm.js` terminal.
+- **Remote Terminal**: Attach to any active session using an embedded `xterm.js` terminal with proper support for spinner animations and progress indicators.
 - **Real-time Updates**: Sessions and terminal output are updated in real-time via Socket.IO.
 - **Responsive Design**: Modern, dark-themed UI that works across various screen sizes.
+
+### Terminal Configuration
+The xterm.js terminal is configured with:
+- **Unix-style line replacement** (`windowsMode: false`): Ensures carriage return (`\r`) characters properly move the cursor to the beginning of the line without creating new lines, enabling smooth spinner animations and progress bars.
+- **Raw terminal output** (`convertEol: false`): Preserves raw terminal output without converting line endings, maintaining fidelity with the remote PTY.
 
 ## Tech Stack
 - **React**: UI library.

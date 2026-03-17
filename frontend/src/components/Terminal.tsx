@@ -30,7 +30,9 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       },
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
       fontSize: 14,
-      allowProposedApi: true
+      allowProposedApi: true,
+      windowsMode: false,  // Ensure proper handling of \r without \n (Unix-style line replacement)
+      convertEol: false     // Don't convert line endings - preserve raw terminal output
     });
     
     const fitAddon = new FitAddon();

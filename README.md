@@ -118,6 +118,7 @@ Go to the Web UI (`http://localhost:8080`). You will see your workstation listed
 - **Dynamic Resizing:** Terminals perfectly scale to match the window viewport size in real-time, instantly relaying geometry changes back to the underlying remote PTY.
 - **History Replay:** If you close a terminal window and re-attach later, the dashboard automatically replays the recent session history so you can pick up exactly where you left off.
 - **Color Support:** Terminals are configured with `xterm-256color` support for rich CLI output.
+- **Line Replacement Support:** Terminals properly handle carriage return (`\r`) sequences for spinner animations, progress bars, and status updates. Both the PTY configuration and xterm.js settings are optimized to prevent line repetition and ensure smooth UI updates from CLI tools.
 - **Live Telemetry (OTel):** The dashboard now uses standardized OpenTelemetry (OTLP) to capture model names and token usage. The Host Daemon runs a local OTLP receiver (port 4318) that child agents (Gemini, Claude) report to, ensuring 100% accurate stats without screen-scraping or interfering with terminal performance. Bash agents omit these stat boxes dynamically.
 
 ---

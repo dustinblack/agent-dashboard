@@ -195,6 +195,15 @@ class HostDaemon:
 
         pid, fd = pty.fork()
         if pid == 0: # Child process
+            # Set initial PTY size to a large default to prevent tools like 'ora' from
+            # caching a small width (80) and prematurely wrapping/padding text.
+            import fcntl, termios, struct
+            try:
+                size = struct.pack('HHHH', 50, 200, 0, 0)
+                fcntl.ioctl(0, termios.TIOCSWINSZ, size)
+            except Exception:
+                pass
+
             if full_path and os.path.exists(full_path):
                 os.chdir(full_path)
             
