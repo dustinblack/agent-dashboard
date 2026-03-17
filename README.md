@@ -41,7 +41,7 @@ curl -X POST http://localhost:8000/hosts \
 
 ### 2. Run the Host Daemon (Containerized)
 
-It is recommended to mount your local development directory and Gemini configuration folder so the spawned agents can access your code and maintain persistent settings.
+It is recommended to mount your local development directory, AI tool configuration folders, and GCP credentials so the spawned agents can access your code and maintain persistent settings.
 
 #### Option A: Manual Run (Testing)
 ```bash
@@ -52,15 +52,28 @@ podman run -d --name host-daemon --network=host \
   --security-opt label=disable \
   -e DASHBOARD_URL="http://127.0.0.1:8000" \
   -e HOST_TOKEN="secret-token-123" \
-  -e GEMINI_API_KEY="your-key-here" \
   -e PROJECTS_ROOT="/git" \
+  -e GEMINI_API_KEY="your-key-here" \
+  -e CLAUDE_CODE_USE_VERTEX=1 \
+  -e CLOUD_ML_REGION="us-east5" \
+  -e ANTHROPIC_VERTEX_PROJECT_ID="your-gcp-project-id" \
   -v /path/to/your/git:/git \
   -v $HOME/.ssh:/root/.ssh:ro \
   -v $HOME/.gitconfig:/root/.gitconfig:ro \
   -v $HOME/.gemini/:/root/.gemini \
+  -v $HOME/.claude/:/root/.claude \
+  -v $HOME/.config/gcloud:/root/.config/gcloud:ro \
   localhost/agent-dashboard-daemon:latest
 ```
 *(Note: We use `--security-opt label=disable` instead of the `:Z` mount flag to safely grant the container access to your local files without recursively changing their SELinux labels, which can cause permission errors on large directories.)*
+
+**Note on Claude Code (Vertex AI):**
+If you use Claude Code via Google Cloud Vertex AI, the daemon container includes the `gcloud` CLI and supports passing GCP credentials through. You must configure GCP authentication on the **host machine** before starting the daemon — the `~/.config/gcloud` volume mount passes your credentials into the container. Refer to your organization's GCP setup instructions for details on `gcloud init`, `gcloud auth application-default login`, and any required quota project configuration.
+
+The following environment variables must be set on the daemon for Vertex AI:
+- `CLAUDE_CODE_USE_VERTEX=1`
+- `CLOUD_ML_REGION` — your GCP region (e.g., `us-east5`)
+- `ANTHROPIC_VERTEX_PROJECT_ID` — your GCP project ID
 
 #### Option B: Running on Boot (Rootless Systemd Quadlet)
 For a robust setup where the daemon starts automatically on boot without relying on user login sessions, you should create a **rootless** Podman Quadlet. This ensures the daemon runs as your user account, preventing file permission issues when agents create or modify files in your repositories.
@@ -80,14 +93,19 @@ SecurityLabelDisable=true
 # Environment Variables
 Environment=DASHBOARD_URL=http://your-server-ip:8000
 Environment=HOST_TOKEN=secret-token-123
-Environment=GEMINI_API_KEY=your-key-here
 Environment=PROJECTS_ROOT=/git
+Environment=GEMINI_API_KEY=your-key-here
+Environment=CLAUDE_CODE_USE_VERTEX=1
+Environment=CLOUD_ML_REGION=us-east5
+Environment=ANTHROPIC_VERTEX_PROJECT_ID=your-gcp-project-id
 
 # Volume Mounts (using %h for your home directory)
 Volume=%h/path/to/your/git:/git
 Volume=%h/.ssh:/root/.ssh:ro
 Volume=%h/.gitconfig:/root/.gitconfig:ro
 Volume=%h/.gemini/:/root/.gemini
+Volume=%h/.claude/:/root/.claude
+Volume=%h/.config/gcloud:/root/.config/gcloud:ro
 
 [Install]
 WantedBy=default.target
