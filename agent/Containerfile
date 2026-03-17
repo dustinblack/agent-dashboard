@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     npm \
     git \
     openssh-client \
+    vim \
     apt-transport-https \
     ca-certificates \
     gnupg \
