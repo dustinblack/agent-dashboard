@@ -86,7 +86,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     xtermRef.current = term;
 
     // Initialize Socket.IO
-    const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const baseURL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
     const socket = io(`${baseURL}/terminal`, { path: '/socket.io' });
     socketRef.current = socket;
 

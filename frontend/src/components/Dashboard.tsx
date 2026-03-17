@@ -173,7 +173,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
   };
 
   const requestProjects = () => {
-      const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseURL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
       const socket = io(`${baseURL}/terminal`, { path: '/socket.io' });
       socket.emit('request_projects', {});
       console.log("Manual project refresh requested.");
@@ -182,11 +182,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
 
   useEffect(() => {
     fetchData();
-    const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const baseURL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
     const socket = io(`${baseURL}/terminal`, { path: '/socket.io' });
-    
-    socket.on('connect', () => {
-        socket.emit('request_projects', {});
+
+    socket.on('connect', () => {        socket.emit('request_projects', {});
     });
 
     socket.on('agent_status_update', (data: { agent_id: string, status: string }) => {
@@ -226,7 +225,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
         <strong className="font-bold">Error: </strong>
         <span className="block sm:inline">{error}</span>
         <div className="mt-2">
-          <a href="http://localhost:8000/login" className="underline font-bold">Login via OIDC</a>
+          <a href={import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/login` : `http://${window.location.hostname}:8000/login`} className="underline font-bold">Login via OIDC</a>
         </div>
       </div>
     </div>

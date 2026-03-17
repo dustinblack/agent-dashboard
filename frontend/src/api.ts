@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const baseURL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL,
   withCredentials: true, // Required for session cookies from OIDC
 });
 
