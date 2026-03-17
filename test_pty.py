@@ -2,24 +2,20 @@
 """
 Test script for PTY terminal size configuration.
 
-This script demonstrates how to set the initial terminal size (rows and columns)
-for a PTY before executing a command. This is important because some CLI tools
-(like 'ora' spinners used by gemini-cli and claude-code) cache the terminal width
-at startup and use it for text wrapping calculations.
+This script demonstrates how to set and verify the terminal size for a PTY.
+Correct terminal size is critical because CLI tools use it to calculate
+line wrapping — if the PTY width doesn't match the actual display width,
+cursor-up escape sequences will target wrong positions, causing visual
+artifacts like repeated lines.
 
 Usage:
     python3 test_pty.py
 
 Expected output: Should print "40 150" indicating the terminal was successfully
 configured to 40 rows and 150 columns.
-
-This technique is used in the Host Daemon to set a large default terminal width
-(200 columns) before spawning AI agents, preventing premature text wrapping
-in spinner animations and progress indicators.
 """
 import pty
 import os
-import sys
 import struct
 import fcntl
 import termios

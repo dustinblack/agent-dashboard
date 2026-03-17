@@ -249,7 +249,7 @@ class HostDaemon:
                 if not agent_entry: continue
                 agent_id, info = agent_entry
                 try:
-                    data = os.read(fd, 1024)
+                    data = os.read(fd, 65536)
                     if not data:
                         self.close_agent(agent_id)
                         continue
