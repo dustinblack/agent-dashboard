@@ -3,7 +3,7 @@
 This is the React frontend for the Gemini AI Coding Agent Dashboard, built with Vite and TypeScript.
 
 ## Features
-- **Dashboard Grid**: View all registered machines and active agent sessions.
+- **Dashboard Grid**: View active agent sessions grouped by host, with each host displayed as a distinct section containing its agents.
 - **Remote Terminal**: Attach to any active session using an embedded `xterm.js` terminal with proper support for spinner animations, progress indicators, and streaming LLM output.
 - **Real-time Updates**: Sessions and terminal output are updated in real-time via Socket.IO.
 - **Responsive Design**: Modern, dark-themed UI that works across various screen sizes.

@@ -260,85 +260,110 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
             <h2 className="text-xl font-semibold text-slate-300">Active Agent Sessions</h2>
             <span className="text-xs text-slate-500 italic">Live telemetry from remote daemons</span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {agents.filter(a => a.status === 'active').length === 0 && (
-            <div className="col-span-full py-12 text-center bg-slate-800/30 rounded-2xl border border-dashed border-slate-700">
+        {agents.filter(a => a.status === 'active').length === 0 ? (
+            <div className="py-12 text-center bg-slate-800/30 rounded-2xl border border-dashed border-slate-700">
                 <p className="text-slate-500 italic">No active sessions. Spawn one below from an online host.</p>
             </div>
-          )}
-          {agents.filter(a => a.status === 'active').map(agent => {
-            const host = hosts.find(h => h.id === agent.host_id);
-            const tel = agent.telemetry || {};
-            return (
-              <div key={agent.id} className="bg-slate-800 rounded-2xl p-6 border border-slate-700 hover:border-blue-500/50 transition-all shadow-lg flex flex-col group">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="overflow-hidden">
-                    <h3 className="font-bold text-lg text-white truncate">{tel.git_project || host?.name || 'Agent'}</h3>
-                    <div className="flex gap-2 items-center mt-1">
-                        <span className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded font-bold uppercase border border-blue-500/20">
-                            {agent.tool_name || 'gemini'}
-                        </span>
-                        <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono" title="Host">
-                            <Server size={10} /> {host?.name || 'Unknown Host'}
-                        </span>
-                        {tel.git_branch && (
-                            <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
-                                <GitBranch size={10} /> {tel.git_branch}
-                            </span>
+        ) : (
+            <div className="space-y-6">
+              {(() => {
+                const activeAgents = agents.filter(a => a.status === 'active');
+                const hostIds = [...new Set(activeAgents.map(a => a.host_id))];
+                return hostIds.map(hostId => {
+                  const host = hosts.find(h => h.id === hostId);
+                  const hostAgents = activeAgents.filter(a => a.host_id === hostId);
+                  return (
+                    <div key={hostId} className="bg-slate-800/40 rounded-2xl border border-slate-700 overflow-hidden">
+                      <div className="flex items-center gap-3 px-6 py-3 bg-slate-800/80 border-b border-slate-700/50">
+                        <Server size={16} className="text-slate-400" />
+                        <span className="font-semibold text-white text-sm">{host?.name || 'Unknown Host'}</span>
+                        {host?.status === 'online' ? (
+                          <span className="inline-flex items-center gap-1 text-green-400 text-[10px] font-semibold uppercase">
+                            <Wifi size={10} /> Online
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-slate-500 text-[10px] font-semibold uppercase">
+                            <WifiOff size={10} /> Offline
+                          </span>
                         )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 rounded-full border border-green-500/20">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
-                    <span className="text-green-400 text-[10px] font-bold uppercase tracking-wider">Live</span>
-                  </div>
-                </div>
+                        <span className="text-[10px] text-slate-500 ml-auto">{hostAgents.length} agent{hostAgents.length !== 1 ? 's' : ''}</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                        {hostAgents.map(agent => {
+                          const tel = agent.telemetry || {};
+                          return (
+                            <div key={agent.id} className="bg-slate-800 rounded-2xl p-6 border border-slate-700 hover:border-blue-500/50 transition-all shadow-lg flex flex-col group">
+                              <div className="flex justify-between items-start mb-4">
+                                <div className="overflow-hidden">
+                                  <h3 className="font-bold text-lg text-white truncate">{tel.git_project || 'Agent'}</h3>
+                                  <div className="flex gap-2 items-center mt-1">
+                                      <span className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded font-bold uppercase border border-blue-500/20">
+                                          {agent.tool_name || 'gemini'}
+                                      </span>
+                                      {tel.git_branch && (
+                                          <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+                                              <GitBranch size={10} /> {tel.git_branch}
+                                          </span>
+                                      )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 rounded-full border border-green-500/20">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
+                                  <span className="text-green-400 text-[10px] font-bold uppercase tracking-wider">Live</span>
+                                </div>
+                              </div>
 
-                {tel.task_description && (
-                    <div className="bg-slate-900/50 p-3 rounded-lg mb-4 border border-slate-700/50">
-                        <p className="text-xs text-slate-300 line-clamp-3 leading-relaxed">
-                            <Info size={12} className="inline mr-1.5 text-slate-500" />
-                            {tel.task_description}
-                        </p>
-                    </div>
-                )}
+                              {tel.task_description && (
+                                  <div className="bg-slate-900/50 p-3 rounded-lg mb-4 border border-slate-700/50">
+                                      <p className="text-xs text-slate-300 line-clamp-3 leading-relaxed">
+                                          <Info size={12} className="inline mr-1.5 text-slate-500" />
+                                          {tel.task_description}
+                                      </p>
+                                  </div>
+                              )}
 
-                {agent.tool_name !== 'bash' && (
-                    <div className="grid grid-cols-2 gap-3 mb-6">
-                        <div className="bg-slate-900/30 p-2 rounded border border-slate-700/30">
-                            <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Model</p>
-                            <p className="text-[11px] text-slate-200 font-mono truncate">{tel.model || '...'}</p>
-                        </div>
-                        <div className="bg-slate-900/30 p-2 rounded border border-slate-700/30">
-                            <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Context Usage</p>
-                            <p className="text-[11px] text-slate-200 font-mono truncate">{tel.tokens ? `${tel.tokens.toLocaleString()} tokens` : '...'}</p>
-                        </div>
+                              {agent.tool_name !== 'bash' && (
+                                  <div className="grid grid-cols-2 gap-3 mb-6">
+                                      <div className="bg-slate-900/30 p-2 rounded border border-slate-700/30">
+                                          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Model</p>
+                                          <p className="text-[11px] text-slate-200 font-mono truncate">{tel.model || '...'}</p>
+                                      </div>
+                                      <div className="bg-slate-900/30 p-2 rounded border border-slate-700/30">
+                                          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Context Usage</p>
+                                          <p className="text-[11px] text-slate-200 font-mono truncate">{tel.tokens ? `${tel.tokens.toLocaleString()} tokens` : '...'}</p>
+                                      </div>
+                                  </div>
+                              )}
+
+                              <div className="flex gap-2 mt-auto">
+                                  <button
+                                      onClick={() => onAttach(agent.agent_id)}
+                                      className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm cursor-pointer"
+                                  >
+                                      <Terminal size={18} /> Attach
+                                  </button>
+                                  <button
+                                      onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          handleStop(agent.agent_id);
+                                      }}
+                                      className="w-12 bg-red-600 hover:bg-red-500 text-white rounded-xl transition-colors flex items-center justify-center shadow-md active:scale-90 cursor-pointer"
+                                      title="Stop Agent"
+                                  >
+                                      <Square size={16} fill="currentColor" />
+                                  </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                )}
-                
-                <div className="flex gap-2 mt-auto">
-                    <button 
-                        onClick={() => onAttach(agent.agent_id)}
-                        className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm cursor-pointer"
-                    >
-                        <Terminal size={18} /> Attach
-                    </button>
-                    <button 
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleStop(agent.agent_id);
-                        }}
-                        className="w-12 bg-red-600 hover:bg-red-500 text-white rounded-xl transition-colors flex items-center justify-center shadow-md active:scale-90 cursor-pointer"
-                        title="Stop Agent"
-                    >
-                        <Square size={16} fill="currentColor" />
-                    </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                  );
+                });
+              })()}
+            </div>
+        )}
       </section>
 
       <section>
