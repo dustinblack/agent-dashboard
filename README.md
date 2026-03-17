@@ -133,7 +133,7 @@ For a robust, production-grade deployment on RHEL 9/Fedora that does **not** rel
    Environment=BYPASS_AUTH=true
 
    [Install]
-   WantedBy=default.target
+   WantedBy=multi-user.target
    ```
 
    **`/etc/containers/systemd/agent-dashboard-frontend.container`**
@@ -147,16 +147,16 @@ For a robust, production-grade deployment on RHEL 9/Fedora that does **not** rel
    PublishPort=8080:80
 
    [Install]
-   WantedBy=default.target
+   WantedBy=multi-user.target
    ```
 
 2. **Reload systemd and start the services:**
-   Systemd will automatically parse these Quadlets, generate the underlying service files, and start managing your containers.
+   Systemd's Podman generator will automatically parse these Quadlets on reload and implicitly "enable" them based on the `[Install]` section. Because they are generated units, you do not use the `enable` command directly.
 
    ```bash
    sudo systemctl daemon-reload
    
    # Start the backend and frontend (this automatically creates the volume)
-   sudo systemctl enable --now agent-dashboard-backend.service
-   sudo systemctl enable --now agent-dashboard-frontend.service
+   sudo systemctl start agent-dashboard-backend.service
+   sudo systemctl start agent-dashboard-frontend.service
    ```
