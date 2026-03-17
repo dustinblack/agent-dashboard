@@ -69,7 +69,20 @@ podman run -d --name host-daemon --network=host \
 *(Note: We use `--security-opt label=disable` instead of the `:Z` mount flag to safely grant the container access to your local files without recursively changing their SELinux labels, which can cause permission errors on large directories.)*
 
 **Note on GitHub CLI:**
-The container includes the GitHub CLI (`gh`). To allow agents to interact with GitHub (create PRs, manage issues, etc.), authenticate on the host with `gh auth login` and mount your credentials via `~/.config/gh`. The mount is included in the examples above.
+The container includes the GitHub CLI (`gh`). The `~/.config/gh` directory is mounted into the container (included in the examples above), but this alone may not be sufficient. By default, `gh auth login` stores tokens in your system keyring (GNOME Keyring, KDE Wallet, etc.), which is not accessible from inside the container. The mounted `~/.config/gh/hosts.yml` file will reference the token but won't contain it, resulting in authentication failures.
+
+To fix this, export your token and pass it as an environment variable:
+```bash
+# Get your current token from the host keyring
+gh auth token
+
+# Add it to your quadlet or podman run command
+Environment=GH_TOKEN=ghp_your-token-here    # quadlet
+# or
+-e GH_TOKEN="ghp_your-token-here"           # podman run
+```
+
+The `GH_TOKEN` environment variable is recognized by `gh` automatically and takes precedence over any stored credentials. This is the recommended approach for containerized environments.
 
 **Note on Claude Code (Vertex AI):**
 If you use Claude Code via Google Cloud Vertex AI, the daemon container includes the `gcloud` CLI and supports passing GCP credentials through. You must configure GCP authentication on the **host machine** before starting the daemon — the `~/.config/gcloud` volume mount passes your credentials into the container. Refer to your organization's GCP setup instructions for details on `gcloud init`, `gcloud auth application-default login`, and any required quota project configuration.

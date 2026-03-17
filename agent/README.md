@@ -32,8 +32,24 @@ Credentials and configuration for individual tools are passed into the container
 - `~/.gemini` — Gemini CLI configuration
 - `~/.claude` — Claude Code configuration
 - `~/.config/gcloud` — GCP credentials (for Claude Code via Vertex AI)
-- `~/.config/gh` — GitHub CLI credentials
+- `~/.config/gh` — GitHub CLI configuration (see note below about token access)
 - `~/.ssh` and `~/.gitconfig` — Git/SSH configuration
+
+### GitHub CLI Authentication in Containers
+
+Mounting `~/.config/gh` into the container is necessary but may not be sufficient for authentication. By default, `gh auth login` stores tokens in the host's system keyring (GNOME Keyring, KDE Wallet, etc.), which is not accessible from inside the container. The mounted `hosts.yml` will reference the token but won't contain it.
+
+**Solution:** Pass your GitHub token via the `GH_TOKEN` environment variable:
+```bash
+# Retrieve your token from the host keyring
+gh auth token
+
+# Pass it to the container
+-e GH_TOKEN="ghp_your-token-here"           # podman run
+Environment=GH_TOKEN=ghp_your-token-here    # systemd quadlet
+```
+
+`gh` recognizes `GH_TOKEN` automatically and uses it for all API calls.
 
 ## Containerized Usage (Podman / Docker)
 
