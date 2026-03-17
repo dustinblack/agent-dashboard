@@ -30,9 +30,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       },
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
       fontSize: 14,
-      allowProposedApi: true,
-      windowsMode: false,  // Ensure proper handling of \r without \n (Unix-style line replacement)
-      convertEol: false     // Don't convert line endings - preserve raw terminal output
+      allowProposedApi: true
     });
     
     const fitAddon = new FitAddon();
@@ -107,10 +105,6 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
 
     socket.on('terminal_output', (data: { sid: string; output: string }) => {
       if (data.sid === agentId) {
-        // Debug: Log raw output to see what control characters we're receiving
-        if (data.output.includes('\r') || data.output.includes('\n')) {
-          console.log('Raw output:', JSON.stringify(data.output));
-        }
         term.write(data.output);
       }
     });

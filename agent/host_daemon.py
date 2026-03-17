@@ -195,26 +195,17 @@ class HostDaemon:
 
         pid, fd = pty.fork()
         if pid == 0: # Child process
-            # Set initial PTY size to a large default to prevent tools like 'ora' from
-            # caching a small width (80) and prematurely wrapping/padding text.
-            import fcntl, termios, struct
-            try:
-                size = struct.pack('HHHH', 50, 200, 0, 0)
-                fcntl.ioctl(0, termios.TIOCSWINSZ, size)
-            except Exception:
-                pass
-
             if full_path and os.path.exists(full_path):
                 os.chdir(full_path)
-            
+
             env = os.environ.copy()
             env['TERM'] = 'xterm-256color'
             env['COLORTERM'] = 'truecolor'
-            
+
             # Inject OpenTelemetry standard configuration
             env['OTEL_EXPORTER_OTLP_ENDPOINT'] = "http://127.0.0.1:4318"
             env['OTEL_RESOURCE_ATTRIBUTES'] = f"service.name={agent_id}"
-            
+
             # Tool-specific OTel enablement
             env['CLAUDE_CODE_ENABLE_TELEMETRY'] = '1'
             env['GEMINI_CLI_TELEMETRY_ENABLED'] = 'true'
@@ -223,21 +214,13 @@ class HostDaemon:
             env['GEMINI_TELEMETRY_OTLP_PROTOCOL'] = 'http'
             env['GEMINI_TELEMETRY_USE_COLLECTOR'] = 'true'
             env['GEMINI_TELEMETRY_TARGET'] = 'local'
-            
+
             try:
                 os.execvpe(cmd[0], cmd, env)
             except Exception as e:
                 print(f"Failed to execute {cmd}: {e}")
                 os._exit(1)
         else: # Parent process
-            # Set the master fd to raw mode so the terminal driver does
-            # not process any output (no ONLCR, no OPOST, etc).
-            # This ensures escape sequences and control characters like
-            # \r are passed through unmodified to xterm.js which handles
-            # all terminal emulation itself.
-            import tty
-            tty.setraw(fd)
-
             self.agents[agent_id] = {
                 'master_fd': fd,
                 'pid': pid,
@@ -266,7 +249,7 @@ class HostDaemon:
                 if not agent_entry: continue
                 agent_id, info = agent_entry
                 try:
-                    data = os.read(fd, 4096)
+                    data = os.read(fd, 1024)
                     if not data:
                         self.close_agent(agent_id)
                         continue
