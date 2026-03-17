@@ -43,11 +43,12 @@ curl -X POST http://localhost:8000/hosts \
 
 It is recommended to mount your local development directory and Gemini configuration folder so the spawned agents can access your code and maintain persistent settings.
 
+#### Option A: Manual Run (Testing)
 ```bash
 cd agent/
 podman build -t agent-dashboard-daemon -f Containerfile .
 
-podman run -it --rm --network=host \
+podman run -d --name host-daemon --network=host \
   --security-opt label=disable \
   -e DASHBOARD_URL="http://127.0.0.1:8000" \
   -e HOST_TOKEN="secret-token-123" \
@@ -55,9 +56,44 @@ podman run -it --rm --network=host \
   -e PROJECTS_ROOT="/git" \
   -v /path/to/your/git:/git \
   -v $HOME/.gemini/:/root/.gemini \
-  agent-dashboard-daemon
+  localhost/agent-dashboard-daemon:latest
 ```
 *(Note: We use `--security-opt label=disable` instead of the `:Z` mount flag to safely grant the container access to your local files without recursively changing their SELinux labels, which can cause permission errors on large directories.)*
+
+#### Option B: Running on Boot (Systemd Quadlet)
+For a robust setup where the daemon starts automatically on boot without relying on user login sessions, you can create a Podman Quadlet.
+
+Create a new file at `/etc/containers/systemd/agent-dashboard-daemon.container`:
+
+```ini
+[Unit]
+Description=Agent Dashboard Host Daemon
+After=network-online.target
+
+[Container]
+Image=localhost/agent-dashboard-daemon:latest
+Network=host
+SecurityLabelDisable=true
+
+# Environment Variables
+Environment=DASHBOARD_URL=http://your-server-ip:8000
+Environment=HOST_TOKEN=secret-token-123
+Environment=GEMINI_API_KEY=your-key-here
+Environment=PROJECTS_ROOT=/git
+
+# Volume Mounts
+Volume=/path/to/your/git:/git
+Volume=/home/youruser/.gemini/:/root/.gemini
+
+[Install]
+WantedBy=multi-user.target
+```
+
+After creating the file, reload systemd and start the daemon:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl start agent-dashboard-daemon.service
+```
 
 ### 3. Spawn Agents
 Go to the Web UI (`http://localhost:8080`). You will see your workstation listed. Click **"Spawn Gemini"**, **"Spawn Claude"**, or **"Spawn Bash"** to start a remote session.
