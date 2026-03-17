@@ -7,6 +7,8 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime, timezone
 
+from sqlalchemy import func
+
 from . import models, database, auth, socket
 import socketio
 
@@ -81,6 +83,11 @@ class AgentSchema(AgentBase):
     tool_name: Optional[str] = None
     started_at: datetime
     ended_at: Optional[datetime] = None
+
+class AgentDetailSchema(AgentSchema):
+    """Extended agent schema that includes the host name."""
+    host_name: str
+
 
 class SpawnRequest(BaseModel):
     host_id: int
@@ -167,6 +174,91 @@ def read_agents(skip: int = 0, limit: int = 100, db: Session = Depends(database.
     """
     agents = db.query(models.Agent).offset(skip).limit(limit).all()
     return agents
+
+@fastapi_app.get(
+    "/agents/{agent_id}/details",
+    response_model=AgentDetailSchema,
+)
+def get_agent_details(
+    agent_id: str,
+    db: Session = Depends(database.get_db),
+    user: dict = Depends(auth.get_current_user),
+):
+    """
+    Returns a single agent's data along with the host name.
+    Requires UI login.
+    """
+    db_agent = (
+        db.query(models.Agent)
+        .filter(models.Agent.agent_id == agent_id)
+        .first()
+    )
+    if not db_agent:
+        raise HTTPException(status_code=404, detail="Agent not found.")
+
+    host = (
+        db.query(models.Host)
+        .filter(models.Host.id == db_agent.host_id)
+        .first()
+    )
+    host_name = host.name if host else "unknown"
+
+    return AgentDetailSchema(
+        id=db_agent.id,
+        host_id=db_agent.host_id,
+        agent_id=db_agent.agent_id,
+        tool_name=db_agent.tool_name,
+        pid=db_agent.pid,
+        status=db_agent.status,
+        telemetry=db_agent.telemetry,
+        started_at=db_agent.started_at,
+        ended_at=db_agent.ended_at,
+        host_name=host_name,
+    )
+
+
+@fastapi_app.get(
+    "/agents/{agent_id}/companions",
+    response_model=List[AgentSchema],
+)
+def get_agent_companions(
+    agent_id: str,
+    db: Session = Depends(database.get_db),
+    user: dict = Depends(auth.get_current_user),
+):
+    """
+    Returns active companion agents on the same host with the same
+    project_dir. A companion is any other active agent sharing the
+    same host_id and project_dir (extracted from telemetry_json).
+    Requires UI login.
+    """
+    db_agent = (
+        db.query(models.Agent)
+        .filter(models.Agent.agent_id == agent_id)
+        .first()
+    )
+    if not db_agent:
+        raise HTTPException(status_code=404, detail="Agent not found.")
+
+    project_dir = (db_agent.telemetry_json or {}).get("project_dir")
+    if not project_dir:
+        return []
+
+    companions = (
+        db.query(models.Agent)
+        .filter(
+            models.Agent.host_id == db_agent.host_id,
+            models.Agent.status == "active",
+            models.Agent.agent_id != agent_id,
+            func.json_extract(
+                models.Agent.telemetry_json, "$.project_dir"
+            )
+            == project_dir,
+        )
+        .all()
+    )
+    return companions
+
 
 @fastapi_app.post("/agents/spawn", response_model=AgentSchema)
 async def spawn_agent(request: SpawnRequest, db: Session = Depends(database.get_db), user: dict = Depends(auth.get_current_user)):

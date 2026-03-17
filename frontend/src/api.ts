@@ -65,6 +65,20 @@ export const stopAgent = async (agentId: string): Promise<void> => {
   await api.post(`/agents/${agentId}/stop`);
 };
 
+export interface AgentDetail extends Agent {
+  host_name: string;
+}
+
+export const getAgentDetails = async (agentId: string): Promise<AgentDetail> => {
+  const response = await api.get(`/agents/${agentId}/details`);
+  return response.data;
+};
+
+export const getCompanions = async (agentId: string): Promise<Agent[]> => {
+  const response = await api.get(`/agents/${agentId}/companions`);
+  return response.data;
+};
+
 export const getMe = async () => {
   const response = await api.get('/me');
   return response.data;
