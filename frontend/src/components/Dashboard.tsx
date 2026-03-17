@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { getHosts, getAgents, spawnAgent, stopAgent, deleteHost } from '../api';
 import type { Host, Agent } from '../api';
-import { Terminal, Cpu, Activity, PlusCircle, Wifi, WifiOff, Square, GitBranch, Folder, Info, X, ChevronRight, RefreshCw, Trash2 } from 'lucide-react';
+import { Terminal, Cpu, Activity, PlusCircle, Wifi, WifiOff, Square, GitBranch, Folder, Info, X, ChevronRight, RefreshCw, Trash2, Server } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface DashboardProps {
@@ -277,6 +277,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                     <div className="flex gap-2 items-center mt-1">
                         <span className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded font-bold uppercase border border-blue-500/20">
                             {agent.tool_name || 'gemini'}
+                        </span>
+                        <span className="flex items-center gap-1 text-[10px] text-slate-400 font-mono" title="Host">
+                            <Server size={10} /> {host?.name || 'Unknown Host'}
                         </span>
                         {tel.git_branch && (
                             <span className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
