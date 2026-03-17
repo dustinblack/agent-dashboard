@@ -149,23 +149,45 @@ class HostDaemon:
             }, namespace='/terminal')
 
     def get_git_info(self, path: str):
-        """Extracts git branch and project name from a directory."""
+        """Extracts git branch and project name from a directory.
+
+        The project name is derived from the remote origin URL when
+        available, falling back to the git repository's root directory
+        name (e.g. a repo at /git/agent-dashboard yields
+        "agent-dashboard").
+        """
         if not path or not os.path.exists(path):
             return None, None
+
+        branch = None
+        project = None
+
         try:
             branch = subprocess.check_output(
-                ["git", "rev-parse", "--abbrev-ref", "HEAD"], 
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
                 cwd=path, stderr=subprocess.DEVNULL
             ).decode().strip()
-            
+        except Exception:
+            pass
+
+        try:
             origin = subprocess.check_output(
-                ["git", "config", "--get", "remote.origin.url"], 
+                ["git", "config", "--get", "remote.origin.url"],
                 cwd=path, stderr=subprocess.DEVNULL
             ).decode().strip()
             project = origin.split("/")[-1].replace(".git", "")
-            return branch, project
         except Exception:
-            return None, None
+            # No remote configured — use the repo root directory name
+            try:
+                toplevel = subprocess.check_output(
+                    ["git", "rev-parse", "--show-toplevel"],
+                    cwd=path, stderr=subprocess.DEVNULL
+                ).decode().strip()
+                project = os.path.basename(toplevel)
+            except Exception:
+                pass
+
+        return branch, project
 
     async def spawn_agent(self, agent_id: str, tool: str, project_dir: Optional[str] = None, task: Optional[str] = None):
         """Spawns a new process in a pseudo-terminal with environmental context."""
