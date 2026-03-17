@@ -60,10 +60,10 @@ podman run -d --name host-daemon --network=host \
 ```
 *(Note: We use `--security-opt label=disable` instead of the `:Z` mount flag to safely grant the container access to your local files without recursively changing their SELinux labels, which can cause permission errors on large directories.)*
 
-#### Option B: Running on Boot (Systemd Quadlet)
-For a robust setup where the daemon starts automatically on boot without relying on user login sessions, you can create a Podman Quadlet.
+#### Option B: Running on Boot (Rootless Systemd Quadlet)
+For a robust setup where the daemon starts automatically on boot without relying on user login sessions, you should create a **rootless** Podman Quadlet. This ensures the daemon runs as your user account, preventing file permission issues when agents create or modify files in your repositories.
 
-Create a new file at `/etc/containers/systemd/agent-dashboard-daemon.container`:
+Create a new file at `~/.config/containers/systemd/agent-dashboard-daemon.container`:
 
 ```ini
 [Unit]
@@ -81,18 +81,23 @@ Environment=HOST_TOKEN=secret-token-123
 Environment=GEMINI_API_KEY=your-key-here
 Environment=PROJECTS_ROOT=/git
 
-# Volume Mounts
-Volume=/path/to/your/git:/git
-Volume=/home/youruser/.gemini/:/root/.gemini
+# Volume Mounts (using %h for your home directory)
+Volume=%h/path/to/your/git:/git
+Volume=%h/.gemini/:/root/.gemini
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 ```
 
-After creating the file, reload systemd and start the daemon:
+After creating the file, reload the user systemd daemon and start the generated service:
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl start agent-dashboard-daemon.service
+systemctl --user daemon-reload
+systemctl --user start agent-dashboard-daemon.service
+```
+
+*Note: Ensure you have enabled lingering for your user account so the service starts on boot and remains running after you log out:*
+```bash
+sudo loginctl enable-linger $USER
 ```
 
 ### 3. Spawn Agents
