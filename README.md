@@ -104,6 +104,14 @@ Then, update your `compose.yml` to pass this to the frontend build:
 
 *(Note: You will also need to update `frontend/Containerfile` to accept `ARG VITE_API_URL` and pass it during the `npm run build` step.)*
 
+**3. Configure the Firewall (RHEL 9):**
+To allow other machines on your lab network to access the dashboard and the API, run the following commands:
+```bash
+sudo firewall-cmd --permanent --add-port=8080/tcp
+sudo firewall-cmd --permanent --add-port=8000/tcp
+sudo firewall-cmd --reload
+```
+
 ### Persistence
 The SQLite database is stored in the `dashboard_data` Podman volume.
 
