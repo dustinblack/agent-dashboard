@@ -107,17 +107,56 @@ Then, update your `compose.yml` to pass this to the frontend build:
 ### Persistence
 The SQLite database is stored in the `dashboard_data` Podman volume.
 
-### Running on Boot (Systemd for RHEL 9)
-To ensure the Hub containers start automatically on boot as a system-wide service:
+### Running on Boot (Systemd Quadlets for RHEL 9)
+For a robust, production-grade deployment on RHEL 9/Fedora that does **not** rely on the source directory or `compose.yml` at runtime, use **Podman Quadlets**. This ensures systemd directly manages the containers using only the built images.
 
-1. **Generate the podman-compose systemd template:**
-   Run this command with `sudo` to install the generic template into the system directory (`/etc/systemd/system/`):
-   ```bash
-   sudo podman-compose systemd -a create-unit
-   sudo systemctl daemon-reload
+1. **Create the Quadlet definitions:**
+   Create the following three files in the global systemd containers directory (`/etc/containers/systemd/`):
+
+   **`/etc/containers/systemd/agent-dashboard-data.volume`**
+   ```ini
+   [Volume]
+   VolumeName=dashboard_data
    ```
-2. **Enable and start the service for this project:**
-   Ensure you are in the directory containing the `compose.yml` file (e.g., `agent-dashboard`), then run:
+
+   **`/etc/containers/systemd/agent-dashboard-backend.container`**
+   ```ini
+   [Unit]
+   Description=Agent Dashboard Backend
+   After=network-online.target
+
+   [Container]
+   Image=localhost/agent-dashboard_backend:latest
+   PublishPort=8000:8000
+   Volume=agent-dashboard-data.volume:/app/data
+   Environment=DATABASE_URL=sqlite:////app/data/agent_dashboard.db
+   Environment=BYPASS_AUTH=true
+
+   [Install]
+   WantedBy=default.target
+   ```
+
+   **`/etc/containers/systemd/agent-dashboard-frontend.container`**
+   ```ini
+   [Unit]
+   Description=Agent Dashboard Frontend
+   After=network-online.target agent-dashboard-backend.service
+
+   [Container]
+   Image=localhost/agent-dashboard_frontend:latest
+   PublishPort=8080:80
+
+   [Install]
+   WantedBy=default.target
+   ```
+
+2. **Reload systemd and start the services:**
+   Systemd will automatically parse these Quadlets, generate the underlying service files, and start managing your containers.
+
    ```bash
-   sudo systemctl enable --now podman-compose@agent-dashboard.service
+   sudo systemctl daemon-reload
+   
+   # Start the backend and frontend (this automatically creates the volume)
+   sudo systemctl enable --now agent-dashboard-backend.service
+   sudo systemctl enable --now agent-dashboard-frontend.service
    ```
