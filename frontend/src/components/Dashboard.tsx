@@ -278,11 +278,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                         <span className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded font-bold uppercase border border-blue-500/20">
                             {agent.tool_name || 'gemini'}
                         </span>
-                        <span className="flex items-center gap-1 text-[10px] text-slate-400 font-mono" title="Host">
+                        <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono" title="Host">
                             <Server size={10} /> {host?.name || 'Unknown Host'}
                         </span>
                         {tel.git_branch && (
-                            <span className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
+                            <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
                                 <GitBranch size={10} /> {tel.git_branch}
                             </span>
                         )}
