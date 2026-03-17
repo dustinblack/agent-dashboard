@@ -153,8 +153,13 @@ sudo firewall-cmd --permanent --add-port=8000/tcp
 sudo firewall-cmd --reload
 ```
 
-### Persistence
-The SQLite database is stored in the `dashboard_data` Podman volume.
+### Persistence & Boot Behavior
+- **Data Persistence:** The SQLite database is stored in the `dashboard_data` Podman volume, which survives container updates and system reboots.
+- **Service Persistence (Lingering):** By default, RHEL kills all user processes when a user logs out. For **rootless** services to start automatically at boot and remain running after logout, you **must** enable "lingering" for the service account:
+  ```bash
+  sudo loginctl enable-linger $USER
+  ```
+  This ensures the user's systemd manager is initialized at boot time and kept active indefinitely.
 
 ### Running on Boot (Systemd Quadlets for RHEL 9)
 For a robust, production-grade deployment on RHEL 9/Fedora that does **not** rely on the source directory or `compose.yml` at runtime, use **Podman Quadlets**. This ensures systemd directly manages the containers using only the built images.
