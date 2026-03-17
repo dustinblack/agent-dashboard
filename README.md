@@ -77,10 +77,32 @@ Go to the Web UI (`http://localhost:8080`). You will see your workstation listed
 
 ---
 
-### Running in Production
-1. Remove `BYPASS_AUTH=true` from `compose.yml`.
-2. Configure real OIDC environment variables in the backend.
-3. Setup a reverse proxy (NGINX) with TLS for WebSocket support.
+### Running in Production (Internal Lab)
+If you are deploying this strictly for an internal, private lab network, you can simplify the deployment by continuing to bypass OIDC authentication and avoiding reverse proxies.
+
+1. Ensure the `BYPASS_AUTH=true` flag remains in your `compose.yml`.
+2. To allow machines on your network to access the UI and the Backend API, you must explicitly set the `VITE_API_URL` environment variable for the frontend.
+
+Create a `.env` file in the root directory (or inject it directly into `compose.yml`):
+```bash
+# Replace 'your-server-ip' with the actual IP address or local DNS name of the host
+VITE_API_URL=http://your-server-ip:8000
+```
+
+Then, update your `compose.yml` to pass this to the frontend build:
+
+```yaml
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Containerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    ports:
+      - "8080:80"
+```
+
+*(Note: You will also need to update `frontend/Containerfile` to accept `ARG VITE_API_URL` and pass it during the `npm run build` step.)*
 
 ### Persistence
 The SQLite database is stored in the `dashboard_data` Podman volume.

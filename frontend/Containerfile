@@ -9,9 +9,9 @@ RUN npm ci
 
 # Copy source code and build
 COPY . .
-# You can pass VITE_API_URL here if the backend is on a specific hostname
-# ARG VITE_API_URL
-# ENV VITE_API_URL=$VITE_API_URL
+# Pass VITE_API_URL here if the backend is on a specific hostname
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
 # Stage 2: Serve with NGINX
