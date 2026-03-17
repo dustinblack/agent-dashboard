@@ -21,13 +21,28 @@ fastapi_app = FastAPI(title="AI Coding Agent Dashboard API")
 fastapi_app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY", "super-secret-default-key"))
 
 # Add CORS Middleware
-fastapi_app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# In lab environments (BYPASS_AUTH=true), we allow any HTTP/HTTPS origin.
+# In production, specify comma-separated origins via the ALLOWED_ORIGINS env var.
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080")
+allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
+
+if os.getenv("BYPASS_AUTH", "false").lower() == "true":
+    fastapi_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_origin_regex="https?://.*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    fastapi_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Mount Socket.IO
 app = socketio.ASGIApp(socket.sio, fastapi_app)
