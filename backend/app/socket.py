@@ -83,11 +83,8 @@ async def handle_join_room(sid, data):
         await sio.enter_room(sid, agent_id, namespace='/terminal')
         print(f"UI Client {sid} joined Agent room: {agent_id}")
         
-        # 1. Request history replay from the host daemon
+        # Request history replay from the host daemon
         await sio.emit('request_history', {'agent_id': agent_id}, namespace='/terminal')
-        
-        # 2. Also send a carriage return to force a fresh prompt redraw
-        await sio.emit('terminal_input', {'target_sid': agent_id, 'input': '\r'}, namespace='/terminal')
 
 @sio.on('request_projects', namespace='/terminal')
 async def handle_request_projects(sid, data):
