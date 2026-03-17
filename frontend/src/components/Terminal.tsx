@@ -240,6 +240,16 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
   const gitProject = agentDetail?.telemetry?.git_project;
   const gitBranch = agentDetail?.telemetry?.git_branch;
 
+  // Update browser window title with host / project / branch
+  useEffect(() => {
+    const parts = [TOOL_LABELS[category]];
+    if (hostName) parts.push(hostName);
+    if (gitProject) parts.push(gitProject);
+    if (gitBranch) parts.push(gitBranch);
+    document.title = parts.join(' · ');
+    return () => { document.title = 'Agent Dashboard'; };
+  }, [category, hostName, gitProject, gitBranch]);
+
   // Build companion buttons based on current tool type
   const companionButtons: { label: string; tool: ToolCategory }[] = [];
   if (category === 'bash') {

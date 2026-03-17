@@ -152,6 +152,7 @@ Go to the Web UI (`http://localhost:8080`). You will see your workstation listed
 **Note on Console UX:**
 - **Detached Windows:** Attaching to a terminal now opens a standalone browser popup window with minimal interface, allowing for side-by-side multi-tasking across different agents.
 - **Dynamic Resizing:** Terminals perfectly scale to match the window viewport size in real-time, instantly relaying geometry changes back to the underlying remote PTY.
+- **Dynamic Window Title:** The browser tab title updates dynamically to show the tool type, host name, project, and git branch (e.g. "Claude · myhost · agent-dashboard · main"), making it easy to identify sessions when multiple terminal windows are open.
 - **History Replay:** If you close a terminal window and re-attach later, the dashboard automatically replays the recent session history so you can pick up exactly where you left off.
 - **Color Support:** Terminals are configured with `xterm-256color` support for rich CLI output.
 - **Line Replacement Support:** Terminals properly handle cursor movement and line-erase escape sequences for spinner animations, progress bars, and streaming LLM output. The PTY read buffer is sized to deliver complete render frames to xterm.js in single writes, preventing visual artifacts from split escape sequences.

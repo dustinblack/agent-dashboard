@@ -218,6 +218,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
     };
   }, []);
 
+  // Set browser window title
+  useEffect(() => {
+    document.title = 'Agent Dashboard';
+  }, []);
+
   if (loading) return <div className="p-8 text-white">Loading dashboard...</div>;
   if (error) return (
     <div className="p-8">
