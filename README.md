@@ -63,9 +63,13 @@ podman run -d --name host-daemon --network=host \
   -v $HOME/.gemini/:/root/.gemini \
   -v $HOME/.claude/:/root/.claude \
   -v $HOME/.config/gcloud:/root/.config/gcloud:ro \
+  -v $HOME/.config/gh:/root/.config/gh:ro \
   localhost/agent-dashboard-daemon:latest
 ```
 *(Note: We use `--security-opt label=disable` instead of the `:Z` mount flag to safely grant the container access to your local files without recursively changing their SELinux labels, which can cause permission errors on large directories.)*
+
+**Note on GitHub CLI:**
+The container includes the GitHub CLI (`gh`). To allow agents to interact with GitHub (create PRs, manage issues, etc.), authenticate on the host with `gh auth login` and mount your credentials via `~/.config/gh`. The mount is included in the examples above.
 
 **Note on Claude Code (Vertex AI):**
 If you use Claude Code via Google Cloud Vertex AI, the daemon container includes the `gcloud` CLI and supports passing GCP credentials through. You must configure GCP authentication on the **host machine** before starting the daemon — the `~/.config/gcloud` volume mount passes your credentials into the container. Refer to your organization's GCP setup instructions for details on `gcloud init`, `gcloud auth application-default login`, and any required quota project configuration.
@@ -106,6 +110,7 @@ Volume=%h/.gitconfig:/root/.gitconfig:ro
 Volume=%h/.gemini/:/root/.gemini
 Volume=%h/.claude/:/root/.claude
 Volume=%h/.config/gcloud:/root/.config/gcloud:ro
+Volume=%h/.config/gh:/root/.config/gh:ro
 
 [Install]
 WantedBy=default.target
