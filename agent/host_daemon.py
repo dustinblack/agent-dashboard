@@ -208,6 +208,9 @@ class HostDaemon:
 
             # Tool-specific OTel enablement
             env['CLAUDE_CODE_ENABLE_TELEMETRY'] = '1'
+            env['OTEL_METRICS_EXPORTER'] = 'otlp'
+            env['OTEL_LOGS_EXPORTER'] = 'otlp'
+            env['OTEL_EXPORTER_OTLP_PROTOCOL'] = 'http/json'
             env['GEMINI_CLI_TELEMETRY_ENABLED'] = 'true'
             env['GEMINI_TELEMETRY_ENABLED'] = 'true'
             env['GEMINI_TELEMETRY_OTLP_ENDPOINT'] = 'http://127.0.0.1:4318/v1/logs'
@@ -339,6 +342,7 @@ class HostDaemon:
         # Token detection — try common attribute names
         input_tokens = None
         output_tokens = None
+        cache_tokens = None
         for key in ('input_token_count', 'input_tokens',
                      'gen_ai.usage.input_tokens'):
             val = attrs.get(key)
@@ -351,9 +355,14 @@ class HostDaemon:
             if val is not None:
                 output_tokens = int(val)
                 break
+        for key in ('cache_read_tokens', 'cache_creation_tokens'):
+            val = attrs.get(key)
+            if val is not None:
+                cache_tokens = (cache_tokens or 0) + int(val)
 
         if input_tokens is not None or output_tokens is not None:
-            total = (input_tokens or 0) + (output_tokens or 0)
+            total = ((input_tokens or 0) + (output_tokens or 0)
+                     + (cache_tokens or 0))
             if total > tel.get('tokens', 0):
                 tel['tokens'] = total
                 changed = True
@@ -415,6 +424,63 @@ class HostDaemon:
                             span.get('attributes', []))
                         if self._update_telemetry_from_attrs(tel, attrs):
                             changed = True
+
+                if changed and self.sio.connected:
+                    await self.sio.emit(
+                        'agent_telemetry',
+                        {'agent_id': agent_id, 'telemetry': tel},
+                        namespace='/terminal')
+
+            # Process OTLP Metrics
+            # (resourceMetrics → scopeMetrics → metrics → dataPoints)
+            # Claude Code sends token usage as counter metrics with
+            # 'model' and 'type' (input/output) attributes.
+            for res_metric in data.get('resourceMetrics', []):
+                resource = res_metric.get('resource', {})
+                res_attrs = self._process_otel_attributes(
+                    resource.get('attributes', []))
+                agent_id = res_attrs.get('service.name')
+
+                if not agent_id or agent_id not in self.agents:
+                    continue
+                tel = self.agents[agent_id]['telemetry']
+                changed = False
+
+                for scope_metric in res_metric.get('scopeMetrics', []):
+                    for metric in scope_metric.get('metrics', []):
+                        name = metric.get('name', '')
+
+                        # Collect data points from sum, gauge, or
+                        # histogram structures
+                        data_points = []
+                        for container in ('sum', 'gauge', 'histogram'):
+                            section = metric.get(container, {})
+                            data_points.extend(
+                                section.get('dataPoints', []))
+
+                        for dp in data_points:
+                            dp_attrs = self._process_otel_attributes(
+                                dp.get('attributes', []))
+
+                            # Model detection from any metric with a
+                            # 'model' attribute
+                            model = dp_attrs.get('model')
+                            if (model and isinstance(model, str)
+                                    and tel.get('model') != model):
+                                tel['model'] = model
+                                changed = True
+
+                            # Token accumulation from
+                            # claude_code.token.usage counters
+                            if name == 'claude_code.token.usage':
+                                value = (dp.get('asInt')
+                                         or dp.get('asDouble')
+                                         or 0)
+                                if value:
+                                    tel['tokens'] = (
+                                        tel.get('tokens', 0)
+                                        + int(value))
+                                    changed = True
 
                 if changed and self.sio.connected:
                     await self.sio.emit(

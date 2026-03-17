@@ -63,4 +63,12 @@ Environment=GH_TOKEN=ghp_your-token-here    # systemd quadlet
 
 ## Telemetry
 
-The daemon runs a local OTLP HTTP receiver on port 4318 that captures telemetry (model names, token usage) from spawned agents. Both OTLP logs (`/v1/logs`, used by Gemini) and traces (`/v1/traces`, used by Claude Code) are supported.
+The daemon runs a local OTLP HTTP receiver on port 4318 that captures telemetry (model names, token usage) from spawned agents. All three OTLP signals are supported:
+
+| Signal | Endpoint | Used By |
+|--------|----------|---------|
+| Logs | `/v1/logs` | Gemini CLI |
+| Traces | `/v1/traces` | Gemini CLI, Claude Code |
+| Metrics | `/v1/metrics` | Claude Code (`claude_code.token.usage` counters) |
+
+The daemon automatically configures the required OpenTelemetry environment variables for each spawned agent, including `OTEL_METRICS_EXPORTER`, `OTEL_LOGS_EXPORTER`, and `OTEL_EXPORTER_OTLP_PROTOCOL` for Claude Code compatibility.
