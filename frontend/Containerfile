@@ -1,7 +1,10 @@
 # Stage 1: Build the React app
-FROM docker.io/library/node:20-alpine AS build
+FROM registry.fedoraproject.org/fedora:42 AS build
 
 WORKDIR /app
+
+# Install Node.js and npm
+RUN dnf install --setopt=install_weak_deps=False -y nodejs npm && dnf clean all
 
 # Copy package files and install dependencies
 COPY package*.json ./
@@ -15,7 +18,13 @@ ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
 # Stage 2: Serve with NGINX
-FROM docker.io/library/nginx:alpine
+FROM registry.fedoraproject.org/fedora-minimal:42
+
+# Install nginx
+RUN microdnf install -y nginx && microdnf clean all
+
+# Remove default nginx configs to avoid conflicts
+RUN rm -f /etc/nginx/conf.d/default.conf /etc/nginx/nginx.conf.default
 
 # Copy custom NGINX configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf

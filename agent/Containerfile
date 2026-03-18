@@ -1,52 +1,51 @@
-FROM docker.io/library/python:3.9-slim
+FROM registry.fedoraproject.org/fedora:42
 
 WORKDIR /app
 
 # Install basic utilities, nodejs, and npm
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN dnf install --setopt=install_weak_deps=False -y \
     bash \
     curl \
     nodejs \
     npm \
     git \
-    openssh-client \
+    openssh-clients \
     less \
-    vim \
+    vim-enhanced \
     man-db \
-    apt-transport-https \
     ca-certificates \
-    gnupg \
+    gnupg2 \
     jq \
     tree \
-    procps \
-    iputils-ping \
-    iproute2 \
+    procps-ng \
+    iputils \
+    iproute \
     unzip \
     zip \
     make \
     ripgrep \
-    dnsutils \
+    bind-utils \
     strace \
     tmux \
     file \
     patch \
-    && rm -rf /var/lib/apt/lists/*
+    python3 \
+    python3-pip \
+    python3-devel \
+    gcc \
+    && dnf clean all
 
 # Install GitHub CLI
-RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-    > /etc/apt/sources.list.d/github-cli.list \
-    && apt-get update && apt-get install -y --no-install-recommends gh \
-    && rm -rf /var/lib/apt/lists/*
+RUN printf '[gh-cli]\nname=GitHub CLI\nbaseurl=https://cli.github.com/packages/rpm\nenabled=1\ngpgcheck=1\ngpgkey=https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x23F3D4EA75716059\n' \
+    > /etc/yum.repos.d/gh-cli.repo \
+    && dnf install --setopt=install_weak_deps=False -y gh \
+    && dnf clean all
 
 # Install Google Cloud CLI (required for Claude Code via Vertex AI)
-RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
-    | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
-    > /etc/apt/sources.list.d/google-cloud-sdk.list \
-    && apt-get update && apt-get install -y --no-install-recommends google-cloud-cli \
-    && rm -rf /var/lib/apt/lists/*
+RUN printf '[google-cloud-cli]\nname=Google Cloud CLI\nbaseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-$(uname -m)\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=0\ngpgkey=https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg\n' \
+    > /etc/yum.repos.d/google-cloud-sdk.repo \
+    && dnf install --setopt=install_weak_deps=False -y google-cloud-cli \
+    && dnf clean all
 
 # Install actual AI CLIs via npm
 RUN npm install -g @google/gemini-cli @anthropic-ai/claude-code
@@ -57,10 +56,10 @@ RUN mkdir -p /root/.gemini && \
 
 # Copy requirements and install daemon python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy the daemon script
 COPY host_daemon.py .
 
 # Use the daemon as the entrypoint
-ENTRYPOINT ["python", "host_daemon.py"]
+ENTRYPOINT ["python3", "host_daemon.py"]
