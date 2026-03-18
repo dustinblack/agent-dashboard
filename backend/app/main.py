@@ -94,6 +94,7 @@ class SpawnRequest(BaseModel):
     tool_name: str
     project_dir: Optional[str] = None
     task_description: Optional[str] = None
+    session_mode: Optional[str] = "resume"
 
 # Authentication Endpoints
 @fastapi_app.get("/login")
@@ -291,14 +292,15 @@ async def spawn_agent(request: SpawnRequest, db: Session = Depends(database.get_
     # 2. Relay command to the specific host daemon via Socket.IO
     # The host daemon should be in a room named "host_{id}"
     await socket.sio.emit(
-        'spawn_agent', 
+        'spawn_agent',
         {
-            'agent_id': agent_uuid, 
+            'agent_id': agent_uuid,
             'tool': request.tool_name,
             'project_dir': request.project_dir,
-            'task_description': request.task_description
-        }, 
-        room=f"host_{request.host_id}", 
+            'task_description': request.task_description,
+            'session_mode': request.session_mode or 'resume',
+        },
+        room=f"host_{request.host_id}",
         namespace='/terminal'
     )
     

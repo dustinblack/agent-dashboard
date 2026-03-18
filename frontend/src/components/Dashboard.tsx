@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { getHosts, getAgents, spawnAgent, stopAgent, deleteHost } from '../api';
 import type { Host, Agent } from '../api';
-import { Terminal, Cpu, Activity, PlusCircle, Wifi, WifiOff, Square, GitBranch, Folder, Info, X, ChevronRight, RefreshCw, Trash2, Server } from 'lucide-react';
+import { Terminal, Cpu, Activity, PlusCircle, Wifi, WifiOff, Square, GitBranch, Folder, Info, X, ChevronRight, RefreshCw, Trash2, Server, Plug } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface DashboardProps {
@@ -12,7 +12,7 @@ interface SpawnModalProps {
     host: Host;
     tool: string;
     onClose: () => void;
-    onSpawn: (dir: string, task: string) => void;
+    onSpawn: (dir: string, task: string, sessionMode: string) => void;
     onRefresh: () => void;
 }
 
@@ -20,6 +20,8 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, o
     const projects = host.projects?.available_projects || [];
     const [selectedProject, setSelectedProject] = useState('');
     const [task, setTask] = useState('');
+    const [resumeSession, setResumeSession] = useState(true);
+    const showResume = tool === 'claude' || tool === 'gemini';
 
     // Auto-select first project when list arrives
     useEffect(() => {
@@ -76,6 +78,31 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, o
                         </p>
                     </div>
 
+                    {showResume && (
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest">Session Mode</label>
+                                <p className="text-[10px] text-slate-500 mt-0.5">
+                                    {resumeSession ? 'Continue the most recent session in this project' : 'Start a fresh session'}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setResumeSession(!resumeSession)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                    resumeSession ? 'bg-blue-600' : 'bg-slate-600'
+                                }`}
+                            >
+                                <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                                    resumeSession ? 'translate-x-6' : 'translate-x-1'
+                                }`} />
+                            </button>
+                            <span className="text-xs text-slate-300 font-medium ml-2 w-16">
+                                {resumeSession ? 'Resume' : 'New'}
+                            </span>
+                        </div>
+                    )}
+
                     <div>
                         <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Task Description (Optional)</label>
                         <textarea 
@@ -95,7 +122,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, o
                         Cancel
                     </button>
                     <button 
-                        onClick={() => onSpawn(selectedProject, task)}
+                        onClick={() => onSpawn(selectedProject, task, resumeSession ? 'resume' : 'new')}
                         disabled={!selectedProject}
                         className={`flex-1 font-bold py-2.5 rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 ${
                             selectedProject 
@@ -109,6 +136,63 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, o
             </div>
         </div>
     );
+};
+
+const CONTEXT_WINDOWS: Record<string, number> = {
+    'claude-opus-4': 200000,
+    'claude-sonnet-4': 200000,
+    'claude-haiku-4': 200000,
+    'gemini-2.5-pro': 1000000,
+    'gemini-2.5-flash': 1000000,
+    'gemini-2.0-flash': 1000000,
+};
+
+const getContextWindow = (model?: string): number => {
+    if (!model) return 200000;
+    for (const [prefix, size] of Object.entries(CONTEXT_WINDOWS)) {
+        if (model.startsWith(prefix)) return size;
+    }
+    if (model.startsWith('gemini')) return 1000000;
+    return 200000;
+};
+
+const getProgressColor = (pct: number): string => {
+    if (pct > 80) return 'bg-red-500';
+    if (pct > 50) return 'bg-amber-500';
+    return 'bg-green-500';
+};
+
+const StatusIndicator: React.FC<{ status?: string }> = ({ status }) => {
+    switch (status) {
+        case 'working':
+            return (
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 rounded-full border border-green-500/20">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                    <span className="text-green-400 text-[10px] font-bold uppercase tracking-wider">Working</span>
+                </div>
+            );
+        case 'waiting_permission':
+            return (
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-red-500/15 rounded-full border border-red-500/30 animate-pulse">
+                    <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                    <span className="text-red-400 text-[10px] font-bold uppercase tracking-wider">Permission</span>
+                </div>
+            );
+        case 'idle':
+            return (
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 rounded-full border border-amber-500/20">
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span className="text-amber-400 text-[10px] font-bold uppercase tracking-wider">Idle</span>
+                </div>
+            );
+        default:
+            return (
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 rounded-full border border-green-500/20">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                    <span className="text-green-400 text-[10px] font-bold uppercase tracking-wider">Live</span>
+                </div>
+            );
+    }
 };
 
 const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
@@ -139,9 +223,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
     }
   };
 
-  const handleSpawn = async (hostId: number, toolName: string, projectDir?: string, taskDescription?: string) => {
+  const handleSpawn = async (hostId: number, toolName: string, projectDir?: string, taskDescription?: string, sessionMode?: string) => {
       try {
-          const newAgent = await spawnAgent(hostId, toolName, projectDir, taskDescription);
+          const newAgent = await spawnAgent(hostId, toolName, projectDir, taskDescription, sessionMode);
           setActiveSpawn(null);
           await fetchData();
           onAttach(newAgent.agent_id);
@@ -296,56 +380,67 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
                         {hostAgents.map(agent => {
                           const tel = agent.telemetry || {};
+                          const contextMax = getContextWindow(tel.model);
+                          const tokenPct = tel.tokens ? Math.min((tel.tokens / contextMax) * 100, 100) : 0;
+                          const mcpServers = tel.mcp_servers || [];
                           return (
-                            <div key={agent.id} className="bg-slate-800 rounded-2xl p-6 border border-slate-700 hover:border-blue-500/50 transition-all shadow-lg flex flex-col group">
-                              <div className="flex justify-between items-start mb-4">
+                            <div key={agent.id} className="bg-slate-800 rounded-2xl p-4 border border-slate-700 hover:border-blue-500/50 transition-all shadow-lg flex flex-col group">
+                              <div className="flex justify-between items-start mb-2">
                                 <div className="overflow-hidden">
-                                  <h3 className="font-bold text-lg text-white truncate">{tel.git_project || 'Agent'}</h3>
-                                  <div className="flex gap-2 items-center mt-1">
+                                  <div className="flex gap-2 items-center">
                                       <span className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded font-bold uppercase border border-blue-500/20">
                                           {agent.tool_name || 'gemini'}
                                       </span>
-                                      {tel.git_branch && (
-                                          <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
-                                              <GitBranch size={10} /> {tel.git_branch}
-                                          </span>
-                                      )}
+                                      <h3 className="font-bold text-sm text-white truncate">{tel.git_project || 'Agent'}</h3>
                                   </div>
+                                  {tel.git_branch && (
+                                      <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5 ml-0.5">
+                                          <GitBranch size={10} /> {tel.git_branch}
+                                      </span>
+                                  )}
                                 </div>
-                                <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 rounded-full border border-green-500/20">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
-                                  <span className="text-green-400 text-[10px] font-bold uppercase tracking-wider">Live</span>
-                                </div>
+                                <StatusIndicator status={tel.agent_status} />
                               </div>
 
-                              {tel.task_description && (
-                                  <div className="bg-slate-900/50 p-3 rounded-lg mb-4 border border-slate-700/50">
-                                      <p className="text-xs text-slate-300 line-clamp-3 leading-relaxed">
-                                          <Info size={12} className="inline mr-1.5 text-slate-500" />
-                                          {tel.task_description}
-                                      </p>
+                              {agent.tool_name !== 'bash' && (
+                                  <div className="my-2 border-t border-slate-700/50 pt-2">
+                                      <p className="text-[11px] text-slate-300 font-mono truncate">{tel.model || '...'}</p>
+                                      <div className="flex items-center gap-2 mt-1">
+                                          <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                              <div
+                                                  className={`h-full rounded-full transition-all ${getProgressColor(tokenPct)}`}
+                                                  style={{ width: `${tokenPct}%` }}
+                                              />
+                                          </div>
+                                          <span className="text-[10px] text-slate-400 font-mono whitespace-nowrap">
+                                              {tel.tokens ? tel.tokens.toLocaleString() : '0'} tkns
+                                          </span>
+                                      </div>
                                   </div>
                               )}
 
-                              {agent.tool_name !== 'bash' && (
-                                  <div className="grid grid-cols-2 gap-3 mb-6">
-                                      <div className="bg-slate-900/30 p-2 rounded border border-slate-700/30">
-                                          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Model</p>
-                                          <p className="text-[11px] text-slate-200 font-mono truncate">{tel.model || '...'}</p>
-                                      </div>
-                                      <div className="bg-slate-900/30 p-2 rounded border border-slate-700/30">
-                                          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Context Usage</p>
-                                          <p className="text-[11px] text-slate-200 font-mono truncate">{tel.tokens ? `${tel.tokens.toLocaleString()} tokens` : '...'}</p>
-                                      </div>
+                              {mcpServers.length > 0 && (
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mb-2">
+                                      <Plug size={10} className="text-slate-500 shrink-0" />
+                                      <span className="truncate">MCP: {mcpServers.join(', ')}</span>
+                                  </div>
+                              )}
+
+                              {tel.task_description && (
+                                  <div className="bg-slate-900/50 p-2 rounded-lg mb-2 border border-slate-700/50">
+                                      <p className="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">
+                                          <Info size={10} className="inline mr-1 text-slate-500" />
+                                          {tel.task_description}
+                                      </p>
                                   </div>
                               )}
 
                               <div className="flex gap-2 mt-auto">
                                   <button
                                       onClick={() => onAttach(agent.agent_id)}
-                                      className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm cursor-pointer"
+                                      className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm cursor-pointer"
                                   >
-                                      <Terminal size={18} /> Attach
+                                      <Terminal size={16} /> Attach
                                   </button>
                                   <button
                                       onClick={(e) => {
@@ -353,10 +448,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                                           e.stopPropagation();
                                           handleStop(agent.agent_id);
                                       }}
-                                      className="w-12 bg-red-600 hover:bg-red-500 text-white rounded-xl transition-colors flex items-center justify-center shadow-md active:scale-90 cursor-pointer"
+                                      className="w-10 bg-red-600 hover:bg-red-500 text-white rounded-xl transition-colors flex items-center justify-center shadow-md active:scale-90 cursor-pointer"
                                       title="Stop Agent"
                                   >
-                                      <Square size={16} fill="currentColor" />
+                                      <Square size={14} fill="currentColor" />
                                   </button>
                               </div>
                             </div>
@@ -455,7 +550,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
             host={hosts.find(h => h.id === activeSpawn.hostId)!} 
             tool={activeSpawn.tool} 
             onClose={() => setActiveSpawn(null)}
-            onSpawn={(dir, task) => handleSpawn(activeSpawn.hostId, activeSpawn.tool, dir, task)}
+            onSpawn={(dir, task, sessionMode) => handleSpawn(activeSpawn.hostId, activeSpawn.tool, dir, task, sessionMode)}
             onRefresh={requestProjects}
           />
       )}

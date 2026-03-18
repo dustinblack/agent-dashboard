@@ -8,11 +8,22 @@ import select
 import signal
 import subprocess
 import re
+import json
+import time
 import asyncio
 import aiohttp
 from aiohttp import web
 from typing import Dict, Optional, List
 from collections import deque
+
+# Terminal patterns that indicate the agent is waiting for user input
+PERMISSION_PATTERNS = [
+    re.compile(p, re.IGNORECASE) for p in [
+        r'\[Y/n\]', r'\[y/N\]', r'Do you want to proceed',
+        r'Allow\s', r'waiting for your', r'press enter',
+        r'approve|deny|permission', r'\(yes/no\)',
+    ]
+]
 
 class HostDaemon:
     def __init__(self, server_url: str, host_token: str):
@@ -60,13 +71,19 @@ class HostDaemon:
         async def on_spawn_agent(data):
             """
             Triggered by the server to start a new AI agent session.
-            data: {'agent_id': '...', 'tool': 'gemini|claude', 'project_dir': '...', 'task_description': '...'}
+            data: {'agent_id': '...', 'tool': 'gemini|claude',
+                    'project_dir': '...', 'task_description': '...',
+                    'session_mode': 'resume'|'new'}
             """
             agent_id = data.get('agent_id')
             tool = data.get('tool', 'bash')
             project_dir = data.get('project_dir')
             task_description = data.get('task_description')
-            await self.spawn_agent(agent_id, tool, project_dir, task_description)
+            session_mode = data.get('session_mode', 'resume')
+            await self.spawn_agent(
+                agent_id, tool, project_dir,
+                task_description, session_mode
+            )
 
         @self.sio.on('stop_agent', namespace='/terminal')
         async def on_stop_agent(data):
@@ -189,30 +206,112 @@ class HostDaemon:
 
         return branch, project
 
-    async def spawn_agent(self, agent_id: str, tool: str, project_dir: Optional[str] = None, task: Optional[str] = None):
-        """Spawns a new process in a pseudo-terminal with environmental context."""
+    def _detect_mcp_servers(self, project_dir, tool):
+        """Detects MCP servers configured for the given tool and project.
+
+        For Claude, reads .mcp.json in the project directory and
+        ~/.claude.json for global MCP server configuration.
+        For Gemini, reads ~/.gemini/settings.json.
+
+        Args:
+            project_dir: The project directory path.
+            tool: The agent tool name ('claude', 'gemini', etc.).
+
+        Returns:
+            A list of MCP server name strings.
+        """
+        servers = []
+        try:
+            if tool == 'claude':
+                # Project-level .mcp.json
+                if project_dir:
+                    mcp_path = os.path.join(project_dir, '.mcp.json')
+                    if os.path.isfile(mcp_path):
+                        with open(mcp_path, 'r') as f:
+                            data = json.load(f)
+                        mcp_servers = data.get('mcpServers', {})
+                        servers.extend(mcp_servers.keys())
+
+                # User-level ~/.claude.json
+                home_claude = os.path.expanduser('~/.claude.json')
+                if os.path.isfile(home_claude):
+                    with open(home_claude, 'r') as f:
+                        data = json.load(f)
+                    mcp_servers = data.get('mcpServers', {})
+                    for name in mcp_servers.keys():
+                        if name not in servers:
+                            servers.append(name)
+
+            elif tool == 'gemini':
+                settings_path = os.path.expanduser(
+                    '~/.gemini/settings.json'
+                )
+                if os.path.isfile(settings_path):
+                    with open(settings_path, 'r') as f:
+                        data = json.load(f)
+                    mcp_servers = data.get('mcpServers', {})
+                    servers.extend(mcp_servers.keys())
+        except Exception as e:
+            print(f"MCP detection error for {tool}: {e}")
+
+        return servers
+
+    async def spawn_agent(
+        self, agent_id: str, tool: str,
+        project_dir: Optional[str] = None,
+        task: Optional[str] = None,
+        session_mode: str = "resume"
+    ):
+        """Spawns a new process in a pseudo-terminal with environmental context.
+
+        Args:
+            agent_id: Unique identifier for the agent session.
+            tool: The CLI tool to spawn ('claude', 'gemini', 'bash').
+            project_dir: Working directory for the agent.
+            task: Optional task description for the session.
+            session_mode: 'resume' to continue the latest session
+                          (default), or 'new' for a fresh session.
+        """
         # Resolve full path (handles both absolute and relative from projects_root)
         full_path = project_dir
         if project_dir and not project_dir.startswith('/'):
             full_path = os.path.join(self.projects_root, project_dir)
-        
+
         # Ensure we use an absolute path for working directory
         if full_path:
             full_path = os.path.abspath(full_path)
 
-        print(f"Spawning agent {agent_id} with tool: {tool} in {full_path}")
-        
+        print(
+            f"Spawning agent {agent_id} with tool: {tool} "
+            f"mode: {session_mode} in {full_path}"
+        )
+
         branch, project = self.get_git_info(full_path)
+        mcp_servers = self._detect_mcp_servers(full_path, tool)
         telemetry = {
             "project_dir": full_path,
             "task_description": task,
             "git_branch": branch,
             "git_project": project,
             "model": "detecting...",
-            "tokens": 0
+            "tokens": 0,
+            "agent_status": "idle",
+            "mcp_servers": mcp_servers,
         }
 
-        cmd_map = {'gemini': ['gemini'], 'claude': ['claude'], 'bash': ['bash']}
+        # Build command based on session_mode
+        if session_mode == "resume":
+            cmd_map = {
+                'gemini': ['gemini', '--resume', 'latest'],
+                'claude': ['claude', '--continue'],
+                'bash': ['bash'],
+            }
+        else:
+            cmd_map = {
+                'gemini': ['gemini'],
+                'claude': ['claude'],
+                'bash': ['bash'],
+            }
         cmd = cmd_map.get(tool, [tool])
 
         pid, fd = pty.fork()
@@ -251,7 +350,10 @@ class HostDaemon:
                 'pid': pid,
                 'tool': tool,
                 'history': deque(maxlen=1000),
-                'telemetry': telemetry
+                'telemetry': telemetry,
+                'last_otlp_time': 0.0,
+                'last_output_time': time.monotonic(),
+                'permission_waiting': False,
             }
             if self.sio.connected:
                 await self.sio.emit('agent_telemetry', {'agent_id': agent_id, 'telemetry': telemetry}, namespace='/terminal')
@@ -281,6 +383,19 @@ class HostDaemon:
                     if self.sio.connected:
                         decoded_data = data.decode('utf-8', errors='replace')
                         self.agents[agent_id]['history'].append(decoded_data)
+                        self.agents[agent_id]['last_output_time'] = (
+                            time.monotonic()
+                        )
+
+                        # Check for permission prompts
+                        if any(p.search(decoded_data)
+                               for p in PERMISSION_PATTERNS):
+                            self.agents[agent_id][
+                                'permission_waiting'] = True
+                        else:
+                            self.agents[agent_id][
+                                'permission_waiting'] = False
+
                         await self.sio.emit('terminal_output', {'sid': agent_id, 'output': decoded_data}, namespace='/terminal')
                 except OSError:
                     self.close_agent(agent_id)
@@ -412,6 +527,9 @@ class HostDaemon:
 
                 if not agent_id or agent_id not in self.agents:
                     continue
+                self.agents[agent_id]['last_otlp_time'] = (
+                    time.monotonic()
+                )
                 tel = self.agents[agent_id]['telemetry']
                 changed = False
 
@@ -437,6 +555,9 @@ class HostDaemon:
 
                 if not agent_id or agent_id not in self.agents:
                     continue
+                self.agents[agent_id]['last_otlp_time'] = (
+                    time.monotonic()
+                )
                 tel = self.agents[agent_id]['telemetry']
                 changed = False
 
@@ -465,6 +586,9 @@ class HostDaemon:
 
                 if not agent_id or agent_id not in self.agents:
                     continue
+                self.agents[agent_id]['last_otlp_time'] = (
+                    time.monotonic()
+                )
                 tel = self.agents[agent_id]['telemetry']
                 changed = False
 
@@ -527,6 +651,43 @@ class HostDaemon:
         print("OTLP Receiver listening on http://127.0.0.1:4318")
         await site.start()
 
+    async def update_agent_status(self):
+        """Periodically derives agent_status from OTLP and output activity.
+
+        Runs every 5 seconds. Status logic:
+        - permission_waiting flag set -> 'waiting_permission'
+        - OTLP data received within last 15s -> 'working'
+        - No recent activity -> 'idle'
+        Emits agent_telemetry on status change.
+        """
+        while self.running:
+            now = time.monotonic()
+            for agent_id, info in list(self.agents.items()):
+                tel = info['telemetry']
+                old_status = tel.get('agent_status')
+
+                if info.get('permission_waiting'):
+                    new_status = 'waiting_permission'
+                elif (now - info.get('last_otlp_time', 0)) < 15:
+                    new_status = 'working'
+                elif (now - info.get('last_output_time', 0)) < 15:
+                    new_status = 'working'
+                else:
+                    new_status = 'idle'
+
+                if new_status != old_status:
+                    tel['agent_status'] = new_status
+                    if self.sio.connected:
+                        await self.sio.emit(
+                            'agent_telemetry',
+                            {
+                                'agent_id': agent_id,
+                                'telemetry': tel,
+                            },
+                            namespace='/terminal',
+                        )
+            await asyncio.sleep(5)
+
     async def update_agents_git_info(self):
         """Periodically checks the current working directory of each agent and updates git info."""
         while self.running:
@@ -565,8 +726,15 @@ class HostDaemon:
             self.cache_task = asyncio.create_task(self.update_projects_cache())
             self.otlp_task = asyncio.create_task(self.start_otlp_server())
             self.git_task = asyncio.create_task(self.update_agents_git_info())
-            
-            await asyncio.gather(self.watcher_task, self.cache_task, self.otlp_task, self.git_task)
+            self.status_task = asyncio.create_task(
+                self.update_agent_status()
+            )
+
+            await asyncio.gather(
+                self.watcher_task, self.cache_task,
+                self.otlp_task, self.git_task,
+                self.status_task,
+            )
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -590,6 +758,8 @@ class HostDaemon:
             self.cache_task.cancel()
         if hasattr(self, 'git_task') and not self.git_task.done():
             self.git_task.cancel()
+        if hasattr(self, 'status_task') and not self.status_task.done():
+            self.status_task.cancel()
 
 async def main():
     SERVER_URL = os.getenv("DASHBOARD_URL", "http://localhost:8000")

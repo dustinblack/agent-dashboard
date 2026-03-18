@@ -34,6 +34,8 @@ export interface Agent {
       git_project?: string;
       model?: string;
       tokens?: number;
+      agent_status?: string;
+      mcp_servers?: string[];
   };
 }
 
@@ -51,12 +53,13 @@ export const getAgents = async (): Promise<Agent[]> => {
   return response.data;
 };
 
-export const spawnAgent = async (hostId: number, toolName: string, projectDir?: string, taskDescription?: string): Promise<Agent> => {
-  const response = await api.post('/agents/spawn', { 
-      host_id: hostId, 
+export const spawnAgent = async (hostId: number, toolName: string, projectDir?: string, taskDescription?: string, sessionMode?: string): Promise<Agent> => {
+  const response = await api.post('/agents/spawn', {
+      host_id: hostId,
       tool_name: toolName,
       project_dir: projectDir,
-      task_description: taskDescription
+      task_description: taskDescription,
+      session_mode: sessionMode || 'resume',
   });
   return response.data;
 };
