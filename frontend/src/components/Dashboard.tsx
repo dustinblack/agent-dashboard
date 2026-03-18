@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { getHosts, getAgents, spawnAgent, stopAgent, deleteHost } from '../api';
 import type { Host, Agent } from '../api';
-import { Terminal, Cpu, Activity, PlusCircle, Wifi, WifiOff, Square, GitBranch, Folder, Info, X, ChevronRight, RefreshCw, Trash2, Server, Plug } from 'lucide-react';
+import { Terminal, Cpu, Activity, PlusCircle, Wifi, WifiOff, Square, GitBranch, Folder, Info, X, ChevronRight, RefreshCw, Trash2, Server, Plug, Clock } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface DashboardProps {
@@ -225,6 +225,37 @@ const getProgressColor = (pct: number): string => {
     if (pct > 80) return 'bg-red-500';
     if (pct > 50) return 'bg-amber-500';
     return 'bg-green-500';
+};
+
+/**
+ * Formats a duration in seconds to a compact human-readable
+ * string (e.g. "45s", "12m", "2h 15m", "1d 3h").
+ * Falls back to wall-clock elapsed from a start timestamp
+ * if seconds is not available.
+ */
+const formatDuration = (
+    seconds?: number,
+    startedAt?: string,
+): string => {
+    let secs = seconds || 0;
+    if (!secs && startedAt) {
+        const start = new Date(startedAt).getTime();
+        if (!isNaN(start)) {
+            secs = Math.floor(
+                (Date.now() - start) / 1000
+            );
+        }
+    }
+    if (secs <= 0) return '';
+    if (secs < 60) return `${secs}s`;
+    const minutes = Math.floor(secs / 60);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours < 24) return `${hours}h ${mins}m`;
+    const days = Math.floor(hours / 24);
+    const hrs = hours % 24;
+    return `${days}d ${hrs}h`;
 };
 
 const StatusIndicator: React.FC<{ status?: string }> = ({ status }) => {
@@ -464,11 +495,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                                       </span>
                                       <h3 className="font-bold text-sm text-white truncate">{tel.git_project || 'Agent'}</h3>
                                   </div>
-                                  {tel.git_branch && (
-                                      <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5 ml-0.5">
-                                          <GitBranch size={10} /> {tel.git_branch}
-                                      </span>
-                                  )}
+                                  <div className="flex items-center gap-3 mt-0.5 ml-0.5">
+                                      {tel.git_branch && (
+                                          <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+                                              <GitBranch size={10} /> {tel.git_branch}
+                                          </span>
+                                      )}
+                                      {(tel.run_time_seconds || agent.started_at) && (
+                                          <span className="flex items-center gap-1 text-[10px] text-slate-500 font-mono" title={tel.run_time_seconds ? 'Active time (CLI-reported)' : 'Elapsed since spawn'}>
+                                              <Clock size={10} /> {formatDuration(tel.run_time_seconds, agent.started_at)}
+                                          </span>
+                                      )}
+                                  </div>
                                 </div>
                                 <StatusIndicator status={tel.agent_status} />
                               </div>

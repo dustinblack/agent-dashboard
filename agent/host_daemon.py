@@ -299,6 +299,7 @@ class HostDaemon:
             "current_activity": "",
             "agent_status": "idle",
             "mcp_servers": mcp_servers,
+            "run_time_seconds": 0,
         }
 
         # Build command based on session_mode
@@ -764,6 +765,37 @@ class HostDaemon:
                                 )
                                 if fn and isinstance(fn, str):
                                     tel['current_activity'] = fn
+                                    changed = True
+
+                            # Run time from CLI-reported metrics.
+                            # Claude: active_time.total (seconds)
+                            # Gemini: agent.duration (ms, end-of
+                            #   session only)
+                            if name == (
+                                'claude_code.active_time.total'
+                            ):
+                                value = (
+                                    dp.get('asInt')
+                                    or dp.get('asDouble')
+                                    or 0
+                                )
+                                if value:
+                                    tel['run_time_seconds'] = (
+                                        int(value)
+                                    )
+                                    changed = True
+                            elif name == (
+                                'gemini_cli.agent.duration'
+                            ):
+                                value = (
+                                    dp.get('asInt')
+                                    or dp.get('asDouble')
+                                    or 0
+                                )
+                                if value:
+                                    tel['run_time_seconds'] = (
+                                        int(value / 1000)
+                                    )
                                     changed = True
 
                 if changed and self.sio.connected:
