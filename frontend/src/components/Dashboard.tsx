@@ -138,12 +138,14 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, o
     );
 };
 
+const CONTEXT_TIERS = [8000, 16000, 32000, 64000, 128000, 200000, 500000, 1000000, 2000000, 4000000, 8000000];
+
 const CONTEXT_WINDOWS: Record<string, number> = {
     'claude-3-5': 200000,
     'claude-3': 200000,
-    'claude-opus-4': 200000,
-    'claude-sonnet-4': 200000,
-    'claude-haiku-4': 200000,
+    'claude-opus-4': 1000000,
+    'claude-sonnet-4': 1000000,
+    'claude-haiku-4': 1000000,
     'gemini-1.5-pro': 2000000,
     'gemini-exp': 2000000,
     'gemini-1.5-flash': 1000000,
@@ -154,15 +156,44 @@ const CONTEXT_WINDOWS: Record<string, number> = {
     'gpt-4o': 128000,
 };
 
-const getContextWindow = (model?: string): number => {
-    if (!model) return 200000;
-    const normalizedModel = model.toLowerCase();
-    
-    for (const [key, size] of Object.entries(CONTEXT_WINDOWS)) {
-        if (normalizedModel.includes(key)) return size;
+const getContextWindow = (model?: string, tokensUsed: number = 0): number => {
+    let baseMax = 200000;
+    if (model) {
+        const normalizedModel = model.toLowerCase();
+        let found = false;
+        
+        for (const [key, size] of Object.entries(CONTEXT_WINDOWS)) {
+            if (normalizedModel.includes(key)) {
+                baseMax = size;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            if (normalizedModel.includes('gemini')) baseMax = 1000000;
+            else if (normalizedModel.includes('claude')) baseMax = 200000;
+        }
     }
-    if (normalizedModel.includes('gemini')) return 1000000;
-    return 200000;
+
+    if (!tokensUsed) return baseMax;
+
+    // Expansion: If tokens exceed the hardcoded limit, expand to next tier.
+    if (tokensUsed >= baseMax) {
+        const higherTiers = CONTEXT_TIERS.filter(t => t > tokensUsed);
+        return higherTiers.length > 0 ? higherTiers[0] : Math.ceil(tokensUsed * 1.5);
+    }
+
+    // Contraction: If usage is very low compared to the hardcoded baseMax, 
+    // dynamically contract the visual maximum so the progress bar remains meaningful.
+    const idealMax = Math.max(tokensUsed * 1.5, 32000); 
+    if (idealMax < baseMax) {
+        const lowerTiers = CONTEXT_TIERS.filter(t => t >= idealMax && t <= baseMax);
+        if (lowerTiers.length > 0) {
+            return lowerTiers[0];
+        }
+    }
+
+    return baseMax;
 };
 
 /**
@@ -414,7 +445,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
                         {hostAgents.map(agent => {
                           const tel = agent.telemetry || {};
-                          const contextMax = getContextWindow(tel.model);
+                          const contextMax = getContextWindow(tel.model, tel.tokens || 0);
                           const tokenPct = tel.tokens ? Math.min((tel.tokens / contextMax) * 100, 100) : 0;
                           const mcpServers = tel.mcp_servers || [];
                           return (
