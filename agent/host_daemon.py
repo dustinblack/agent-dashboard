@@ -295,6 +295,7 @@ class HostDaemon:
             "git_project": project,
             "model": "detecting...",
             "tokens": 0,
+            "context_tokens": 0,
             "agent_status": "idle",
             "mcp_servers": mcp_servers,
         }
@@ -507,6 +508,15 @@ class HostDaemon:
             if total > tel.get('tokens', 0):
                 tel['tokens'] = total
                 changed = True
+
+        # Track input_tokens as context_tokens — this is
+        # the per-API-call value representing current context
+        # window usage (accounts for compression/eviction).
+        # Always overwrite with the latest value so it can
+        # decrease after context compression.
+        if input_tokens is not None and input_tokens > 0:
+            tel['context_tokens'] = input_tokens
+            changed = True
 
         return changed
 

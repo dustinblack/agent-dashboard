@@ -445,8 +445,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
                         {hostAgents.map(agent => {
                           const tel = agent.telemetry || {};
-                          const contextMax = getContextWindow(tel.model, tel.tokens || 0);
-                          const tokenPct = tel.tokens ? Math.min((tel.tokens / contextMax) * 100, 100) : 0;
+                          // Use context_tokens (per-call input tokens)
+                          // for the progress bar — reflects current
+                          // context window usage after compression.
+                          // Fall back to cumulative tokens if context
+                          // data is not yet available.
+                          const ctxTokens = tel.context_tokens || tel.tokens || 0;
+                          const contextMax = getContextWindow(tel.model, ctxTokens);
+                          const tokenPct = ctxTokens ? Math.min((ctxTokens / contextMax) * 100, 100) : 0;
                           const mcpServers = tel.mcp_servers || [];
                           return (
                             <div key={agent.id} className={`bg-slate-800 rounded-2xl p-4 border border-slate-700 ${getToolColors(agent.tool_name).border} transition-all shadow-lg flex flex-col h-full group`}>
@@ -474,7 +480,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                                           <div className="flex justify-between items-center mb-1">
                                               <span className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Context</span>
                                               <span className="text-[10px] text-slate-400 font-mono">
-                                                  {tel.tokens ? tel.tokens.toLocaleString() : '0'} / {contextMax >= 1000000 ? `${(contextMax / 1000000).toFixed(1).replace('.0', '')}M` : `${(contextMax / 1000).toFixed(0)}k`}
+                                                  {ctxTokens ? ctxTokens.toLocaleString() : '0'} / {contextMax >= 1000000 ? `${(contextMax / 1000000).toFixed(1).replace('.0', '')}M` : `${(contextMax / 1000).toFixed(0)}k`}
                                               </span>
                                           </div>
                                           <div className="w-full h-2.5 bg-slate-700 rounded-full overflow-hidden">

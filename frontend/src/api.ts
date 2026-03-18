@@ -34,6 +34,7 @@ export interface Agent {
       git_project?: string;
       model?: string;
       tokens?: number;
+      context_tokens?: number;
       agent_status?: string;
       mcp_servers?: string[];
   };
