@@ -334,7 +334,11 @@ class HostDaemon:
             env['OTEL_EXPORTER_OTLP_PROTOCOL'] = 'http/json'
             env['GEMINI_CLI_TELEMETRY_ENABLED'] = 'true'
             env['GEMINI_TELEMETRY_ENABLED'] = 'true'
-            env['GEMINI_TELEMETRY_OTLP_ENDPOINT'] = 'http://127.0.0.1:4318/v1/logs'
+            # Gemini SDK appends /v1/{traces,logs,metrics} to
+            # this base URL — do NOT include a path suffix.
+            env['GEMINI_TELEMETRY_OTLP_ENDPOINT'] = (
+                'http://127.0.0.1:4318'
+            )
             env['GEMINI_TELEMETRY_OTLP_PROTOCOL'] = 'http'
             env['GEMINI_TELEMETRY_USE_COLLECTOR'] = 'true'
             env['GEMINI_TELEMETRY_TARGET'] = 'local'
@@ -685,9 +689,19 @@ class HostDaemon:
                                 tel['model'] = model
                                 changed = True
 
-                            # Token accumulation from
-                            # claude_code.token.usage counters
-                            if name == 'claude_code.token.usage':
+                            # Token accumulation from tool-
+                            # specific usage counters.
+                            # Claude: claude_code.token.usage
+                            # Gemini: gemini_cli.token.usage
+                            # Note: Gemini also emits
+                            # gen_ai.client.token.usage with
+                            # identical values — intentionally
+                            # excluded to avoid double-counting.
+                            token_metrics = (
+                                'claude_code.token.usage',
+                                'gemini_cli.token.usage',
+                            )
+                            if name in token_metrics:
                                 value = (dp.get('asInt')
                                          or dp.get('asDouble')
                                          or 0)
