@@ -10,11 +10,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     npm \
     git \
     openssh-client \
+    less \
     vim \
     man-db \
     apt-transport-https \
     ca-certificates \
     gnupg \
+    jq \
+    tree \
+    procps \
+    iputils-ping \
+    iproute2 \
+    unzip \
+    zip \
+    make \
+    ripgrep \
+    dnsutils \
+    strace \
+    tmux \
+    file \
+    patch \
     && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI
