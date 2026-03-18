@@ -14,6 +14,7 @@ This is the React frontend for the Gemini AI Coding Agent Dashboard, built with 
 - **Vite**: Build tool.
 - **xterm.js**: Terminal emulator for the browser.
 - **Socket.IO-client**: Real-time communication with the backend.
+- **Tailwind CSS v4**: Utility-first CSS framework.
 - **Lucide React**: Icon library.
 - **Axios**: HTTP client for API requests.
 

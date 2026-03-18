@@ -42,10 +42,11 @@ RUN printf '[gh-cli]\nname=GitHub CLI\nbaseurl=https://cli.github.com/packages/r
     && dnf clean all
 
 # Install Google Cloud CLI (required for Claude Code via Vertex AI)
-RUN printf '[google-cloud-cli]\nname=Google Cloud CLI\nbaseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-$(uname -m)\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=0\ngpgkey=https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg\n' \
-    > /etc/yum.repos.d/google-cloud-sdk.repo \
-    && dnf install --setopt=install_weak_deps=False -y google-cloud-cli \
-    && dnf clean all
+RUN curl -sSL https://sdk.cloud.google.com > /tmp/install_gcloud.sh \
+    && bash /tmp/install_gcloud.sh --disable-prompts --install-dir=/opt \
+    && rm /tmp/install_gcloud.sh \
+    && ln -s /opt/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud \
+    && ln -s /opt/google-cloud-sdk/bin/gsutil /usr/local/bin/gsutil
 
 # Install actual AI CLIs via npm
 RUN npm install -g @google/gemini-cli @anthropic-ai/claude-code

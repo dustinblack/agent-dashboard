@@ -29,7 +29,7 @@ This project is inspired by the following blog post:
 - **Formatting**: Use `prettier`.
 - **Linting**: Use `eslint` with project-specific configurations.
 - **Language**: Use TypeScript for all new components and logic.
-- **Styling**: Prefer Vanilla CSS as per global defaults unless otherwise specified.
+- **Styling**: Use Tailwind CSS v4 utility classes. Custom CSS should only be used for overrides that Tailwind cannot express (e.g., third-party component styling).
 
 ## Workflow & Safety
 
