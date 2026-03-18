@@ -139,20 +139,29 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, o
 };
 
 const CONTEXT_WINDOWS: Record<string, number> = {
+    'claude-3-5': 200000,
+    'claude-3': 200000,
     'claude-opus-4': 200000,
     'claude-sonnet-4': 200000,
     'claude-haiku-4': 200000,
-    'gemini-2.5-pro': 1000000,
+    'gemini-1.5-pro': 2000000,
+    'gemini-exp': 2000000,
+    'gemini-1.5-flash': 1000000,
+    'gemini-2.5-pro': 2000000,
     'gemini-2.5-flash': 1000000,
     'gemini-2.0-flash': 1000000,
+    'gpt-4': 128000,
+    'gpt-4o': 128000,
 };
 
 const getContextWindow = (model?: string): number => {
     if (!model) return 200000;
-    for (const [prefix, size] of Object.entries(CONTEXT_WINDOWS)) {
-        if (model.startsWith(prefix)) return size;
+    const normalizedModel = model.toLowerCase();
+    
+    for (const [key, size] of Object.entries(CONTEXT_WINDOWS)) {
+        if (normalizedModel.includes(key)) return size;
     }
-    if (model.startsWith('gemini')) return 1000000;
+    if (normalizedModel.includes('gemini')) return 1000000;
     return 200000;
 };
 
@@ -434,7 +443,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                                           <div className="flex justify-between items-center mb-1">
                                               <span className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Context</span>
                                               <span className="text-[10px] text-slate-400 font-mono">
-                                                  {tel.tokens ? tel.tokens.toLocaleString() : '0'} / {(contextMax / 1000).toFixed(0)}k
+                                                  {tel.tokens ? tel.tokens.toLocaleString() : '0'} / {contextMax >= 1000000 ? `${(contextMax / 1000000).toFixed(1).replace('.0', '')}M` : `${(contextMax / 1000).toFixed(0)}k`}
                                               </span>
                                           </div>
                                           <div className="w-full h-2.5 bg-slate-700 rounded-full overflow-hidden">
