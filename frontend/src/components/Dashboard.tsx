@@ -384,7 +384,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                           const tokenPct = tel.tokens ? Math.min((tel.tokens / contextMax) * 100, 100) : 0;
                           const mcpServers = tel.mcp_servers || [];
                           return (
-                            <div key={agent.id} className="bg-slate-800 rounded-2xl p-4 border border-slate-700 hover:border-blue-500/50 transition-all shadow-lg flex flex-col group">
+                            <div key={agent.id} className="bg-slate-800 rounded-2xl p-4 border border-slate-700 hover:border-blue-500/50 transition-all shadow-lg flex flex-col h-full group">
                               <div className="flex justify-between items-start mb-2">
                                 <div className="overflow-hidden">
                                   <div className="flex gap-2 items-center">
@@ -405,16 +405,19 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                               {agent.tool_name !== 'bash' && (
                                   <div className="my-2 border-t border-slate-700/50 pt-2">
                                       <p className="text-[11px] text-slate-300 font-mono truncate">{tel.model || '...'}</p>
-                                      <div className="flex items-center gap-2 mt-1">
-                                          <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                      <div className="mt-1.5">
+                                          <div className="flex justify-between items-center mb-1">
+                                              <span className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Context</span>
+                                              <span className="text-[10px] text-slate-400 font-mono">
+                                                  {tel.tokens ? tel.tokens.toLocaleString() : '0'} / {(contextMax / 1000).toFixed(0)}k
+                                              </span>
+                                          </div>
+                                          <div className="w-full h-2.5 bg-slate-700 rounded-full overflow-hidden">
                                               <div
-                                                  className={`h-full rounded-full transition-all ${getProgressColor(tokenPct)}`}
-                                                  style={{ width: `${tokenPct}%` }}
+                                                  className={`h-full rounded-full transition-all duration-500 ${getProgressColor(tokenPct)}`}
+                                                  style={{ width: `${Math.max(tokenPct, 1)}%` }}
                                               />
                                           </div>
-                                          <span className="text-[10px] text-slate-400 font-mono whitespace-nowrap">
-                                              {tel.tokens ? tel.tokens.toLocaleString() : '0'} tkns
-                                          </span>
                                       </div>
                                   </div>
                               )}
@@ -435,7 +438,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                                   </div>
                               )}
 
-                              <div className="flex gap-2 mt-auto">
+                              <div className="flex gap-2 mt-auto pt-2">
                                   <button
                                       onClick={() => onAttach(agent.agent_id)}
                                       className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm cursor-pointer"

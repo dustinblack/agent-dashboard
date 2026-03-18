@@ -506,13 +506,78 @@ class HostDaemon:
 
         return changed
 
+    def _resolve_agent_id(self, res_attrs):
+        """Resolves an agent_id from OTLP resource attributes.
+
+        First checks for the standard 'service.name' attribute (set
+        via OTEL_RESOURCE_ATTRIBUTES for tools like Claude Code that
+        use the standard OTEL SDK).  If not found, falls back to
+        matching by tool type — Gemini CLI uses its own telemetry
+        implementation and does not honour OTEL_RESOURCE_ATTRIBUTES.
+
+        The fallback inspects the 'service.name' value and all
+        resource attributes for tool-type hints, then matches to
+        any active agent of that tool type.  When multiple agents of
+        the same tool type are running, falls back to the most
+        recently spawned one.
+
+        Args:
+            res_attrs: Flat dict of parsed OTLP resource attributes.
+
+        Returns:
+            A matching agent_id string, or None.
+        """
+        # Direct match via injected service.name (Claude Code path)
+        agent_id = res_attrs.get('service.name')
+        if agent_id and agent_id in self.agents:
+            return agent_id
+
+        # Fallback: infer tool type from resource attributes and
+        # match to an active agent of that type.
+        tool_hint = None
+        svc = res_attrs.get('service.name', '') or ''
+        all_vals = ' '.join(
+            str(v) for v in res_attrs.values() if v
+        ).lower()
+
+        if 'gemini' in svc.lower() or 'gemini' in all_vals:
+            tool_hint = 'gemini'
+        elif 'claude' in svc.lower() or 'claude' in all_vals:
+            tool_hint = 'claude'
+
+        if tool_hint:
+            candidates = [
+                (aid, info) for aid, info in self.agents.items()
+                if info.get('tool') == tool_hint
+            ]
+            if len(candidates) == 1:
+                return candidates[0][0]
+            elif len(candidates) > 1:
+                # Multiple agents of same type — use the most
+                # recently spawned (highest last_output_time as
+                # proxy for recency)
+                return max(
+                    candidates,
+                    key=lambda c: c[1].get(
+                        'last_output_time', 0
+                    ),
+                )[0]
+
+        # Last resort: if there is exactly one agent, use it
+        if len(self.agents) == 1:
+            return next(iter(self.agents))
+
+        return None
+
     async def handle_otlp(self, request):
         """Standardized OTLP HTTP receiver (JSON format).
 
         Handles logs (/v1/logs), traces (/v1/traces), and metrics
         (/v1/metrics). Extracts agent_id from the resource
         'service.name' attribute (injected at spawn time) and looks
-        for model/token info in record or span attributes.
+        for model/token info in record or span attributes.  Falls
+        back to tool-type matching for CLIs (like Gemini) that do
+        not respect OTEL_RESOURCE_ATTRIBUTES.
         """
         try:
             data = await request.json()
@@ -523,9 +588,13 @@ class HostDaemon:
                 resource = res_log.get('resource', {})
                 res_attrs = self._process_otel_attributes(
                     resource.get('attributes', []))
-                agent_id = res_attrs.get('service.name')
+                agent_id = self._resolve_agent_id(res_attrs)
 
-                if not agent_id or agent_id not in self.agents:
+                if not agent_id:
+                    print(
+                        f"OTLP: no agent match for resource "
+                        f"attrs: {res_attrs}"
+                    )
                     continue
                 self.agents[agent_id]['last_otlp_time'] = (
                     time.monotonic()
@@ -551,9 +620,9 @@ class HostDaemon:
                 resource = res_span.get('resource', {})
                 res_attrs = self._process_otel_attributes(
                     resource.get('attributes', []))
-                agent_id = res_attrs.get('service.name')
+                agent_id = self._resolve_agent_id(res_attrs)
 
-                if not agent_id or agent_id not in self.agents:
+                if not agent_id:
                     continue
                 self.agents[agent_id]['last_otlp_time'] = (
                     time.monotonic()
@@ -582,9 +651,9 @@ class HostDaemon:
                 resource = res_metric.get('resource', {})
                 res_attrs = self._process_otel_attributes(
                     resource.get('attributes', []))
-                agent_id = res_attrs.get('service.name')
+                agent_id = self._resolve_agent_id(res_attrs)
 
-                if not agent_id or agent_id not in self.agents:
+                if not agent_id:
                     continue
                 self.agents[agent_id]['last_otlp_time'] = (
                     time.monotonic()
