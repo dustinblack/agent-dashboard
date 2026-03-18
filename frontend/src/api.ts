@@ -49,7 +49,7 @@ export const deleteHost = async (id: number): Promise<void> => {
 };
 
 export const getAgents = async (): Promise<Agent[]> => {
-  const response = await api.get('/agents');
+  const response = await api.get('/agents', { params: { status: 'active' } });
   return response.data;
 };
 

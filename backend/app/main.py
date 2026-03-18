@@ -169,11 +169,20 @@ def delete_host(host_id: int, db: Session = Depends(database.get_db), user: dict
     return {"detail": "Host deleted successfully."}
 
 @fastapi_app.get("/agents", response_model=List[AgentSchema])
-def read_agents(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db), user: dict = Depends(auth.get_current_user)):
+def read_agents(
+    skip: int = 0,
+    limit: int = 100,
+    status: Optional[str] = None,
+    db: Session = Depends(database.get_db),
+    user: dict = Depends(auth.get_current_user),
+):
     """
-    List all active and historical agent sessions. Requires UI login.
+    List agent sessions, optionally filtered by status. Requires UI login.
     """
-    agents = db.query(models.Agent).offset(skip).limit(limit).all()
+    query = db.query(models.Agent)
+    if status:
+        query = query.filter(models.Agent.status == status)
+    agents = query.offset(skip).limit(limit).all()
     return agents
 
 @fastapi_app.get(
