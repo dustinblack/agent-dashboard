@@ -296,6 +296,7 @@ class HostDaemon:
             "model": "detecting...",
             "tokens": 0,
             "context_tokens": 0,
+            "current_activity": "",
             "agent_status": "idle",
             "mcp_servers": mcp_servers,
         }
@@ -518,6 +519,31 @@ class HostDaemon:
             tel['context_tokens'] = input_tokens
             changed = True
 
+        # Current activity — extract the latest tool/function
+        # name from span or log attributes.  Gemini uses
+        # 'function_name', Claude uses 'tool_name'.
+        activity = None
+        for key in (
+            'function_name', 'tool_name',
+            'gen_ai.operation.name',
+        ):
+            val = attrs.get(key)
+            if val and isinstance(val, str):
+                activity = val
+                break
+
+        # Fall back to event.name for log records
+        if not activity:
+            event_name = attrs.get('event.name')
+            if (event_name and isinstance(event_name, str)
+                    and event_name not in (
+                        'gen_ai_operation_details',)):
+                activity = event_name
+
+        if activity:
+            tel['current_activity'] = activity
+            changed = True
+
         return changed
 
     def _resolve_agent_id(self, res_attrs):
@@ -719,6 +745,25 @@ class HostDaemon:
                                     tel['tokens'] = (
                                         tel.get('tokens', 0)
                                         + int(value))
+                                    changed = True
+
+                            # Activity from tool call metrics.
+                            # Gemini: gemini_cli.tool.call.count
+                            # Claude: claude_code.tool.execution
+                            tool_metrics = (
+                                'gemini_cli.tool.call.count',
+                                'gemini_cli.tool.call.latency',
+                                'claude_code.tool.execution',
+                                'claude_code.tool',
+                            )
+                            if name in tool_metrics:
+                                fn = dp_attrs.get(
+                                    'function_name'
+                                ) or dp_attrs.get(
+                                    'tool_name'
+                                )
+                                if fn and isinstance(fn, str):
+                                    tel['current_activity'] = fn
                                     changed = True
 
                 if changed and self.sio.connected:

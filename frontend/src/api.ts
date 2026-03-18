@@ -35,6 +35,7 @@ export interface Agent {
       model?: string;
       tokens?: number;
       context_tokens?: number;
+      current_activity?: string;
       agent_status?: string;
       mcp_servers?: string[];
   };

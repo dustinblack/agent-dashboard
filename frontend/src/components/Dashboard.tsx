@@ -500,11 +500,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                                   </div>
                               )}
 
-                              {tel.task_description && (
+                              {(tel.current_activity || tel.task_description) && (
                                   <div className="bg-slate-900/50 p-2 rounded-lg mb-2 border border-slate-700/50">
                                       <p className="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">
                                           <Info size={10} className="inline mr-1 text-slate-500" />
-                                          {tel.task_description}
+                                          {tel.current_activity || tel.task_description}
                                       </p>
                                   </div>
                               )}
