@@ -32,8 +32,8 @@ function categorize(toolName?: string): ToolCategory {
 
 const TOOL_COLORS: Record<ToolCategory, string> = {
   gemini: 'bg-blue-500',
-  claude: 'bg-orange-500',
-  bash: 'bg-green-500',
+  claude: 'bg-purple-500',
+  bash: 'bg-slate-500',
   unknown: 'bg-slate-500',
 };
 

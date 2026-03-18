@@ -156,6 +156,31 @@ const getContextWindow = (model?: string): number => {
     return 200000;
 };
 
+/**
+ * Returns Tailwind color classes for agent tool type badges.
+ * Gemini = blue, Claude = purple, Bash = slate.
+ */
+const getToolColors = (toolName?: string) => {
+    const t = (toolName || '').toLowerCase();
+    if (t.includes('claude')) {
+        return {
+            badge: 'bg-purple-500/20 text-purple-400 border-purple-500/20',
+            border: 'hover:border-purple-500/50',
+        };
+    }
+    if (t.includes('bash') || t.includes('shell')) {
+        return {
+            badge: 'bg-slate-500/20 text-slate-300 border-slate-500/20',
+            border: 'hover:border-slate-500/50',
+        };
+    }
+    // Default: gemini / blue
+    return {
+        badge: 'bg-blue-500/20 text-blue-400 border-blue-500/20',
+        border: 'hover:border-blue-500/50',
+    };
+};
+
 const getProgressColor = (pct: number): string => {
     if (pct > 80) return 'bg-red-500';
     if (pct > 50) return 'bg-amber-500';
@@ -384,11 +409,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                           const tokenPct = tel.tokens ? Math.min((tel.tokens / contextMax) * 100, 100) : 0;
                           const mcpServers = tel.mcp_servers || [];
                           return (
-                            <div key={agent.id} className="bg-slate-800 rounded-2xl p-4 border border-slate-700 hover:border-blue-500/50 transition-all shadow-lg flex flex-col h-full group">
+                            <div key={agent.id} className={`bg-slate-800 rounded-2xl p-4 border border-slate-700 ${getToolColors(agent.tool_name).border} transition-all shadow-lg flex flex-col h-full group`}>
                               <div className="flex justify-between items-start mb-2">
                                 <div className="overflow-hidden">
                                   <div className="flex gap-2 items-center">
-                                      <span className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded font-bold uppercase border border-blue-500/20">
+                                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase border ${getToolColors(agent.tool_name).badge}`}>
                                           {agent.tool_name || 'gemini'}
                                       </span>
                                       <h3 className="font-bold text-sm text-white truncate">{tel.git_project || 'Agent'}</h3>
