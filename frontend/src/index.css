@@ -1,5 +1,39 @@
 @import "tailwindcss";
 
+/* Theme accent colour custom properties.
+   These are the defaults (Matrix Green) and are overridden
+   at runtime by applyTheme(). */
+:root {
+  --color-accent: #39FF14;
+  --color-accent-hover: #5FFF4A;
+  --color-accent-muted: #1A7A0A;
+}
+
+/* Accent utility classes consumed by components. */
+@layer utilities {
+  .bg-accent {
+    background-color: var(--color-accent);
+  }
+  .hover\:bg-accent-hover:hover {
+    background-color: var(--color-accent-hover);
+  }
+  .text-accent {
+    color: var(--color-accent);
+  }
+  .border-accent {
+    border-color: var(--color-accent);
+  }
+  .border-accent-muted {
+    border-color: var(--color-accent-muted);
+  }
+  .focus\:border-accent:focus {
+    border-color: var(--color-accent);
+  }
+  .group:hover .group-hover\:text-accent {
+    color: var(--color-accent);
+  }
+}
+
 /* Ensure xterm fills its container */
 .xterm,
 .xterm-viewport,

@@ -46,7 +46,7 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col bg-slate-900 text-slate-100 font-sans h-screen w-screen overflow-hidden">
+    <div className="flex flex-col bg-slate-900 text-slate-50 font-sans h-screen w-screen overflow-hidden">
       {renderContent()}
     </div>
   );

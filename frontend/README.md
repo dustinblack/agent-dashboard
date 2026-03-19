@@ -6,7 +6,8 @@ This is the React frontend for the Gemini AI Coding Agent Dashboard, built with 
 - **Dashboard Grid**: View active agent sessions grouped by host, with each host displayed as a distinct section containing its agents.
 - **Remote Terminal**: Attach to any active session using an embedded `xterm.js` terminal with proper support for spinner animations, progress indicators, and streaming LLM output. Includes batched rendering, debounced resizing, and native touch scrolling.
 - **Real-time Updates**: Sessions and terminal output are updated in real-time via Socket.IO.
-- **Responsive Design**: Modern, dark-themed UI that works across various screen sizes.
+- **Theming**: Six built-in colour themes (Matrix Green, Cyber Cyan, Retro Amber, Proton Purple, Signal Red, Space Black) selectable via dot icons in the header. Each theme bundles an accent colour with a surface brightness palette. Selection persists in localStorage.
+- **Responsive Design**: Modern UI that works across various screen sizes.
 
 ## Tech Stack
 - **React**: UI library.

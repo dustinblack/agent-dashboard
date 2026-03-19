@@ -3,6 +3,8 @@ import { getHosts, getAgents, spawnAgent, stopAgent, deleteHost, updateTaskDescr
 import type { Host, Agent } from '../api';
 import { Terminal, Cpu, Activity, PlusCircle, Wifi, WifiOff, Square, GitBranch, Folder, Info, X, ChevronRight, RefreshCw, Trash2, Server, Plug, Clock } from 'lucide-react';
 import { io } from 'socket.io-client';
+import LogoSvg from './LogoSvg';
+import ThemeSelector from './ThemeSelector';
 
 interface DashboardProps {
   onAttach: (agentId: string) => void;
@@ -34,11 +36,11 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, o
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
                 <div className="flex justify-between items-center p-6 border-b border-slate-700 bg-slate-800/50">
-                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                        <PlusCircle size={24} className="text-blue-400" />
+                    <h3 className="text-xl font-bold text-slate-50 flex items-center gap-2">
+                        <PlusCircle size={24} className="text-accent" />
                         Spawn {tool.toUpperCase()}
                     </h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-50 transition-colors">
                         <X size={24} />
                     </button>
                 </div>
@@ -46,32 +48,32 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, o
                 <div className="p-6 space-y-6">
                     <div>
                         <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Host</label>
-                        <p className="text-white font-medium bg-slate-900/50 p-3 rounded-lg border border-slate-700">{host.name}</p>
+                        <p className="text-slate-50 font-medium bg-slate-900/50 p-3 rounded-lg border border-slate-700">{host.name}</p>
                     </div>
 
                     <div>
                         <div className="flex justify-between items-center mb-2">
-                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest text-blue-400">Select Project</label>
+                            <label className="block text-xs font-bold uppercase tracking-widest text-accent">Select Project</label>
                             <button 
                                 onClick={onRefresh}
-                                className="text-[10px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-tighter transition-colors flex items-center gap-1"
+                                className="text-[10px] text-accent font-bold uppercase tracking-tighter transition-colors flex items-center gap-1"
                             >
                                 <RefreshCw size={10} className="animate-spin-slow" /> Force Refresh
                             </button>
                         </div>
                         <div className="relative group">
-                            <Folder className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-hover:text-blue-400 transition-colors" size={18} />
+                            <Folder className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-hover:text-accent transition-colors" size={18} />
                             <select 
                                 value={selectedProject}
                                 onChange={(e) => setSelectedProject(e.target.value)}
-                                className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-10 text-white focus:outline-none focus:border-blue-500 appearance-none transition-all cursor-pointer"
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-10 text-slate-50 focus:outline-none focus:border-accent appearance-none transition-all cursor-pointer"
                             >
                                 {projects.length === 0 && <option value="">Loading projects from {host.projects?.projects_root || '/git'}...</option>}
                                 {projects.map(p => (
                                     <option key={p} value={p}>{p}</option>
                                 ))}
                             </select>
-                            <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none group-hover:text-blue-400 rotate-90" size={18} />
+                            <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none group-hover:text-accent rotate-90" size={18} />
                         </div>
                         <p className="text-[10px] text-slate-500 mt-1.5 italic">
                             Projects found in <code className="bg-slate-900 px-1 rounded">{host.projects?.projects_root || '/git'}</code>
@@ -90,7 +92,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, o
                                 type="button"
                                 onClick={() => setResumeSession(!resumeSession)}
                                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                    resumeSession ? 'bg-blue-600' : 'bg-slate-600'
+                                    resumeSession ? 'bg-accent' : 'bg-slate-600'
                                 }`}
                             >
                                 <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
@@ -108,7 +110,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, o
                         <textarea 
                             value={task}
                             onChange={(e) => setTask(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-blue-500 transition-colors min-h-[100px] resize-none"
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 px-4 text-slate-50 focus:outline-none focus:border-accent transition-colors min-h-[100px] resize-none"
                             placeholder="Describe the objective for this session..."
                         />
                     </div>
@@ -117,7 +119,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, o
                 <div className="p-6 bg-slate-900/50 border-t border-slate-700 flex gap-3">
                     <button 
                         onClick={onClose}
-                        className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-400 hover:text-white transition-colors"
+                        className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-400 hover:text-slate-50 transition-colors"
                     >
                         Cancel
                     </button>
@@ -125,8 +127,8 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, o
                         onClick={() => onSpawn(selectedProject, task, resumeSession ? 'resume' : 'new')}
                         disabled={!selectedProject}
                         className={`flex-1 font-bold py-2.5 rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 ${
-                            selectedProject 
-                            ? 'bg-blue-600 hover:bg-blue-500 text-white' 
+                            selectedProject
+                            ? 'bg-accent hover:bg-accent-hover text-slate-50'
                             : 'bg-slate-700 text-slate-500 cursor-not-allowed border border-slate-600'
                         }`}
                     >
@@ -347,7 +349,7 @@ const EditableTaskDescription: React.FC<{
                     if (e.key === 'Escape') cancel();
                 }}
                 onBlur={save}
-                className="w-full bg-slate-800 text-[11px] text-slate-200 px-1.5 py-0.5 rounded border border-blue-500/50 outline-none focus:border-blue-400"
+                className="w-full bg-slate-800 text-[11px] text-slate-200 px-1.5 py-0.5 rounded border border-accent-muted outline-none focus:border-accent"
                 placeholder="Describe the task..."
             />
         );
@@ -477,7 +479,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
     document.title = 'Agent Dashboard';
   }, []);
 
-  if (loading) return <div className="p-8 text-white">Loading dashboard...</div>;
+  if (loading) return <div className="p-8 text-slate-50">Loading dashboard...</div>;
   if (error) return (
     <div className="p-8">
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -493,27 +495,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
   return (
     <div className="max-w-7xl mx-auto p-8">
       <header className="mb-8 flex justify-between items-center">
-        <h1 className="text-3xl font-bold flex items-center gap-3 text-white">
-          <img
-            src="/favicon.svg"
-            alt="Agent Dashboard"
-            className="w-9 h-9"
-          />
+        <h1 className="text-3xl font-bold flex items-center gap-3 text-slate-50">
+          <LogoSvg className="w-9 h-9" />
           Agent Dashboard
         </h1>
-        <div className="flex gap-4">
+        <div className="flex items-center gap-4">
+          <ThemeSelector />
           <div className="bg-slate-800 p-3 rounded-lg flex items-center gap-3">
-             <Cpu className="text-blue-400" />
+             <Cpu className="text-accent" />
              <div>
                 <p className="text-xs text-slate-400">Registered Hosts</p>
-                <p className="font-bold text-white">{hosts.length}</p>
+                <p className="font-bold text-slate-50">{hosts.length}</p>
              </div>
           </div>
           <div className="bg-slate-800 p-3 rounded-lg flex items-center gap-3">
              <Activity className="text-green-400" />
              <div>
                 <p className="text-xs text-slate-400">Active Agents</p>
-                <p className="font-bold text-white">{agents.filter(a => a.status === 'active').length}</p>
+                <p className="font-bold text-slate-50">{agents.filter(a => a.status === 'active').length}</p>
              </div>
           </div>
         </div>
@@ -540,7 +539,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                     <div key={hostId} className="bg-slate-800/40 rounded-2xl border border-slate-700 overflow-hidden">
                       <div className="flex items-center gap-3 px-6 py-3 bg-slate-800/80 border-b border-slate-700/50">
                         <Server size={16} className="text-slate-400" />
-                        <span className="font-semibold text-white text-sm">{host?.name || 'Unknown Host'}</span>
+                        <span className="font-semibold text-slate-50 text-sm">{host?.name || 'Unknown Host'}</span>
                         {host?.status === 'online' ? (
                           <span className="inline-flex items-center gap-1 text-green-400 text-[10px] font-semibold uppercase">
                             <Wifi size={10} /> Online
@@ -572,7 +571,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                                       <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase border ${getToolColors(agent.tool_name).badge}`}>
                                           {agent.tool_name || 'gemini'}
                                       </span>
-                                      <h3 className="font-bold text-sm text-white truncate">{tel.git_project || 'Agent'}</h3>
+                                      <h3 className="font-bold text-sm text-slate-50 truncate">{tel.git_project || 'Agent'}</h3>
                                   </div>
                                   <div className="flex items-center gap-3 mt-0.5 ml-0.5">
                                       {tel.git_branch && (
@@ -633,7 +632,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                               <div className="flex gap-2 mt-auto pt-2">
                                   <button
                                       onClick={() => onAttach(agent.agent_id)}
-                                      className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm cursor-pointer"
+                                      className="flex-1 bg-accent hover:bg-accent-hover text-slate-50 font-bold py-2 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm cursor-pointer"
                                   >
                                       <Terminal size={16} /> Attach
                                   </button>
@@ -643,7 +642,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                                           e.stopPropagation();
                                           handleStop(agent.agent_id);
                                       }}
-                                      className="w-10 bg-red-600 hover:bg-red-500 text-white rounded-xl transition-colors flex items-center justify-center shadow-md active:scale-90 cursor-pointer"
+                                      className="w-10 bg-red-600 hover:bg-red-500 text-slate-50 rounded-xl transition-colors flex items-center justify-center shadow-md active:scale-90 cursor-pointer"
                                       title="Stop Agent"
                                   >
                                       <Square size={14} fill="currentColor" />
