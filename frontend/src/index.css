@@ -46,10 +46,18 @@
   width: 100% !important;
 }
 
+/* Prevent overscroll "bounce" artifacts on the terminal
+   viewport when scrolled to the top or bottom edge. */
+.xterm-viewport {
+  overscroll-behavior: contain !important;
+}
+
 /* Allow native vertical touch scrolling on the terminal.
    xterm.js registers touch handlers with {passive: false}
-   which blocks the browser's default scroll behavior. */
-.xterm-viewport,
-.xterm-screen {
+   which blocks the browser's default scroll behavior.
+   touch-action tells the browser to handle vertical panning
+   before JS handlers fire; the actual scrolling is driven
+   by a JS touchmove handler in Terminal.tsx. */
+.xterm .xterm-screen {
   touch-action: pan-y !important;
 }

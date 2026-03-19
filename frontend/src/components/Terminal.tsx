@@ -195,6 +195,60 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     requestAnimationFrame(performFit);
     xtermRef.current = term;
 
+    // --- Touch scrolling ---
+    // xterm.js intercepts touch events with {passive: false}
+    // and calls preventDefault(), blocking the browser's
+    // native scroll.  We attach our own handler on the
+    // xterm-screen element (capture phase) to translate
+    // vertical swipe gestures into term.scrollLines() calls.
+    let touchStartY: number | null = null;
+    let touchAccum = 0;
+    const LINE_HEIGHT_PX = 18; // approx pixel height per row
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        touchStartY = e.touches[0].clientY;
+        touchAccum = 0;
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (touchStartY === null || e.touches.length !== 1) return;
+      const deltaY = touchStartY - e.touches[0].clientY;
+      touchStartY = e.touches[0].clientY;
+      touchAccum += deltaY;
+
+      const lines = Math.trunc(touchAccum / LINE_HEIGHT_PX);
+      if (lines !== 0) {
+        term.scrollLines(lines);
+        touchAccum -= lines * LINE_HEIGHT_PX;
+      }
+      // Prevent the page itself from scrolling
+      e.preventDefault();
+    };
+    const onTouchEnd = () => {
+      touchStartY = null;
+      touchAccum = 0;
+    };
+
+    // Attach to the .xterm-screen element inside our
+    // container so we capture touches before xterm's own
+    // handler can preventDefault() on them.
+    const screenEl =
+      terminalRef.current?.querySelector<HTMLElement>(
+        '.xterm-screen',
+      );
+    if (screenEl) {
+      screenEl.addEventListener('touchstart', onTouchStart, {
+        passive: true,
+      });
+      screenEl.addEventListener('touchmove', onTouchMove, {
+        passive: false,
+      });
+      screenEl.addEventListener('touchend', onTouchEnd, {
+        passive: true,
+      });
+    }
+
     // --- Output batching ---
     // Buffer rapid successive terminal_output events and
     // flush them in a single term.write() per animation frame
@@ -276,6 +330,11 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       if (resizeTimer) clearTimeout(resizeTimer);
       if (rafId !== null) cancelAnimationFrame(rafId);
       resizeObserver?.disconnect();
+      if (screenEl) {
+        screenEl.removeEventListener('touchstart', onTouchStart);
+        screenEl.removeEventListener('touchmove', onTouchMove);
+        screenEl.removeEventListener('touchend', onTouchEnd);
+      }
       socket.disconnect();
       term.dispose();
     };
