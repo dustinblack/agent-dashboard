@@ -3,10 +3,103 @@
 An AI Coding Agent Dashboard designed for the Gemini CLI and Claude Code, allowing centralized orchestration and remote interaction with multiple AI agent sessions across different machines.
 
 ## Architecture
-- **Backend (Hub)**: Python 3.9+ with FastAPI and `python-socketio`. Manages the database and relays commands.
+
 - **Frontend**: React (TypeScript) via Vite, `xterm.js`, and `socket.io-client`. Central command UI.
+- **Backend (Hub)**: Python 3.9+ with FastAPI and `python-socketio`. Manages the database and relays commands.
 - **Host Daemon**: Background service running on remote development machines. Listens for `spawn` commands from the hub and multiplexes Agent I/O.
 - **Agent**: A specific AI CLI session (Gemini, Claude, or Bash) running inside a pseudo-terminal on a Host.
+
+```mermaid
+graph LR
+    subgraph Hub Server
+        FE["Frontend<br/>(React + xterm.js)"]
+        BE["Backend<br/>(FastAPI + Socket.IO)"]
+        DB[(SQLite)]
+    end
+
+    subgraph Host Machine 1
+        HD1["Host Daemon"]
+        OTLP1["OTLP Receiver<br/>:4318"]
+        subgraph PTY Sessions
+            A1["Claude<br/>(PTY)"]
+            A2["Gemini<br/>(PTY)"]
+        end
+    end
+
+    subgraph Host Machine N
+        HDN["Host Daemon"]
+    end
+
+    FE <-->|"Socket.IO"| BE
+    FE -->|"REST API"| BE
+    BE <--> DB
+    BE <-->|"Socket.IO"| HD1
+    BE <-->|"Socket.IO"| HDN
+    HD1 <-->|"PTY I/O"| A1
+    HD1 <-->|"PTY I/O"| A2
+    A1 -.->|"OTel metrics,<br/>traces, logs"| OTLP1
+    A2 -.->|"OTel metrics,<br/>traces, logs"| OTLP1
+    OTLP1 -->|"Telemetry<br/>via Socket.IO"| BE
+
+    style FE fill:#1e3a5f,color:#fff
+    style BE fill:#1e3a5f,color:#fff
+    style DB fill:#374151,color:#fff
+    style HD1 fill:#1a3326,color:#fff
+    style HDN fill:#1a3326,color:#fff
+    style OTLP1 fill:#3b2e1a,color:#fff
+    style A1 fill:#2d1f4e,color:#fff
+    style A2 fill:#1e3a5f,color:#fff
+```
+
+### Agent Spawn Flow
+
+When a user clicks "Spawn" in the UI, the request passes through
+three services before an agent process starts:
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant FE as Frontend
+    participant API as Backend API
+    participant DB as SQLite
+    participant SIO as Socket.IO Hub
+    participant HD as Host Daemon
+    participant PTY as Agent (PTY)
+
+    User->>FE: Click "Spawn Claude"
+    FE->>API: POST /agents/spawn<br/>{host_id, tool, project_dir,<br/>cols, rows}
+    API->>DB: INSERT agent record
+    API->>SIO: emit("spawn_agent", {...})
+    SIO->>HD: relay to host room
+
+    HD->>PTY: pty.fork() + execvpe()
+    HD->>PTY: ioctl(TIOCSWINSZ)<br/>set initial cols/rows
+    API-->>FE: return agent record
+
+    FE->>SIO: emit("join_room", agent_id)
+    SIO->>HD: emit("request_history")
+    HD-->>SIO: emit("terminal_output") x N
+    SIO-->>FE: relay history chunks
+    HD-->>SIO: emit("history_complete")
+    SIO-->>FE: relay completion
+
+    loop Live Session
+        PTY-->>HD: os.read(fd) + UTF-8 buffer
+        HD-->>SIO: emit("terminal_output")
+        SIO-->>FE: relay to agent room
+        FE->>FE: batch via rAF,<br/>term.write()
+        User->>FE: Type input
+        FE->>SIO: emit("terminal_input")
+        SIO->>HD: relay to host
+        HD->>PTY: os.write(fd)
+    end
+
+    loop OTel Telemetry
+        PTY-.>>HD: OTLP HTTP POST<br/>(:4318)
+        HD-.>>SIO: emit("agent_telemetry")
+        SIO-.>>FE: relay to UI
+    end
+```
 
 ## Deployment on RHEL 9 with Podman (The Hub)
 
