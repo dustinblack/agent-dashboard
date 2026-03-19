@@ -7,3 +7,11 @@
   height: 100% !important;
   width: 100% !important;
 }
+
+/* Allow native vertical touch scrolling on the terminal.
+   xterm.js registers touch handlers with {passive: false}
+   which blocks the browser's default scroll behavior. */
+.xterm-viewport,
+.xterm-screen {
+  touch-action: pan-y !important;
+}

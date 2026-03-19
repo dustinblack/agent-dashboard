@@ -135,7 +135,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     [companions, agentDetail, spawning],
   );
 
-  // xterm + socket setup (unchanged logic)
+  // xterm + socket setup
   useEffect(() => {
     if (!terminalRef.current) return;
 
@@ -179,40 +179,85 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     const handleResize = () => performFit();
     window.addEventListener('resize', handleResize);
 
+    // Debounce ResizeObserver to avoid rapid-fire resize
+    // events during layout transitions or animations.
+    let resizeTimer: ReturnType<typeof setTimeout> | null =
+      null;
     let resizeObserver: ResizeObserver | null = null;
     if (terminalRef.current) {
-      resizeObserver = new ResizeObserver(() => performFit());
+      resizeObserver = new ResizeObserver(() => {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(performFit, 150);
+      });
       resizeObserver.observe(terminalRef.current);
     }
 
     requestAnimationFrame(performFit);
     xtermRef.current = term;
 
+    // --- Output batching ---
+    // Buffer rapid successive terminal_output events and
+    // flush them in a single term.write() per animation frame
+    // to prevent visible scroll jumping during fast output.
+    let outputBuffer = '';
+    let rafId: number | null = null;
+    const flushOutput = () => {
+      rafId = null;
+      if (outputBuffer) {
+        term.write(outputBuffer);
+        outputBuffer = '';
+      }
+    };
+
+    // Buffer history chunks and write them all at once on
+    // history_complete to avoid per-chunk scroll jumping
+    // during replay.
+    let historyBuffer: string[] = [];
+
     // Socket.IO
     const baseURL =
       import.meta.env.VITE_API_URL ||
       `http://${window.location.hostname}:8000`;
-    const socket = io(`${baseURL}/terminal`, { path: '/socket.io' });
+    const socket = io(`${baseURL}/terminal`, {
+      path: '/socket.io',
+    });
     socketRef.current = socket;
 
     socket.on('connect', () => {
       isReplaying.current = true;
+      historyBuffer = [];
       socket.emit('join_room', { room: agentId });
       performFit();
     });
 
-    socket.on('history_complete', (data: { agent_id: string }) => {
-      if (data.agent_id === agentId) {
-        isReplaying.current = false;
-        performFit();
-      }
-    });
+    socket.on(
+      'history_complete',
+      (data: { agent_id: string }) => {
+        if (data.agent_id === agentId) {
+          // Write all buffered history in one call
+          if (historyBuffer.length > 0) {
+            term.write(historyBuffer.join(''));
+            historyBuffer = [];
+          }
+          isReplaying.current = false;
+          performFit();
+        }
+      },
+    );
 
     socket.on(
       'terminal_output',
       (data: { sid: string; output: string }) => {
-        if (data.sid === agentId) {
-          term.write(data.output);
+        if (data.sid !== agentId) return;
+        if (isReplaying.current) {
+          // Collect history chunks for batched write
+          historyBuffer.push(data.output);
+        } else {
+          // Buffer live output and flush per animation frame
+          outputBuffer += data.output;
+          if (rafId === null) {
+            rafId = requestAnimationFrame(flushOutput);
+          }
         }
       },
     );
@@ -228,6 +273,8 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (resizeTimer) clearTimeout(resizeTimer);
+      if (rafId !== null) cancelAnimationFrame(rafId);
       resizeObserver?.disconnect();
       socket.disconnect();
       term.dispose();

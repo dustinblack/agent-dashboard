@@ -56,13 +56,23 @@ export const getAgents = async (): Promise<Agent[]> => {
   return response.data;
 };
 
-export const spawnAgent = async (hostId: number, toolName: string, projectDir?: string, taskDescription?: string, sessionMode?: string): Promise<Agent> => {
+export const spawnAgent = async (
+  hostId: number,
+  toolName: string,
+  projectDir?: string,
+  taskDescription?: string,
+  sessionMode?: string,
+  cols?: number,
+  rows?: number,
+): Promise<Agent> => {
   const response = await api.post('/agents/spawn', {
-      host_id: hostId,
-      tool_name: toolName,
-      project_dir: projectDir,
-      task_description: taskDescription,
-      session_mode: sessionMode || 'resume',
+    host_id: hostId,
+    tool_name: toolName,
+    project_dir: projectDir,
+    task_description: taskDescription,
+    session_mode: sessionMode || 'resume',
+    cols: cols || 120,
+    rows: rows || 40,
   });
   return response.data;
 };
