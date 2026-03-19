@@ -1,6 +1,12 @@
-# Agent Dashboard
+<p align="center">
+  <img src="docs/images/agent-dashboard-logo.svg" alt="Agent Dashboard" width="128" height="128">
+</p>
 
+<h1 align="center">Agent Dashboard</h1>
+
+<p align="center">
 An AI Coding Agent Dashboard designed for the Gemini CLI and Claude Code, allowing centralized orchestration and remote interaction with multiple AI agent sessions across different machines.
+</p>
 
 ## Architecture
 

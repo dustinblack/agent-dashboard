@@ -1,0 +1,25 @@
+<svg width="512" height="512" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<style>
+@keyframes blink {
+0%, 100% { opacity: 1; }
+50% { opacity: 0; }
+}
+.cursor {
+animation: blink 1.2s infinite;
+}
+</style>
+<!-- Optional: Remove the rect below if you want a transparent background -->
+<rect width="48" height="48" fill="#0B0E14" rx="4"/>
+
+<!-- Hexagon Frame -->
+
+<path d="M24 4L41.3205 14V34L24 44L6.67949 34V14L24 4Z" stroke="#39FF14" stroke-width="2.5" fill="none"/>
+
+<!-- Prompt Arrow -->
+
+<path d="M16 24L21 20L16 16" stroke="#39FF14" stroke-width="3" stroke-linecap="round" transform="translate(0, 4)"/>
+
+<!-- Blinking Cursor -->
+
+<rect x="23" y="27" width="9" height="3" fill="#39FF14" class="cursor"/>
+</svg>

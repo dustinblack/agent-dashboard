@@ -493,8 +493,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
   return (
     <div className="max-w-7xl mx-auto p-8">
       <header className="mb-8 flex justify-between items-center">
-        <h1 className="text-3xl font-bold flex items-center gap-2 text-white">
-          <Terminal size={32} /> Agent Dashboard
+        <h1 className="text-3xl font-bold flex items-center gap-3 text-white">
+          <img
+            src="/favicon.svg"
+            alt="Agent Dashboard"
+            className="w-9 h-9"
+          />
+          Agent Dashboard
         </h1>
         <div className="flex gap-4">
           <div className="bg-slate-800 p-3 rounded-lg flex items-center gap-3">
