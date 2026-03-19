@@ -19,18 +19,29 @@ from aiohttp import web
 from typing import Dict, Optional, List
 from collections import deque
 
-# Terminal patterns that indicate the agent is waiting for user input
+# Terminal patterns that indicate the agent is waiting for user input.
+# Covers Claude Code, Gemini CLI, and generic yes/no prompts.
 PERMISSION_PATTERNS = [
     re.compile(p, re.IGNORECASE)
     for p in [
+        # Generic yes/no prompts
         r"\[Y/n\]",
         r"\[y/N\]",
-        r"Do you want to proceed",
-        r"Allow\s",
-        r"waiting for your",
-        r"press enter",
-        r"approve|deny|permission",
         r"\(yes/no\)",
+        r"\(y/n\)",
+        # Claude Code specific
+        r"Do you want to",
+        r"Allow\s",
+        r"approve|deny",
+        # Gemini CLI specific
+        r"Do you want to proceed",
+        r"waiting for your",
+        # General input prompts
+        r"press enter",
+        r"Press any key",
+        r"confirm\?",
+        r"Continue\?",
+        r"Proceed\?",
     ]
 ]
 
@@ -477,6 +488,7 @@ class HostDaemon:
                 "last_otlp_time": 0.0,
                 "last_output_time": time.monotonic(),
                 "permission_waiting": False,
+                "permission_waiting_since": 0,
                 "utf8_buffer": b"",
             }
             if self.sio.connected:
@@ -534,11 +546,19 @@ class HostDaemon:
                         self.agents[agent_id]["history"].append(decoded_data)
                         self.agents[agent_id]["last_output_time"] = time.monotonic()
 
-                        # Check for permission prompts
+                        # Check for permission prompts.
+                        # Use a sticky flag: once set, only clear
+                        # after 10s of non-matching output so that
+                        # trailing ANSI sequences don't flicker the
+                        # badge off before the status poll fires.
+                        now = time.monotonic()
                         if any(p.search(decoded_data) for p in PERMISSION_PATTERNS):
-                            self.agents[agent_id]["permission_waiting"] = True
-                        else:
-                            self.agents[agent_id]["permission_waiting"] = False
+                            info["permission_waiting"] = True
+                            info["permission_waiting_since"] = now
+                        elif info.get("permission_waiting"):
+                            elapsed = now - info.get("permission_waiting_since", 0)
+                            if elapsed > 10:
+                                info["permission_waiting"] = False
 
                         await self.sio.emit(
                             "terminal_output",
@@ -767,7 +787,15 @@ class HostDaemon:
         """
         try:
             data = await request.json()
-            print(f"OTLP received on {request.path}: {list(data.keys())}")
+            print(f"OTLP received on {request.path}: " f"{list(data.keys())}")
+
+            # Optional verbose debug mode for inspecting
+            # raw OTLP payloads from agent tools.
+            if os.getenv("OTLP_DEBUG"):
+                print(
+                    f"OTLP DEBUG {request.path}:\n"
+                    f"{json.dumps(data, indent=2, default=str)}"
+                )
 
             # Process OTLP Logs (resourceLogs → scopeLogs → logRecords)
             for res_log in data.get("resourceLogs", []):
@@ -813,6 +841,16 @@ class HostDaemon:
                 tel = self.agents[agent_id]["telemetry"]
                 changed = False
 
+                # Keywords that indicate the agent is
+                # waiting for user input / permission.
+                _wait_keywords = (
+                    "permission",
+                    "user_input",
+                    "approval",
+                    "confirm",
+                    "waiting",
+                )
+
                 for scope_span in res_span.get("scopeSpans", []):
                     for span in scope_span.get("spans", []):
                         attrs = self._process_otel_attributes(
@@ -820,6 +858,26 @@ class HostDaemon:
                         )
                         if self._update_telemetry_from_attrs(tel, attrs):
                             changed = True
+
+                        # Check span name for permission /
+                        # waiting signals (future-proofing for
+                        # when tools emit these via OTLP).
+                        span_name = (span.get("name") or "").lower()
+                        if any(kw in span_name for kw in _wait_keywords):
+                            info = self.agents[agent_id]
+                            info["permission_waiting"] = True
+                            info["permission_waiting_since"] = time.monotonic()
+                            changed = True
+
+                        # Check span events for waiting
+                        # indicators.
+                        for event in span.get("events", []):
+                            event_name = (event.get("name") or "").lower()
+                            if any(kw in event_name for kw in _wait_keywords):
+                                info = self.agents[agent_id]
+                                info["permission_waiting"] = True
+                                info["permission_waiting_since"] = time.monotonic()
+                                changed = True
 
                 if changed and self.sio.connected:
                     await self.sio.emit(
