@@ -397,11 +397,24 @@ class HostDaemon:
             "run_time_seconds": 0,
         }
 
-        # Build command based on session_mode
+        # Build command based on session_mode.
+        # For resume mode, wrap in a shell fallback so that if
+        # no previous session exists (e.g. claude --continue
+        # errors with "no conversation found"), the agent
+        # automatically starts a fresh session instead of
+        # exiting.
         if session_mode == "resume":
             cmd_map = {
-                "gemini": ["gemini", "--resume", "latest"],
-                "claude": ["claude", "--continue"],
+                "gemini": [
+                    "bash",
+                    "-c",
+                    "gemini --resume latest || gemini",
+                ],
+                "claude": [
+                    "bash",
+                    "-c",
+                    "claude --continue || claude",
+                ],
                 "bash": ["bash"],
             }
         else:
