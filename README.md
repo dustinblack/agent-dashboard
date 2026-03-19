@@ -95,9 +95,9 @@ sequenceDiagram
     end
 
     loop OTel Telemetry
-        PTY-.>>HD: OTLP HTTP POST<br/>(:4318)
-        HD-.>>SIO: emit("agent_telemetry")
-        SIO-.>>FE: relay to UI
+        PTY-->>HD: OTLP HTTP POST<br/>(:4318)
+        HD-->>SIO: emit("agent_telemetry")
+        SIO-->>FE: relay to UI
     end
 ```
 
