@@ -128,7 +128,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({ host, tool, onClose, onSpawn, o
                         disabled={!selectedProject}
                         className={`flex-1 font-bold py-2.5 rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 ${
                             selectedProject
-                            ? 'bg-accent hover:bg-accent-hover text-slate-50'
+                            ? 'bg-accent hover:bg-accent-hover text-accent-text'
                             : 'bg-slate-700 text-slate-500 cursor-not-allowed border border-slate-600'
                         }`}
                     >
@@ -632,7 +632,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                               <div className="flex gap-2 mt-auto pt-2">
                                   <button
                                       onClick={() => onAttach(agent.agent_id)}
-                                      className="flex-1 bg-accent hover:bg-accent-hover text-slate-50 font-bold py-2 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm cursor-pointer"
+                                      className="flex-1 bg-accent hover:bg-accent-hover text-accent-text font-bold py-2 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm cursor-pointer"
                                   >
                                       <Terminal size={16} /> Attach
                                   </button>

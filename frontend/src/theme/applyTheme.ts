@@ -39,6 +39,7 @@ export function applyTheme(themeKey: ThemeKey): void {
   root.setProperty("--color-accent", theme.accent);
   root.setProperty("--color-accent-hover", theme.accentHover);
   root.setProperty("--color-accent-muted", theme.accentMuted);
+  root.setProperty("--color-accent-text", theme.accentText);
 
   // Slate scale — override or remove.
   if (theme.slateScale) {

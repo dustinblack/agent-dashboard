@@ -24,6 +24,8 @@ export interface ThemeDefinition {
   accentHover: string;
   /** Darker / muted accent for borders. */
   accentMuted: string;
+  /** Text colour for use on accent-coloured backgrounds. */
+  accentText: string;
   /** Colour rendered in the selector dot. */
   dotColor: string;
   /**
@@ -88,6 +90,7 @@ export const THEMES: Record<ThemeKey, ThemeDefinition> = {
     accent: "#39FF14",
     accentHover: "#5FFF4A",
     accentMuted: "#1A7A0A",
+    accentText: "#0a0a0a",
     dotColor: "#39FF14",
     slateScale: null,
   },
@@ -96,6 +99,7 @@ export const THEMES: Record<ThemeKey, ThemeDefinition> = {
     accent: "#00F0FF",
     accentHover: "#4AF5FF",
     accentMuted: "#006B73",
+    accentText: "#0a0a0a",
     dotColor: "#00F0FF",
     slateScale: null,
   },
@@ -104,6 +108,7 @@ export const THEMES: Record<ThemeKey, ThemeDefinition> = {
     accent: "#FFB800",
     accentHover: "#FFCE4A",
     accentMuted: "#7A5800",
+    accentText: "#0a0a0a",
     dotColor: "#FFB800",
     slateScale: MEDIUM_SLATE,
   },
@@ -112,6 +117,7 @@ export const THEMES: Record<ThemeKey, ThemeDefinition> = {
     accent: "#BF40BF",
     accentHover: "#D670D6",
     accentMuted: "#5E205E",
+    accentText: "#ffffff",
     dotColor: "#BF40BF",
     slateScale: null,
   },
@@ -120,6 +126,7 @@ export const THEMES: Record<ThemeKey, ThemeDefinition> = {
     accent: "#FF4444",
     accentHover: "#FF7070",
     accentMuted: "#7A2020",
+    accentText: "#ffffff",
     dotColor: "#FF4444",
     slateScale: HIGH_CONTRAST_SLATE,
   },
@@ -128,6 +135,7 @@ export const THEMES: Record<ThemeKey, ThemeDefinition> = {
     accent: "#0B0E14",
     accentHover: "#2A2F3A",
     accentMuted: "#64748b",
+    accentText: "#f8fafc",
     dotColor: "#0B0E14",
     slateScale: LIGHT_SLATE,
   },
