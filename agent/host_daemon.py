@@ -42,6 +42,10 @@ PERMISSION_PATTERNS = [
         r"confirm\?",
         r"Continue\?",
         r"Proceed\?",
+        # Claude Code plan mode interactive menus
+        r"\u276f\s+\d+\.",  # ❯ 1. (selection cursor)
+        r"\u2610",  # ☐ (unchecked checkbox)
+        r"Skip interview and plan",  # plan mode menu option
     ]
 ]
 
