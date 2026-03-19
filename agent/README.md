@@ -17,6 +17,7 @@ The container image bundles the following tools so spawned agents have everythin
 | **Google Cloud CLI** (`gcloud`) | GCP authentication for Claude Code via Vertex AI |
 | **GitHub CLI** (`gh`) | GitHub interaction (PRs, issues, etc.) |
 | **Git** | Version control |
+| **Podman** | Container builds and runtimes (podman-in-podman) |
 | **SSH client** | Remote repository access |
 
 ## Configuration

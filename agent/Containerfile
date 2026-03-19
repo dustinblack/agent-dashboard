@@ -30,6 +30,8 @@ RUN dnf install --setopt=install_weak_deps=False -y \
     tmux \
     file \
     patch \
+    podman \
+    fuse-overlayfs \
     python3 \
     python3-pip \
     python3-devel \

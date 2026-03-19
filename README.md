@@ -152,7 +152,7 @@ cd agent/
 podman build -t agent-dashboard-daemon -f Containerfile .
 
 podman run -d --name host-daemon --network=host \
-  --security-opt label=disable \
+  --privileged \
   -e DASHBOARD_URL="http://127.0.0.1:8000" \
   -e HOST_TOKEN="secret-token-123" \
   -e PROJECTS_ROOT="/git" \
@@ -169,7 +169,7 @@ podman run -d --name host-daemon --network=host \
   -v $HOME/.config/gh:/root/.config/gh:ro \
   localhost/agent-dashboard-daemon:latest
 ```
-*(Note: We use `--security-opt label=disable` instead of the `:Z` mount flag to safely grant the container access to your local files without recursively changing their SELinux labels, which can cause permission errors on large directories.)*
+*(Note: `--privileged` is required to enable podman-in-podman support inside the daemon container, allowing agents to build and run containers during development sessions. This also implicitly disables SELinux label confinement, replacing the previous `--security-opt label=disable` flag.)*
 
 **Note on GitHub CLI:**
 The container includes the GitHub CLI (`gh`). The `~/.config/gh` directory is mounted into the container (included in the examples above), but this alone may not be sufficient. By default, `gh auth login` stores tokens in your system keyring (GNOME Keyring, KDE Wallet, etc.), which is not accessible from inside the container. The mounted `~/.config/gh/hosts.yml` file will reference the token but won't contain it, resulting in authentication failures.
@@ -208,7 +208,7 @@ After=network-online.target
 [Container]
 Image=localhost/agent-dashboard-daemon:latest
 Network=host
-SecurityLabelDisable=true
+PodmanArgs=--privileged
 
 # Environment Variables
 Environment=DASHBOARD_URL=http://your-server-ip:8000
