@@ -28,6 +28,7 @@ The daemon relies on the following environment variables:
 - `HOST_TOKEN`: (Required) The pre-shared token for this host, registered with the Hub.
 - `DASHBOARD_URL`: (Optional) The URL of the central Dashboard Backend. Defaults to `http://localhost:8000`.
 - `PROJECTS_ROOT`: (Optional) Root directory to scan for project repositories. Defaults to `/git`.
+- `OTLP_PORT`: (Optional) Port for the local OTLP HTTP telemetry receiver. Defaults to `4318`. Set to a different value when running multiple daemons on the same host with `Network=host`.
 
 ### Tool-Specific Configuration
 
@@ -66,7 +67,7 @@ Environment=GH_TOKEN=ghp_your-token-here    # systemd quadlet
 
 ## Telemetry
 
-The daemon runs a local OTLP HTTP receiver on port 4318 that captures telemetry (model names, token usage) from spawned agents. All three OTLP signals are supported:
+The daemon runs a local OTLP HTTP receiver (default port 4318, configurable via `OTLP_PORT`) that captures telemetry (model names, token usage) from spawned agents. All three OTLP signals are supported:
 
 | Signal | Endpoint | Used By |
 |--------|----------|---------|

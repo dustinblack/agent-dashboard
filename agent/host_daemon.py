@@ -95,6 +95,9 @@ class HostDaemon:
         self.server_url = server_url
         self.host_token = host_token
         self.projects_root = os.getenv("PROJECTS_ROOT", "/git")
+        # OTLP receiver port — configurable to allow multiple
+        # daemons on the same host via Network=host
+        self.otlp_port = int(os.getenv("OTLP_PORT", "4318"))
         self.sio = socketio.AsyncClient()
         self.agents: Dict[str, Dict] = (
             {}
@@ -450,7 +453,7 @@ class HostDaemon:
             env["COLORTERM"] = "truecolor"
 
             # Inject OpenTelemetry standard configuration
-            env["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://127.0.0.1:4318"
+            env["OTEL_EXPORTER_OTLP_ENDPOINT"] = f"http://127.0.0.1:{self.otlp_port}"
             env["OTEL_RESOURCE_ATTRIBUTES"] = f"service.name={agent_id}"
 
             # Tool-specific OTel enablement
@@ -462,7 +465,7 @@ class HostDaemon:
             env["GEMINI_TELEMETRY_ENABLED"] = "true"
             # Gemini SDK appends /v1/{traces,logs,metrics} to
             # this base URL — do NOT include a path suffix.
-            env["GEMINI_TELEMETRY_OTLP_ENDPOINT"] = "http://127.0.0.1:4318"
+            env["GEMINI_TELEMETRY_OTLP_ENDPOINT"] = f"http://127.0.0.1:{self.otlp_port}"
             env["GEMINI_TELEMETRY_OTLP_PROTOCOL"] = "http"
             env["GEMINI_TELEMETRY_USE_COLLECTOR"] = "true"
             env["GEMINI_TELEMETRY_TARGET"] = "local"
@@ -1004,8 +1007,8 @@ class HostDaemon:
         app.router.add_post("/v1/metrics", self.handle_otlp)
         self.otlp_runner = web.AppRunner(app)
         await self.otlp_runner.setup()
-        site = web.TCPSite(self.otlp_runner, "127.0.0.1", 4318)
-        print("OTLP Receiver listening on http://127.0.0.1:4318")
+        site = web.TCPSite(self.otlp_runner, "127.0.0.1", self.otlp_port)
+        print(f"OTLP Receiver listening on " f"http://127.0.0.1:{self.otlp_port}")
         await site.start()
 
     async def update_agent_status(self):

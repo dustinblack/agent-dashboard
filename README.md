@@ -156,6 +156,7 @@ podman run -d --name host-daemon --network=host \
   -e DASHBOARD_URL="http://127.0.0.1:8000" \
   -e HOST_TOKEN="secret-token-123" \
   -e PROJECTS_ROOT="/git" \
+  -e OTLP_PORT="4318" \
   -e GEMINI_API_KEY="your-key-here" \
   -e CLAUDE_CODE_USE_VERTEX=1 \
   -e CLOUD_ML_REGION="us-east5" \
@@ -214,6 +215,9 @@ PodmanArgs=--privileged
 Environment=DASHBOARD_URL=http://your-server-ip:8000
 Environment=HOST_TOKEN=secret-token-123
 Environment=PROJECTS_ROOT=/git
+# OTLP telemetry receiver port (default 4318; change when
+# running multiple daemons on the same host)
+Environment=OTLP_PORT=4318
 Environment=GEMINI_API_KEY=your-key-here
 Environment=CLAUDE_CODE_USE_VERTEX=1
 Environment=CLOUD_ML_REGION=us-east5
