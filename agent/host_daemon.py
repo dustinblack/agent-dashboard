@@ -97,6 +97,21 @@ class HostDaemon:
                     pass
                 self.close_agent(agent_id)
 
+        @self.sio.on(
+            'update_task_description', namespace='/terminal'
+        )
+        async def on_update_task_description(data):
+            """Syncs a user-edited task description into
+            the daemon's local telemetry dict so subsequent
+            telemetry emits won't overwrite the edit.
+            """
+            agent_id = data.get('agent_id')
+            desc = data.get('task_description', '')
+            if agent_id in self.agents:
+                self.agents[agent_id][
+                    'telemetry'
+                ]['task_description'] = desc
+
         @self.sio.on('request_history', namespace='/terminal')
         async def on_request_history(data):
             agent_id = data.get('agent_id')

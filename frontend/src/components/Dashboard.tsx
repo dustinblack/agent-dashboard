@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { getHosts, getAgents, spawnAgent, stopAgent, deleteHost } from '../api';
+import { getHosts, getAgents, spawnAgent, stopAgent, deleteHost, updateTaskDescription } from '../api';
 import type { Host, Agent } from '../api';
 import { Terminal, Cpu, Activity, PlusCircle, Wifi, WifiOff, Square, GitBranch, Folder, Info, X, ChevronRight, RefreshCw, Trash2, Server, Plug, Clock } from 'lucide-react';
 import { io } from 'socket.io-client';
@@ -291,6 +291,80 @@ const StatusIndicator: React.FC<{ status?: string }> = ({ status }) => {
     }
 };
 
+/**
+ * Inline-editable task description. Click to edit, Enter to
+ * save, Escape to cancel. Blurring also saves.
+ */
+const EditableTaskDescription: React.FC<{
+    agentId: string;
+    description: string;
+}> = ({ agentId, description }) => {
+    const [editing, setEditing] = useState(false);
+    const [value, setValue] = useState(description);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    // Keep local value in sync with prop changes
+    useEffect(() => {
+        if (!editing) setValue(description);
+    }, [description, editing]);
+
+    useEffect(() => {
+        if (editing) inputRef.current?.focus();
+    }, [editing]);
+
+    const save = async () => {
+        setEditing(false);
+        const trimmed = value.trim();
+        if (trimmed !== description) {
+            try {
+                await updateTaskDescription(
+                    agentId, trimmed
+                );
+            } catch (err) {
+                console.error(
+                    "Failed to update task description:",
+                    err,
+                );
+                setValue(description);
+            }
+        }
+    };
+
+    const cancel = () => {
+        setValue(description);
+        setEditing(false);
+    };
+
+    if (editing) {
+        return (
+            <input
+                ref={inputRef}
+                type="text"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') save();
+                    if (e.key === 'Escape') cancel();
+                }}
+                onBlur={save}
+                className="w-full bg-slate-800 text-[11px] text-slate-200 px-1.5 py-0.5 rounded border border-blue-500/50 outline-none focus:border-blue-400"
+                placeholder="Describe the task..."
+            />
+        );
+    }
+
+    return (
+        <p
+            className="text-[11px] text-slate-300 line-clamp-2 leading-relaxed cursor-pointer hover:text-slate-100 transition-colors"
+            onClick={() => setEditing(true)}
+            title="Click to edit task description"
+        >
+            <Info size={10} className="inline mr-1 text-slate-500" />
+            {description || 'Click to add description...'}
+        </p>
+    );
+};
+
 const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
   const [hosts, setHosts] = useState<Host[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -538,14 +612,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
                                   </div>
                               )}
 
-                              {(tel.current_activity || tel.task_description) && (
-                                  <div className="bg-slate-900/50 p-2 rounded-lg mb-2 border border-slate-700/50">
-                                      <p className="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">
-                                          <Info size={10} className="inline mr-1 text-slate-500" />
-                                          {tel.current_activity || tel.task_description}
+                              <div className="bg-slate-900/50 p-2 rounded-lg mb-2 border border-slate-700/50">
+                                  <EditableTaskDescription
+                                      agentId={agent.agent_id}
+                                      description={tel.task_description || ''}
+                                  />
+                                  {tel.current_activity && (
+                                      <p className={`text-[10px] text-slate-500 font-mono truncate${tel.task_description ? ' mt-1 pt-1 border-t border-slate-700/30' : ''}`}>
+                                          <Activity size={9} className="inline mr-1 text-slate-500" />
+                                          {tel.current_activity}
                                       </p>
-                                  </div>
-                              )}
+                                  )}
+                              </div>
 
                               <div className="flex gap-2 mt-auto pt-2">
                                   <button

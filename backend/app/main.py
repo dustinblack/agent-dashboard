@@ -349,6 +349,62 @@ async def stop_agent(agent_id: str, db: Session = Depends(database.get_db), user
     
     return {"status": "stop command issued"}
 
+
+class TaskDescriptionUpdate(BaseModel):
+    """Request body for updating an agent's task description."""
+    task_description: str
+
+
+@fastapi_app.patch(
+    "/agents/{agent_id}/task-description",
+)
+async def update_task_description(
+    agent_id: str,
+    body: TaskDescriptionUpdate,
+    db: Session = Depends(database.get_db),
+    user: dict = Depends(auth.get_current_user),
+):
+    """Updates the user-provided task description for an
+    active agent. Persists to DB and syncs to the host
+    daemon so its telemetry dict stays current.
+    """
+    db_agent = (
+        db.query(models.Agent)
+        .filter(models.Agent.agent_id == agent_id)
+        .first()
+    )
+    if not db_agent:
+        raise HTTPException(
+            status_code=404, detail="Agent not found."
+        )
+
+    # Update telemetry_json in the database
+    tel = dict(db_agent.telemetry_json or {})
+    tel["task_description"] = body.task_description
+    db_agent.telemetry_json = tel
+    db.commit()
+
+    # Relay to daemon so its local telemetry stays in sync
+    await socket.sio.emit(
+        "update_task_description",
+        {
+            "agent_id": agent_id,
+            "task_description": body.task_description,
+        },
+        room=f"host_{db_agent.host_id}",
+        namespace="/terminal",
+    )
+
+    # Broadcast updated telemetry to all UI clients
+    await socket.sio.emit(
+        "agent_telemetry_update",
+        {"agent_id": agent_id, "telemetry": tel},
+        namespace="/terminal",
+    )
+
+    return {"status": "updated"}
+
+
 @fastapi_app.get("/health")
 def health_check():
     """

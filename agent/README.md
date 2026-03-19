@@ -72,3 +72,20 @@ The daemon runs a local OTLP HTTP receiver on port 4318 that captures telemetry 
 | Metrics | `/v1/metrics` | Claude Code (`claude_code.token.usage` counters) |
 
 The daemon automatically configures the required OpenTelemetry environment variables for each spawned agent, including `OTEL_METRICS_EXPORTER`, `OTEL_LOGS_EXPORTER`, and `OTEL_EXPORTER_OTLP_PROTOCOL` for Claude Code compatibility.
+
+### Telemetry Fields
+
+The daemon maintains the following telemetry fields for each agent, broadcast to the dashboard via Socket.IO:
+
+| Field | Source | Description |
+|-------|--------|-------------|
+| `model` | OTLP logs/traces/metrics | The AI model name (e.g., `claude-opus-4-6`, `gemini-2.0-flash`) |
+| `context_tokens` | OTLP logs/traces | Current context window usage (latest `input_tokens` per API call). Decreases after compression. |
+| `tokens` | OTLP metrics | Cumulative token high-water mark across all API calls |
+| `run_time_seconds` | OTLP metrics | Active session time — Claude: `claude_code.active_time.total` (periodic), Gemini: `gemini_cli.agent.duration` (end-of-session only) |
+| `current_activity` | OTLP logs/traces/metrics | Latest tool or function name being executed |
+| `task_description` | User-provided | Editable task description, synced from the dashboard UI via `update_task_description` socket event |
+| `agent_status` | Derived | `working`, `idle`, or `waiting_permission` — derived from OTLP activity and terminal output patterns |
+| `mcp_servers` | Config files | MCP server names detected from `.mcp.json`, `~/.claude.json`, or `~/.gemini/settings.json` |
+| `git_branch` | Git | Current branch of the agent's working directory |
+| `git_project` | Git | Repository name extracted from the git remote URL |

@@ -71,6 +71,78 @@ def test_read_agents():
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
+def test_update_task_description():
+    """Test updating an agent's task description via
+    PATCH endpoint.
+    """
+    # Create a host and spawn an agent to get a valid
+    # agent record
+    r_host = client.post(
+        "/hosts",
+        json={
+            "name": "desc-host",
+            "host_token": "desc-token",
+        },
+    )
+    host_id = r_host.json()["id"]
+    # Mark host online so spawn succeeds
+    from backend.app import models
+    db = next(override_get_db())
+    host = (
+        db.query(models.Host)
+        .filter(models.Host.id == host_id)
+        .first()
+    )
+    host.status = "online"
+    db.commit()
+    db.close()
+
+    r_spawn = client.post(
+        "/agents/spawn",
+        json={
+            "host_id": host_id,
+            "tool_name": "bash",
+        },
+    )
+    assert r_spawn.status_code == 200
+    agent_id = r_spawn.json()["agent_id"]
+
+    # Update task description
+    r_patch = client.patch(
+        f"/agents/{agent_id}/task-description",
+        json={"task_description": "Fix the login bug"},
+    )
+    assert r_patch.status_code == 200
+    assert r_patch.json()["status"] == "updated"
+
+    # Verify it persisted
+    r_detail = client.get(
+        f"/agents/{agent_id}/details"
+    )
+    assert r_detail.status_code == 200
+    tel = r_detail.json()["telemetry"]
+    assert tel["task_description"] == "Fix the login bug"
+
+    # Update again to verify overwrite
+    r_patch2 = client.patch(
+        f"/agents/{agent_id}/task-description",
+        json={"task_description": "Refactor auth module"},
+    )
+    assert r_patch2.status_code == 200
+    r_detail2 = client.get(
+        f"/agents/{agent_id}/details"
+    )
+    tel2 = r_detail2.json()["telemetry"]
+    assert tel2["task_description"] == "Refactor auth module"
+
+    # 404 for non-existent agent
+    r_missing = client.patch(
+        "/agents/nonexistent/task-description",
+        json={"task_description": "nope"},
+    )
+    assert r_missing.status_code == 404
+
+
 def test_cors_preflight():
     """Test that the OPTIONS preflight request is properly handled by CORSMiddleware."""
     headers = {

@@ -71,6 +71,16 @@ export const stopAgent = async (agentId: string): Promise<void> => {
   await api.post(`/agents/${agentId}/stop`);
 };
 
+export const updateTaskDescription = async (
+  agentId: string,
+  taskDescription: string,
+): Promise<void> => {
+  await api.patch(
+    `/agents/${agentId}/task-description`,
+    { task_description: taskDescription },
+  );
+};
+
 export interface AgentDetail extends Agent {
   host_name: string;
 }
