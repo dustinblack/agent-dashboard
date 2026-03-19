@@ -18,6 +18,8 @@ The container image bundles the following tools so spawned agents have everythin
 | **GitHub CLI** (`gh`) | GitHub interaction (PRs, issues, etc.) |
 | **Git** | Version control |
 | **Podman** | Container builds and runtimes (podman-in-podman) |
+| **Go** (`golang`) | Go builds and tests |
+| **Rust / Cargo** | Rust builds and tests |
 | **SSH client** | Remote repository access |
 
 ## Configuration
