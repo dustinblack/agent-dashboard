@@ -49,7 +49,7 @@ This project is inspired by the following blog post:
 - **Agent Auth**: Ensure all agent-facing Socket.IO namespaces require a valid `MACHINE_TOKEN`.
 
 ## Git & Documentation
-- **Commits**: Git commit messages should be thorough and verbose. Always include the tag `AI-assisted-by: <model name and version>`.
+- **Commits**: Git commit messages should be thorough and verbose. Always include the tag `Co-authored-by: <model name> <email>`.
 - **Commit Strategy**: Do not amend commits unless explicitly asked. Always create new commits.
 - **Documentation**: Always add documentation for new features and keep existing documentation updated with changes. Documentation must be user-friendly for both beginner users and developers alike. Never remove existing code documentation unless the code itself is removed.
 

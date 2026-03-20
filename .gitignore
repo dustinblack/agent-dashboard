@@ -22,3 +22,7 @@ dist-ssr/
 .vite/
 .vercel
 .netlify
+
+# Coverage reports
+coverage/
+htmlcov/

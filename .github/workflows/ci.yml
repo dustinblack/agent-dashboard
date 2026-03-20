@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  python-checks:
+    name: Python Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements.txt \
+                      -r agent/requirements.txt \
+                      -r requirements-dev.txt
+
+      - name: Check formatting (black)
+        run: ./scripts/format-python.sh
+
+      - name: Lint (flake8 + pylint)
+        run: ./scripts/lint-python.sh
+
+      - name: Security scan (bandit)
+        run: ./scripts/security-python.sh
+
+      - name: Unit tests with coverage
+        run: ./scripts/test-backend.sh
+        env:
+          BYPASS_AUTH: "true"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: coverage/backend/
+
+  frontend-checks:
+    name: Frontend Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: cd frontend && npm ci
+
+      - name: Check formatting (prettier)
+        run: ./scripts/format-frontend.sh
+
+      - name: Lint (eslint)
+        run: ./scripts/lint-frontend.sh
+
+      - name: Type check (tsc)
+        run: ./scripts/typecheck-frontend.sh
+
+      - name: Build
+        run: ./scripts/build-frontend.sh
+
+      - name: Security audit (npm audit)
+        run: ./scripts/security-frontend.sh
+        continue-on-error: true
+
+  secret-detection:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: python-checks
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements.txt \
+                      -r agent/requirements.txt \
+                      -r requirements-dev.txt
+
+      - name: Run E2E tests
+        run: ./scripts/test-e2e.sh
+        env:
+          BYPASS_AUTH: "true"
+
+  container-builds:
+    name: Container Builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend container
+        run: |
+          podman build -t agent-dashboard-backend \
+            -f backend/Containerfile backend/
+
+      - name: Build frontend container
+        run: |
+          podman build -t agent-dashboard-frontend \
+            -f frontend/Containerfile frontend/
+
+      - name: Build agent daemon container
+        run: |
+          podman build -t agent-dashboard-daemon \
+            -f agent/Containerfile agent/
+        timeout-minutes: 15

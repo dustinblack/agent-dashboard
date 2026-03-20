@@ -1,0 +1,17 @@
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+
+[tool.pylint.main]
+ignore-paths = ["frontend", ".venv", "node_modules"]
+
+[tool.pylint.format]
+max-line-length = 88
+
+[tool.pylint."messages control"]
+# Start strict - fix all warnings for a clean baseline
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+python_files = ["test_*.py"]
+addopts = "-v"
