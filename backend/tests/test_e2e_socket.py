@@ -1,10 +1,12 @@
-import pytest
+import os
+import shutil
+import socket
 import subprocess
 import time
+
 import httpx
+import pytest
 import socketio
-import socket
-import os
 
 
 def get_free_port():
@@ -16,11 +18,15 @@ def get_free_port():
 @pytest.fixture(scope="module")
 def live_server():
     port = get_free_port()
-    # Find project root to point to .venv/bin/uvicorn
+    # Prefer .venv uvicorn if present, otherwise find on PATH
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-    uvicorn_path = os.path.join(project_root, ".venv/bin/uvicorn")
+    venv_uvicorn = os.path.join(project_root, ".venv/bin/uvicorn")
+    uvicorn_path = (
+        venv_uvicorn if os.path.isfile(venv_uvicorn) else shutil.which("uvicorn")
+    )
+    if not uvicorn_path:
+        pytest.skip("uvicorn not found in .venv or on PATH")
 
-    # Ensure we are in the backend directory or point to it
     cmd = [uvicorn_path, "app.main:app", "--host", "127.0.0.1", "--port", str(port)]
 
     # We need to set up the environment so it doesn't try to use real OIDC

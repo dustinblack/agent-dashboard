@@ -45,6 +45,24 @@ jobs:
           name: backend-coverage
           path: coverage/backend/
 
+      - name: Coverage summary
+        if: always()
+        run: |
+          if [ -f coverage/backend/coverage.json ]; then
+            PCT=$(python3 -c "
+          import json
+          with open('coverage/backend/coverage.json') as f:
+              data = json.load(f)
+          total = data['totals']
+          print(f\"| Statements | {total['covered_lines']}/{total['num_statements']} | {total['percent_covered']:.1f}% |\")
+          ")
+            echo "## Backend Coverage" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Metric | Covered / Total | Percent |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|--------|-----------------|---------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "$PCT" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   frontend-checks:
     name: Frontend Checks
     runs-on: ubuntu-latest

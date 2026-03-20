@@ -9,4 +9,5 @@ cd "$PROJECT_ROOT"
 pytest backend/tests/test_main.py \
     --cov=backend/app \
     --cov-report=term-missing \
-    --cov-report=html:coverage/backend
+    --cov-report=html:coverage/backend \
+    --cov-report=json:coverage/backend/coverage.json
