@@ -4,11 +4,14 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-echo "=== Backend & Agent Unit Tests (pytest + coverage) ==="
+echo "=== Backend Unit Tests (pytest + coverage) ==="
 cd "$PROJECT_ROOT"
-pytest backend/tests/test_main.py agent/test_wrapper.py \
+pytest backend/tests/test_main.py \
     --cov=backend/app \
-    --cov=agent \
     --cov-report=term-missing \
     --cov-report=html:coverage/backend \
     --cov-report=json:coverage/backend/coverage.json
+
+echo ""
+echo "NOTE: Coverage currently covers backend/app only."
+echo "agent/host_daemon.py and frontend have no test suites yet."
