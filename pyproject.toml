@@ -39,6 +39,6 @@ disable = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests"]
+testpaths = ["backend/tests", "agent"]
 python_files = ["test_*.py"]
 addopts = "-v"

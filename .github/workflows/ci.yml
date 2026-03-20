@@ -137,16 +137,16 @@ jobs:
 
       - name: Build backend container
         run: |
-          podman build -t agent-dashboard-backend \
+          podman build --no-cache -t agent-dashboard-backend \
             -f backend/Containerfile backend/
 
       - name: Build frontend container
         run: |
-          podman build -t agent-dashboard-frontend \
+          podman build --no-cache -t agent-dashboard-frontend \
             -f frontend/Containerfile frontend/
 
       - name: Build agent daemon container
         run: |
-          podman build -t agent-dashboard-daemon \
+          podman build --no-cache -t agent-dashboard-daemon \
             -f agent/Containerfile agent/
         timeout-minutes: 15
