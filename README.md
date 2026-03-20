@@ -12,12 +12,46 @@ An AI Coding Agent Dashboard designed for the Gemini CLI and Claude Code, allowi
   <img src="docs/images/agent-dashboard_main_page_in_use.png" alt="Agent Dashboard main page showing active agent sessions and registered hosts" width="800">
 </p>
 
-## Architecture
+## Overview
 
-- **Frontend**: React (TypeScript) via Vite, `xterm.js`, and `socket.io-client`. Central command UI.
-- **Backend (Hub)**: Python 3.9+ with FastAPI and `python-socketio`. Manages the database and relays commands.
-- **Host Daemon**: Background service running on remote development machines. Listens for `spawn` commands from the hub and multiplexes Agent I/O.
-- **Agent**: A specific AI CLI session (Gemini, Claude, or Bash) running inside a pseudo-terminal on a Host.
+Agent Dashboard provides a centralized web interface for spawning,
+monitoring, and interacting with AI coding agents (Gemini CLI, Claude
+Code, or Bash) across multiple remote machines. It connects a
+React-based frontend to a FastAPI backend hub, which coordinates
+containerized host daemons running on your development machines.
+
+## Features
+
+- **Multi-agent orchestration** — Spawn and manage Gemini, Claude,
+  and Bash sessions across multiple hosts from a single dashboard.
+- **Full terminal emulation** — `xterm-256color` support with proper
+  cursor movement, line-erase sequences, spinners, progress bars,
+  and streaming LLM output.
+- **Detached terminal windows** — Attach to any session in a
+  standalone browser popup for side-by-side multitasking.
+- **Dynamic resizing** — Terminals scale to match the browser
+  viewport in real-time, relaying geometry changes to the remote PTY.
+- **Session history replay** — Close and re-attach to a terminal
+  window; recent output is automatically replayed.
+- **Live telemetry (OpenTelemetry)** — Model names and token usage
+  are captured via a local OTLP receiver (port 4318) on each host,
+  without screen-scraping or terminal interference.
+- **Dynamic window titles** — Browser tabs show tool type, host,
+  project, and git branch (e.g., "Claude · myhost · project · main").
+- **Touch scrolling** — Native vertical touch scrolling in terminal
+  viewports.
+- **Smooth rendering** — Output is batched per animation frame to
+  prevent scroll jumping. History replay writes all chunks in a single
+  pass. ResizeObserver is debounced to avoid resize flicker.
+- **UTF-8 & multi-byte safety** — A byte buffer ensures multi-byte
+  characters (box-drawing, emoji) are never split across reads.
+- **Host management** — Delete offline or retired hosts with cascading
+  cleanup of associated sessions and logs.
+- **Project selection** — The daemon scans `PROJECTS_ROOT` in the
+  background; select a project directory from the dropdown when
+  spawning an agent.
+
+## Architecture
 
 ```mermaid
 graph LR
@@ -111,49 +145,121 @@ sequenceDiagram
     end
 ```
 
-## Deployment on RHEL 9 with Podman (The Hub)
+## Quick Start
 
-The Hub (Backend + Frontend) is configured to run as rootless containers using `podman-compose`.
+Get the hub running locally with a single compose command:
 
-### Prerequisites
 ```bash
-sudo dnf install podman podman-compose
+# Clone the repository
+git clone https://github.com/dustinblack/agent-dashboard.git
+cd agent-dashboard
+
+# Build and start the hub (backend + frontend)
+podman-compose build && podman-compose up -d
+# or with Docker Compose:
+# docker compose build && docker compose up -d
 ```
 
-### Running the Hub (Local Test Configuration)
-1. Build and start the containers (Always use `--no-cache` after code changes to ensure the latest version is built):
-   ```bash
-   podman-compose build --no-cache && podman-compose up -d
-   ```
-2. Hub UI: `http://localhost:8080`
-3. Hub API: `http://localhost:8000`
+- **UI**: `http://localhost:8080`
+- **API**: `http://localhost:8000`
 
----
+> [!TIP]
+> Use `--no-cache` on subsequent builds after code changes to ensure
+> the latest version is built:
+> ```bash
+> podman-compose build --no-cache && podman-compose up -d
+> ```
 
-## Remote Host Setup
+## Deployment
 
-Each machine you want to orchestrate needs to run the `Host Daemon`.
+### Prerequisites
 
-### 1. Register the Host
-First, register your machine with the Hub to get a `HOST_TOKEN`:
+You need a container runtime and a compose tool installed on the hub
+server.
+
+> [!TIP]
+> **Distro-specific install examples:**
+>
+> | Distro | Command |
+> |--------|---------|
+> | Fedora / RHEL 9+ | `sudo dnf install podman podman-compose` |
+> | Debian / Ubuntu | `sudo apt install podman podman-compose` or install [Docker Engine](https://docs.docker.com/engine/install/) |
+> | macOS | `brew install podman podman-compose` or install [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
+
+### 1. Build and Start the Hub
+
 ```bash
-curl -X POST http://localhost:8000/hosts \
+podman-compose build --no-cache && podman-compose up -d
+# or with Docker Compose:
+# docker compose build --no-cache && docker compose up -d
+```
+
+The compose file starts two services:
+- **backend** on port `8000` (FastAPI + Socket.IO)
+- **frontend** on port `8080` (React served by Nginx)
+
+### 2. Network Configuration
+
+By default the frontend connects to the backend on `localhost`. To
+allow other machines on your network to access the dashboard, set
+`VITE_API_URL` before building.
+
+Create a `.env` file in the project root:
+
+```bash
+# Replace with the actual IP or hostname of your hub server
+VITE_API_URL=http://your-server-ip:8000
+```
+
+Then rebuild the frontend:
+
+```bash
+podman-compose build --no-cache && podman-compose up -d
+```
+
+The `compose.yml` already passes `VITE_API_URL` as a build arg to the
+frontend container.
+
+> [!NOTE]
+> **Firewall (firewalld-based systems):**
+> ```bash
+> sudo firewall-cmd --permanent --add-port=8080/tcp
+> sudo firewall-cmd --permanent --add-port=8000/tcp
+> sudo firewall-cmd --reload
+> ```
+
+> [!NOTE]
+> If you are deploying for an internal, private lab network, you can
+> simplify the deployment by keeping `BYPASS_AUTH=true` in your
+> `compose.yml` to skip OIDC authentication.
+
+### 3. Register a Host
+
+Register each development machine with the hub to obtain a
+`HOST_TOKEN`:
+
+```bash
+curl -X POST http://your-server-ip:8000/hosts \
   -H "Content-Type: application/json" \
   -d '{"name": "my-dev-workstation", "host_token": "secret-token-123"}'
 ```
 
-### 2. Run the Host Daemon (Containerized)
+### 4. Build and Run the Host Daemon
 
-It is recommended to mount your local development directory, AI tool configuration folders, and GCP credentials so the spawned agents can access your code and maintain persistent settings.
+Build the daemon container image on each host machine:
 
-#### Option A: Manual Run (Testing)
 ```bash
 cd agent/
 podman build -t agent-dashboard-daemon -f Containerfile .
+# or: docker build -t agent-dashboard-daemon -f Containerfile .
+```
 
+Run the daemon:
+
+```bash
 podman run -d --name host-daemon --network=host \
   --privileged \
-  -e DASHBOARD_URL="http://127.0.0.1:8000" \
+  -e DASHBOARD_URL="http://your-server-ip:8000" \
   -e HOST_TOKEN="secret-token-123" \
   -e PROJECTS_ROOT="/git" \
   -e OTLP_PORT="4318" \
@@ -170,36 +276,144 @@ podman run -d --name host-daemon --network=host \
   -v $HOME/.config/gh:/root/.config/gh:ro \
   localhost/agent-dashboard-daemon:latest
 ```
-*(Note: `--privileged` is required to enable podman-in-podman support inside the daemon container, allowing agents to build and run containers during development sessions. This also implicitly disables SELinux label confinement, replacing the previous `--security-opt label=disable` flag.)*
 
-**Note on GitHub CLI:**
-The container includes the GitHub CLI (`gh`). The `~/.config/gh` directory is mounted into the container (included in the examples above), but this alone may not be sufficient. By default, `gh auth login` stores tokens in your system keyring (GNOME Keyring, KDE Wallet, etc.), which is not accessible from inside the container. The mounted `~/.config/gh/hosts.yml` file will reference the token but won't contain it, resulting in authentication failures.
+> [!WARNING]
+> `--privileged` is required for container-in-container support
+> (e.g., agents building and running containers during development
+> sessions). This also implicitly disables SELinux label confinement.
 
-To fix this, export your token and pass it as an environment variable:
-```bash
-# Get your current token from the host keyring
-gh auth token
+#### Environment Variables
 
-# Add it to your quadlet or podman run command
-Environment=GH_TOKEN=ghp_your-token-here    # quadlet
-# or
--e GH_TOKEN="ghp_your-token-here"           # podman run
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DASHBOARD_URL` | URL of the hub backend | *(required)* |
+| `HOST_TOKEN` | Token from the host registration step | *(required)* |
+| `PROJECTS_ROOT` | Root directory for project scanning | *(required)* |
+| `OTLP_PORT` | OTLP telemetry receiver port | `4318` |
+| `GEMINI_API_KEY` | API key for Gemini CLI | — |
+| `CLAUDE_CODE_USE_VERTEX` | Set to `1` to use Vertex AI for Claude | — |
+| `CLOUD_ML_REGION` | GCP region (e.g., `us-east5`) | — |
+| `ANTHROPIC_VERTEX_PROJECT_ID` | GCP project ID for Vertex AI | — |
+| `GH_TOKEN` | GitHub CLI personal access token | — |
+
+#### Volume Mounts
+
+| Host Path | Container Path | Mode | Purpose |
+|-----------|---------------|------|---------|
+| `/path/to/your/git` | `/git` | rw | Project source code |
+| `~/.ssh` | `/root/.ssh` | ro | SSH keys for git operations |
+| `~/.gitconfig` | `/root/.gitconfig` | ro | Git configuration |
+| `~/.gemini/` | `/root/.gemini` | rw | Gemini CLI settings |
+| `~/.claude/` | `/root/.claude` | rw | Claude Code settings |
+| `~/.config/gcloud` | `/root/.config/gcloud` | ro | GCP credentials |
+| `~/.config/gh` | `/root/.config/gh` | ro | GitHub CLI config |
+
+#### GitHub CLI Authentication
+
+> [!IMPORTANT]
+> The container includes the GitHub CLI (`gh`). Mounting
+> `~/.config/gh` alone is usually not sufficient because `gh auth
+> login` stores tokens in your system keyring (GNOME Keyring, KDE
+> Wallet, etc.), which is not accessible from inside the container.
+>
+> Export your token and pass it as an environment variable instead:
+> ```bash
+> # Get your current token from the host keyring
+> gh auth token
+>
+> # Pass it to the container
+> -e GH_TOKEN="ghp_your-token-here"           # podman/docker run
+> Environment=GH_TOKEN=ghp_your-token-here    # quadlet
+> ```
+> The `GH_TOKEN` environment variable is recognized by `gh`
+> automatically and takes precedence over stored credentials.
+
+#### Claude Code (Vertex AI)
+
+> [!NOTE]
+> If you use Claude Code via Google Cloud Vertex AI, the daemon
+> container includes the `gcloud` CLI and supports passing GCP
+> credentials through. Configure GCP authentication on the **host
+> machine** before starting the daemon — the `~/.config/gcloud`
+> volume mount passes your credentials into the container.
+>
+> Required environment variables for Vertex AI:
+> - `CLAUDE_CODE_USE_VERTEX=1`
+> - `CLOUD_ML_REGION` — your GCP region (e.g., `us-east5`)
+> - `ANTHROPIC_VERTEX_PROJECT_ID` — your GCP project ID
+
+### 5. Use the Dashboard
+
+1. Open the UI at `http://your-server-ip:8080`.
+2. Your registered hosts appear on the dashboard.
+3. Click **"Spawn Gemini"**, **"Spawn Claude"**, or **"Spawn Bash"**
+   to start a remote agent session.
+4. Select a project directory from the dropdown — the daemon scans
+   `PROJECTS_ROOT` in the background every 60 seconds (you can also
+   force a refresh).
+5. Click on a running session to attach in a detached terminal window.
+6. Delete offline or retired hosts via the trash can icon; associated
+   sessions and logs are cascaded.
+
+## Running as a System Service
+
+For production deployments, use systemd quadlets so that containers
+start automatically on boot without relying on the source directory or
+`compose.yml`.
+
+### Hub Services (Quadlets)
+
+Create the following files in `/etc/containers/systemd/`:
+
+**`/etc/containers/systemd/agent-dashboard-data.volume`**
+```ini
+[Volume]
+VolumeName=dashboard_data
 ```
 
-The `GH_TOKEN` environment variable is recognized by `gh` automatically and takes precedence over any stored credentials. This is the recommended approach for containerized environments.
+**`/etc/containers/systemd/agent-dashboard-backend.container`**
+```ini
+[Unit]
+Description=Agent Dashboard Backend
+After=network-online.target
 
-**Note on Claude Code (Vertex AI):**
-If you use Claude Code via Google Cloud Vertex AI, the daemon container includes the `gcloud` CLI and supports passing GCP credentials through. You must configure GCP authentication on the **host machine** before starting the daemon — the `~/.config/gcloud` volume mount passes your credentials into the container. Refer to your organization's GCP setup instructions for details on `gcloud init`, `gcloud auth application-default login`, and any required quota project configuration.
+[Container]
+Image=localhost/agent-dashboard_backend:latest
+PublishPort=8000:8000
+Volume=agent-dashboard-data.volume:/app/data
+Environment=DATABASE_URL=sqlite:////app/data/agent_dashboard.db
+Environment=BYPASS_AUTH=true
 
-The following environment variables must be set on the daemon for Vertex AI:
-- `CLAUDE_CODE_USE_VERTEX=1`
-- `CLOUD_ML_REGION` — your GCP region (e.g., `us-east5`)
-- `ANTHROPIC_VERTEX_PROJECT_ID` — your GCP project ID
+[Install]
+WantedBy=multi-user.target
+```
 
-#### Option B: Running on Boot (Rootless Systemd Quadlet)
-For a robust setup where the daemon starts automatically on boot without relying on user login sessions, you should create a **rootless** Podman Quadlet. This ensures the daemon runs as your user account, preventing file permission issues when agents create or modify files in your repositories.
+**`/etc/containers/systemd/agent-dashboard-frontend.container`**
+```ini
+[Unit]
+Description=Agent Dashboard Frontend
+After=network-online.target agent-dashboard-backend.service
 
-Create a new file at `~/.config/containers/systemd/agent-dashboard-daemon.container`:
+[Container]
+Image=localhost/agent-dashboard_frontend:latest
+PublishPort=8080:80
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Reload and start:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl start agent-dashboard-backend.service
+sudo systemctl start agent-dashboard-frontend.service
+```
+
+### Host Daemon (Rootless Quadlet)
+
+For the host daemon, use a **rootless** quadlet so agents run as your
+user and file permissions are preserved. Create
+`~/.config/containers/systemd/agent-dashboard-daemon.container`:
 
 ```ini
 [Unit]
@@ -236,132 +450,91 @@ Volume=%h/.config/gh:/root/.config/gh:ro
 WantedBy=default.target
 ```
 
-After creating the file, reload the user systemd daemon and start the generated service:
+Reload and start:
 ```bash
 systemctl --user daemon-reload
 systemctl --user start agent-dashboard-daemon.service
 ```
 
-*Note: Ensure you have enabled lingering for your user account so the service starts on boot and remains running after you log out:*
+> [!IMPORTANT]
+> **Lingering:** By default, most Linux distributions kill user
+> processes on logout. For rootless services to start at boot and
+> persist after logout, enable lingering:
+> ```bash
+> sudo loginctl enable-linger $USER
+> ```
+
+## Persistence
+
+- The SQLite database is stored in the `dashboard_data` named volume,
+  which survives container updates and reboots.
+- The database path inside the container is
+  `/app/data/agent_dashboard.db`.
+
+## Development
+
+### Prerequisites
+
+- Python 3.9+
+- Node.js 20+
+- `pip` and `npm`
+
+### Setup
+
 ```bash
-sudo loginctl enable-linger $USER
+# Install Python dev dependencies
+pip install -r backend/requirements.txt \
+            -r agent/requirements.txt \
+            -r requirements-dev.txt
+
+# Install frontend dependencies
+cd frontend && npm install && cd ..
+
+# Install the pre-commit hook
+./scripts/install-hooks.sh
 ```
 
-### 3. Spawn Agents
-Go to the Web UI (`http://localhost:8080`). You will see your workstation listed. Click **"Spawn Gemini"**, **"Spawn Claude"**, or **"Spawn Bash"** to start a remote session.
+### Running Checks
 
-**Note on Host Management:**
-- **Host Deletion:** You can dynamically remove offline or retired hosts from the dashboard by clicking the "Delete" trash can icon. This will safely cascade and clean up all historical agent sessions and logs associated with that host.
+Use `scripts/check.sh` to run checks by category:
 
-**Note on Agent Spawning:**
-- **Project Selection:** The daemon automatically scans the `PROJECTS_ROOT` directory in the background every 60 seconds. You can select a project directory for the agent to start in via the dropdown menu. You can also force a refresh of this list if you've recently added a new project.
-
-**Note on Console UX:**
-- **Detached Windows:** Attaching to a terminal now opens a standalone browser popup window with minimal interface, allowing for side-by-side multi-tasking across different agents.
-- **Dynamic Resizing:** Terminals perfectly scale to match the window viewport size in real-time, instantly relaying geometry changes back to the underlying remote PTY.
-- **Dynamic Window Title:** The browser tab title updates dynamically to show the tool type, host name, project, and git branch (e.g. "Claude · myhost · agent-dashboard · main"), making it easy to identify sessions when multiple terminal windows are open.
-- **History Replay:** If you close a terminal window and re-attach later, the dashboard automatically replays the recent session history so you can pick up exactly where you left off.
-- **Color Support:** Terminals are configured with `xterm-256color` support for rich CLI output.
-- **Line Replacement Support:** Terminals properly handle cursor movement and line-erase escape sequences for spinner animations, progress bars, and streaming LLM output. The PTY read buffer is sized to deliver complete render frames to xterm.js in single writes, preventing visual artifacts from split escape sequences. A UTF-8 byte buffer ensures multi-byte characters (box-drawing, emoji) are never split across reads, eliminating `�` replacement artifacts.
-- **Smooth Rendering:** Terminal output is batched per animation frame to prevent visible scroll jumping during rapid output. History replay writes all chunks in a single pass. The ResizeObserver is debounced to avoid intermediate PTY resize flicker during layout transitions. Initial PTY dimensions are set at spawn time to match the frontend terminal size, avoiding a brief mismatch with the default 80x24.
-- **Touch Scrolling:** Terminal viewports support native vertical touch scrolling on touch-screen devices.
-- **Live Telemetry (OTel):** The dashboard now uses standardized OpenTelemetry (OTLP) to capture model names and token usage. The Host Daemon runs a local OTLP receiver (port 4318) that child agents (Gemini, Claude) report to, ensuring 100% accurate stats without screen-scraping or interfering with terminal performance. Bash agents omit these stat boxes dynamically.
-
----
-
-### Running in Production (Internal Lab)
-If you are deploying this strictly for an internal, private lab network, you can simplify the deployment by continuing to bypass OIDC authentication and avoiding reverse proxies.
-
-1. Ensure the `BYPASS_AUTH=true` flag remains in your `compose.yml`.
-2. To allow machines on your network to access the UI and the Backend API, you must explicitly set the `VITE_API_URL` environment variable for the frontend.
-
-Create a `.env` file in the root directory (or inject it directly into `compose.yml`):
 ```bash
-# Replace 'your-server-ip' with the actual IP address or local DNS name of the host
-VITE_API_URL=http://your-server-ip:8000
+./scripts/check.sh <category>
 ```
 
-Then, update your `compose.yml` to pass this to the frontend build:
+| Category | What it runs |
+|----------|-------------|
+| `format` | `black` (Python), `prettier` (frontend) |
+| `lint` | `flake8` + `pylint` (Python), `eslint` (frontend) |
+| `typecheck` | TypeScript type checking (`tsc`) |
+| `build` | Frontend production build |
+| `test` | Backend unit tests with coverage |
+| `e2e` | End-to-end tests |
+| `security` | `bandit` (Python), `npm audit` (frontend) |
+| `secrets` | Secret detection (`gitleaks`) |
+| `containers` | Build all container images |
+| `precommit` | format + lint + typecheck + secrets (fast) |
+| `ci` | format + lint + typecheck + build + test + security + secrets |
+| `all` | ci + e2e + containers |
 
-```yaml
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Containerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL}
-    ports:
-      - "8080:80"
-```
+### Code Coverage
 
-*(Note: You will also need to update `frontend/Containerfile` to accept `ARG VITE_API_URL` and pass it during the `npm run build` step.)*
+Backend unit test coverage reports are generated at
+`coverage/backend/index.html`.
 
-**3. Configure the Firewall (RHEL 9):**
-To allow other machines on your lab network to access the dashboard and the API, run the following commands:
-```bash
-sudo firewall-cmd --permanent --add-port=8080/tcp
-sudo firewall-cmd --permanent --add-port=8000/tcp
-sudo firewall-cmd --reload
-```
+### CI Pipeline
 
-### Persistence & Boot Behavior
-- **Data Persistence:** The SQLite database is stored in the `dashboard_data` Podman volume, which survives container updates and system reboots.
-- **Service Persistence (Lingering):** By default, RHEL kills all user processes when a user logs out. For **rootless** services to start automatically at boot and remain running after logout, you **must** enable "lingering" for the service account:
-  ```bash
-  sudo loginctl enable-linger $USER
-  ```
-  This ensures the user's systemd manager is initialized at boot time and kept active indefinitely.
+GitHub Actions runs on all PRs and pushes to `main`. The pipeline
+includes:
 
-### Running on Boot (Systemd Quadlets for RHEL 9)
-For a robust, production-grade deployment on RHEL 9/Fedora that does **not** rely on the source directory or `compose.yml` at runtime, use **Podman Quadlets**. This ensures systemd directly manages the containers using only the built images.
+- **Python checks**: formatting, linting, security scan (bandit),
+  unit tests with coverage
+- **Frontend checks**: formatting, linting, type checking, build,
+  security audit (npm audit)
+- **Secret detection**: gitleaks
+- **E2E tests**: end-to-end Socket.IO integration tests
+- **Container builds**: verifies all three Containerfiles build
+  successfully
 
-1. **Create the Quadlet definitions:**
-   Create the following three files in the global systemd containers directory (`/etc/containers/systemd/`):
-
-   **`/etc/containers/systemd/agent-dashboard-data.volume`**
-   ```ini
-   [Volume]
-   VolumeName=dashboard_data
-   ```
-
-   **`/etc/containers/systemd/agent-dashboard-backend.container`**
-   ```ini
-   [Unit]
-   Description=Agent Dashboard Backend
-   After=network-online.target
-
-   [Container]
-   Image=localhost/agent-dashboard_backend:latest
-   PublishPort=8000:8000
-   Volume=agent-dashboard-data.volume:/app/data
-   Environment=DATABASE_URL=sqlite:////app/data/agent_dashboard.db
-   Environment=BYPASS_AUTH=true
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-   **`/etc/containers/systemd/agent-dashboard-frontend.container`**
-   ```ini
-   [Unit]
-   Description=Agent Dashboard Frontend
-   After=network-online.target agent-dashboard-backend.service
-
-   [Container]
-   Image=localhost/agent-dashboard_frontend:latest
-   PublishPort=8080:80
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-2. **Reload systemd and start the services:**
-   Systemd's Podman generator will automatically parse these Quadlets on reload and implicitly "enable" them based on the `[Install]` section. Because they are generated units, you do not use the `enable` command directly.
-
-   ```bash
-   sudo systemctl daemon-reload
-   
-   # Start the backend and frontend (this automatically creates the volume)
-   sudo systemctl start agent-dashboard-backend.service
-   sudo systemctl start agent-dashboard-frontend.service
-   ```
+See [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for
+details.

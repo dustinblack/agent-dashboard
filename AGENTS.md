@@ -13,13 +13,13 @@ This project is inspired by the following blog post:
 - **Frontend**: React (TypeScript) via Vite, `xterm.js`, and `socket.io-client`.
 - **Database**: SQLite with SQLAlchemy ORM.
 - **Authentication**: OIDC/OAuth for UI users; Static API Keys (Machine Tokens) for agents.
-- **Deployment**: Podman (rootless) on RHEL 9 using `podman-compose`.
+- **Deployment**: OCI containers (Podman/Docker) using `compose`.
 - **Integration**: Python wrapper script using `pty` or `pexpect`.
 
 ## Coding Standards
 
 ### Python
-- **Formating**: Use `black` for formatting.
+- **Formatting**: Use `black` for formatting.
 - **Linting**: Adhere to `flake8` and `pylint` standards.
 - **Documentation**: Use Google-style docstrings. Be verbose with documentation for new functions.
 - **Error Handling**: Implement robust error handling and logging in all new functions.
@@ -42,6 +42,11 @@ This project is inspired by the following blog post:
 - **Atomic Changes**: Keep changes surgical and focused on the sub-task.
 - **Testing**: Every change must include verification logic (e.g., unit tests, integration tests, or reproduction scripts).
 - **Validation**: Run project-specific build, lint, and test commands before finalizing.
+
+### Automated Checks
+- **Pre-commit**: Run `./scripts/check.sh precommit` before committing (or install the git hook via `./scripts/install-hooks.sh`).
+- **CI**: GitHub Actions runs format, lint, typecheck, build, test, and security checks on all PRs. All checks must pass.
+- **Coverage**: Unit test coverage reports are generated at `coverage/backend/index.html`.
 
 ### Security
 - **Secrets**: Never log, print, or commit secrets, API keys, or sensitive credentials.
