@@ -161,13 +161,17 @@ jobs:
               return covered, stmts
 
           def read_frontend_cov(path):
-              """Read vitest v8 coverage JSON summary."""
+              """Read vitest v8 coverage-summary.json."""
               if not os.path.isfile(path):
                   return None, None
               with open(path) as f:
                   data = json.load(f)
               t = data.get("total", {}).get("lines", {})
-              return int(t.get("covered", 0)), int(t.get("total", 0))
+              total = int(t.get("total", 0))
+              covered = int(t.get("covered", 0))
+              if total == 0:
+                  return None, None
+              return covered, total
 
           def pct(covered, total):
               return (covered / total * 100) if total else 0
@@ -189,15 +193,10 @@ jobs:
               grand_covered += c
               grand_total += t
 
-          # Frontend
+          # Frontend (json-summary reporter output)
           c, t = read_frontend_cov(
-              "coverage/frontend-coverage/coverage-final.json"
+              "coverage/frontend-coverage/coverage-summary.json"
           )
-          if c is None:
-              # Try summary format
-              c, t = read_frontend_cov(
-                  "coverage/frontend-coverage/coverage.json"
-              )
           if c is not None:
               rows.append(("Frontend (src)", c, t))
               grand_covered += c
