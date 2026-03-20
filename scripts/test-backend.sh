@@ -7,11 +7,10 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo "=== Backend Unit Tests (pytest + coverage) ==="
 cd "$PROJECT_ROOT"
 pytest backend/tests/test_main.py \
-    --cov=backend/app \
+    --cov \
     --cov-report=term-missing \
     --cov-report=html:coverage/backend \
     --cov-report=json:coverage/backend/coverage.json
 
 echo ""
-echo "NOTE: Coverage currently covers backend/app only."
-echo "agent/host_daemon.py and frontend have no test suites yet."
+echo "NOTE: Frontend has no test suite yet (no vitest/jest)."

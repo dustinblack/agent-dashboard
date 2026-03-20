@@ -38,6 +38,10 @@ disable = [
     "too-many-positional-arguments",
 ]
 
+[tool.coverage.run]
+source = ["backend/app", "agent"]
+omit = ["agent/test_*"]
+
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
 python_files = ["test_*.py"]
