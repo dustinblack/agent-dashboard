@@ -23,7 +23,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
     tool: string;
   } | null>(null);
 
-  const projectsCache = useRef<Record<number, Record<string, unknown>>>({});
+  const projectsCache = useRef<Record<number, Host['projects']>>({});
 
   const fetchData = async () => {
     try {
@@ -133,7 +133,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
 
     socket.on(
       'agent_telemetry_update',
-      (data: { agent_id: string; telemetry: Record<string, unknown> }) => {
+      (data: { agent_id: string; telemetry: Agent['telemetry'] }) => {
         setAgents((prev) =>
           prev.map((a) =>
             a.agent_id === data.agent_id
@@ -146,7 +146,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
 
     socket.on(
       'host_telemetry_update',
-      (data: { host_id: number; telemetry: Record<string, unknown> }) => {
+      (data: { host_id: number; telemetry: Host['projects'] }) => {
         projectsCache.current[data.host_id] = data.telemetry;
         setHosts((prev) =>
           prev.map((h) =>
