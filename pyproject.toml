@@ -40,9 +40,9 @@ disable = [
 
 [tool.coverage.run]
 source = ["backend/app", "agent"]
-omit = ["agent/test_*"]
+omit = ["agent/test_*", "agent/tests/*"]
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests"]
+testpaths = ["backend/tests", "agent/tests"]
 python_files = ["test_*.py"]
 addopts = "-v"

@@ -33,59 +33,27 @@ jobs:
       - name: Security scan (bandit)
         run: ./scripts/security-python.sh
 
-      - name: Unit tests with coverage
+      - name: Backend unit tests with coverage
         run: ./scripts/test-backend.sh
         env:
           BYPASS_AUTH: "true"
 
-      - name: Upload coverage report
+      - name: Upload backend coverage
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: backend-coverage
           path: coverage/backend/
 
-      - name: Coverage summary
+      - name: Host Daemon unit tests with coverage
+        run: ./scripts/test-daemon.sh
+
+      - name: Upload daemon coverage
+        uses: actions/upload-artifact@v4
         if: always()
-        run: |
-          if [ -f coverage/backend/coverage.json ]; then
-            python3 << 'PYEOF'
-          import json, os
-
-          with open("coverage/backend/coverage.json") as f:
-              data = json.load(f)
-
-          backend_stmts = backend_miss = 0
-          agent_stmts = agent_miss = 0
-          for path, info in data["files"].items():
-              s = info["summary"]
-              if path.startswith("agent/"):
-                  agent_stmts += s["num_statements"]
-                  agent_miss += s["missing_lines"]
-              else:
-                  backend_stmts += s["num_statements"]
-                  backend_miss += s["missing_lines"]
-
-          def pct(stmts, miss):
-              return ((stmts - miss) / stmts * 100) if stmts else 0
-
-          total = data["totals"]
-          lines = [
-              "## Python Test Coverage",
-              "",
-              "| Component | Covered / Total | Percent |",
-              "|-----------|-----------------|---------|",
-              f"| Backend (backend/app) | {backend_stmts - backend_miss}/{backend_stmts} | {pct(backend_stmts, backend_miss):.1f}% |",
-              f"| Host Daemon (agent) | {agent_stmts - agent_miss}/{agent_stmts} | {pct(agent_stmts, agent_miss):.1f}% |",
-              f"| **Total** | **{total['covered_lines']}/{total['num_statements']}** | **{total['percent_covered']:.1f}%** |",
-              "",
-              "> Frontend has no test suite yet.",
-          ]
-          summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null")
-          with open(summary_path, "a") as f:
-              f.write("\n".join(lines) + "\n")
-          PYEOF
-          fi
+        with:
+          name: daemon-coverage
+          path: coverage/daemon/
 
   frontend-checks:
     name: Frontend Checks
@@ -112,6 +80,16 @@ jobs:
 
       - name: Build
         run: ./scripts/build-frontend.sh
+
+      - name: Unit tests with coverage
+        run: ./scripts/test-frontend.sh
+
+      - name: Upload frontend coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage
+          path: coverage/frontend/
 
       - name: Security audit (npm audit)
         run: ./scripts/security-frontend.sh
@@ -152,6 +130,104 @@ jobs:
         run: ./scripts/test-e2e.sh
         env:
           BYPASS_AUTH: "true"
+
+  coverage-summary:
+    name: Coverage Summary
+    runs-on: ubuntu-latest
+    needs: [python-checks, frontend-checks]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage/
+
+      - name: Generate coverage summary table
+        run: |
+          python3 << 'PYEOF'
+          import json, os
+
+          def read_cov(path):
+              """Read a coverage JSON and return (covered, total)."""
+              if not os.path.isfile(path):
+                  return None, None
+              with open(path) as f:
+                  data = json.load(f)
+              t = data.get("totals", {})
+              stmts = t.get("num_statements", 0)
+              covered = t.get("covered_lines", 0)
+              return covered, stmts
+
+          def read_frontend_cov(path):
+              """Read vitest v8 coverage JSON summary."""
+              if not os.path.isfile(path):
+                  return None, None
+              with open(path) as f:
+                  data = json.load(f)
+              t = data.get("total", {}).get("lines", {})
+              return int(t.get("covered", 0)), int(t.get("total", 0))
+
+          def pct(covered, total):
+              return (covered / total * 100) if total else 0
+
+          rows = []
+          grand_covered = grand_total = 0
+
+          # Backend
+          c, t = read_cov("coverage/backend-coverage/coverage.json")
+          if c is not None:
+              rows.append(("Backend (backend/app)", c, t))
+              grand_covered += c
+              grand_total += t
+
+          # Daemon
+          c, t = read_cov("coverage/daemon-coverage/coverage.json")
+          if c is not None:
+              rows.append(("Host Daemon (agent)", c, t))
+              grand_covered += c
+              grand_total += t
+
+          # Frontend
+          c, t = read_frontend_cov(
+              "coverage/frontend-coverage/coverage-final.json"
+          )
+          if c is None:
+              # Try summary format
+              c, t = read_frontend_cov(
+                  "coverage/frontend-coverage/coverage.json"
+              )
+          if c is not None:
+              rows.append(("Frontend (src)", c, t))
+              grand_covered += c
+              grand_total += t
+
+          lines = [
+              "## Test Coverage Summary",
+              "",
+              "| Component | Covered / Total | Percent |",
+              "|-----------|-----------------|---------|",
+          ]
+          for name, covered, total in rows:
+              lines.append(
+                  f"| {name} | {covered}/{total}"
+                  f" | {pct(covered, total):.1f}% |"
+              )
+          lines.append(
+              f"| **Total** | **{grand_covered}/{grand_total}**"
+              f" | **{pct(grand_covered, grand_total):.1f}%** |"
+          )
+
+          summary_path = os.environ.get(
+              "GITHUB_STEP_SUMMARY", "/dev/null"
+          )
+          with open(summary_path, "a") as f:
+              f.write("\n".join(lines) + "\n")
+
+          # Also print to stdout
+          print("\n".join(lines))
+          PYEOF
 
   container-builds:
     name: Container Builds

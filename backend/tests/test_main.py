@@ -148,6 +148,235 @@ def test_update_task_description():
     assert r_missing.status_code == 404
 
 
+def test_spawn_agent_host_offline():
+    """Spawning on an offline host returns 400."""
+    r_host = client.post(
+        "/hosts",
+        json={"name": "offline-host", "host_token": "off-token"},
+    )
+    host_id = r_host.json()["id"]
+    # Host defaults to 'offline' status
+    r = client.post(
+        "/agents/spawn",
+        json={"host_id": host_id, "tool_name": "bash"},
+    )
+    assert r.status_code == 400
+
+
+def test_spawn_agent_host_not_found():
+    """Spawning on a nonexistent host returns 400."""
+    r = client.post(
+        "/agents/spawn",
+        json={"host_id": 99999, "tool_name": "bash"},
+    )
+    assert r.status_code == 400
+
+
+def test_spawn_agent_with_task():
+    """Verify telemetry_json persists project_dir and task."""
+    from backend.app import models
+
+    r_host = client.post(
+        "/hosts",
+        json={"name": "task-host", "host_token": "task-token"},
+    )
+    host_id = r_host.json()["id"]
+    db = next(override_get_db())
+    host = db.query(models.Host).filter(models.Host.id == host_id).first()
+    host.status = "online"
+    db.commit()
+    db.close()
+
+    r = client.post(
+        "/agents/spawn",
+        json={
+            "host_id": host_id,
+            "tool_name": "claude",
+            "project_dir": "/git/myproject",
+            "task_description": "Fix the bug",
+        },
+    )
+    assert r.status_code == 200
+    agent_id = r.json()["agent_id"]
+
+    r_detail = client.get(f"/agents/{agent_id}/details")
+    tel = r_detail.json()["telemetry"]
+    assert tel["project_dir"] == "/git/myproject"
+    assert tel["task_description"] == "Fix the bug"
+
+
+def test_stop_agent():
+    """Spawn then stop an agent, verify status=closed."""
+    from backend.app import models
+
+    r_host = client.post(
+        "/hosts",
+        json={"name": "stop-host", "host_token": "stop-token"},
+    )
+    host_id = r_host.json()["id"]
+    db = next(override_get_db())
+    host = db.query(models.Host).filter(models.Host.id == host_id).first()
+    host.status = "online"
+    db.commit()
+    db.close()
+
+    r_spawn = client.post(
+        "/agents/spawn",
+        json={"host_id": host_id, "tool_name": "bash"},
+    )
+    agent_id = r_spawn.json()["agent_id"]
+
+    r_stop = client.post(f"/agents/{agent_id}/stop")
+    assert r_stop.status_code == 200
+
+
+def test_stop_agent_not_found():
+    """Stopping a nonexistent agent returns 404."""
+    r = client.post("/agents/nonexistent-id/stop")
+    assert r.status_code == 404
+
+
+def test_stop_agent_already_closed():
+    """Stopping an already-closed agent is idempotent."""
+    from backend.app import models
+
+    r_host = client.post(
+        "/hosts",
+        json={
+            "name": "idempotent-host",
+            "host_token": "idem-token",
+        },
+    )
+    host_id = r_host.json()["id"]
+    db = next(override_get_db())
+    host = db.query(models.Host).filter(models.Host.id == host_id).first()
+    host.status = "online"
+    db.commit()
+    db.close()
+
+    r_spawn = client.post(
+        "/agents/spawn",
+        json={"host_id": host_id, "tool_name": "bash"},
+    )
+    agent_id = r_spawn.json()["agent_id"]
+    client.post(f"/agents/{agent_id}/stop")
+
+    # Stop again — should be idempotent
+    r2 = client.post(f"/agents/{agent_id}/stop")
+    assert r2.status_code == 200
+    assert r2.json()["status"] == "already closed"
+
+
+def test_get_agent_details_not_found():
+    """Getting details for a nonexistent agent returns 404."""
+    r = client.get("/agents/nonexistent-id/details")
+    assert r.status_code == 404
+
+
+def test_get_companions_with_match():
+    """Two active agents on same host+project are companions."""
+    from backend.app import models
+
+    r_host = client.post(
+        "/hosts",
+        json={
+            "name": "companion-host",
+            "host_token": "comp-token",
+        },
+    )
+    host_id = r_host.json()["id"]
+    db = next(override_get_db())
+    host = db.query(models.Host).filter(models.Host.id == host_id).first()
+    host.status = "online"
+    db.commit()
+    db.close()
+
+    r1 = client.post(
+        "/agents/spawn",
+        json={
+            "host_id": host_id,
+            "tool_name": "claude",
+            "project_dir": "/git/shared",
+        },
+    )
+    r2 = client.post(
+        "/agents/spawn",
+        json={
+            "host_id": host_id,
+            "tool_name": "gemini",
+            "project_dir": "/git/shared",
+        },
+    )
+    aid1 = r1.json()["agent_id"]
+    aid2 = r2.json()["agent_id"]
+
+    companions = client.get(f"/agents/{aid1}/companions")
+    assert companions.status_code == 200
+    companion_ids = [a["agent_id"] for a in companions.json()]
+    assert aid2 in companion_ids
+
+
+def test_get_companions_no_match():
+    """Agents on different projects are not companions."""
+    from backend.app import models
+
+    r_host = client.post(
+        "/hosts",
+        json={
+            "name": "nocomp-host",
+            "host_token": "nocomp-token",
+        },
+    )
+    host_id = r_host.json()["id"]
+    db = next(override_get_db())
+    host = db.query(models.Host).filter(models.Host.id == host_id).first()
+    host.status = "online"
+    db.commit()
+    db.close()
+
+    r1 = client.post(
+        "/agents/spawn",
+        json={
+            "host_id": host_id,
+            "tool_name": "claude",
+            "project_dir": "/git/project-a",
+        },
+    )
+    client.post(
+        "/agents/spawn",
+        json={
+            "host_id": host_id,
+            "tool_name": "gemini",
+            "project_dir": "/git/project-b",
+        },
+    )
+    aid1 = r1.json()["agent_id"]
+
+    companions = client.get(f"/agents/{aid1}/companions")
+    assert companions.status_code == 200
+    assert len(companions.json()) == 0
+
+
+def test_get_companions_not_found():
+    """Getting companions for a nonexistent agent returns 404."""
+    r = client.get("/agents/nonexistent-id/companions")
+    assert r.status_code == 404
+
+
+def test_read_agents_status_filter():
+    """Filtering agents by status=active works."""
+    r = client.get("/agents?status=active")
+    assert r.status_code == 200
+    for agent in r.json():
+        assert agent["status"] == "active"
+
+
+def test_delete_host_not_found():
+    """Deleting a nonexistent host returns 404."""
+    r = client.delete("/hosts/99999")
+    assert r.status_code == 404
+
+
 def test_cors_preflight():
     """Test that the OPTIONS preflight request is properly handled by CORSMiddleware."""
     headers = {

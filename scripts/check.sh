@@ -53,6 +53,8 @@ run_category() {
             ;;
         test)
             run_script test-backend.sh
+            run_script test-daemon.sh
+            run_script test-frontend.sh
             ;;
         e2e)
             run_script test-e2e.sh
