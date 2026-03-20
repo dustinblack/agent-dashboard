@@ -8,17 +8,12 @@
  * flash of the wrong colour scheme (FOUC).
  */
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-} from "react";
-import { DEFAULT_THEME, THEMES } from "./themeValues";
-import type { ThemeKey } from "./themeValues";
-import { applyTheme } from "./applyTheme";
+import React, { createContext, useContext, useState, useCallback } from 'react';
+import { DEFAULT_THEME, THEMES } from './themeValues';
+import type { ThemeKey } from './themeValues';
+import { applyTheme } from './applyTheme';
 
-const STORAGE_KEY = "agent-dashboard-theme";
+const STORAGE_KEY = 'agent-dashboard-theme';
 
 /** Read stored theme or fall back to default. */
 function loadStoredTheme(): ThemeKey {
@@ -80,6 +75,7 @@ export const ThemeProvider: React.FC<{
  *
  * Must be used within a `<ThemeProvider>`.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTheme(): ThemeContextValue {
   return useContext(ThemeContext);
 }

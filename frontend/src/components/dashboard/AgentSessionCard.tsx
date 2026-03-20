@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 import {
   Terminal,
   Activity,
@@ -6,16 +6,16 @@ import {
   GitBranch,
   Plug,
   Clock,
-} from "lucide-react";
-import type { Agent } from "../../api";
+} from 'lucide-react';
+import type { Agent } from '../../api';
 import {
   getContextWindow,
   getToolColors,
   getProgressColor,
   formatDuration,
-} from "./utils";
-import StatusIndicator from "./StatusIndicator";
-import EditableTaskDescription from "./EditableTaskDescription";
+} from './utils';
+import StatusIndicator from './StatusIndicator';
+import EditableTaskDescription from './EditableTaskDescription';
 
 /** Props for the AgentSessionCard component. */
 interface AgentSessionCardProps {
@@ -56,10 +56,10 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
             <span
               className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase border ${getToolColors(agent.tool_name).badge}`}
             >
-              {agent.tool_name || "gemini"}
+              {agent.tool_name || 'gemini'}
             </span>
             <h3 className="font-bold text-sm text-slate-50 truncate">
-              {tel.git_project || "Agent"}
+              {tel.git_project || 'Agent'}
             </h3>
           </div>
           <div className="flex items-center gap-3 mt-0.5 ml-0.5">
@@ -73,11 +73,11 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
                 className="flex items-center gap-1 text-[10px] text-slate-500 font-mono"
                 title={
                   tel.run_time_seconds
-                    ? "Active time (CLI-reported)"
-                    : "Elapsed since spawn"
+                    ? 'Active time (CLI-reported)'
+                    : 'Elapsed since spawn'
                 }
               >
-                <Clock size={10} />{" "}
+                <Clock size={10} />{' '}
                 {formatDuration(tel.run_time_seconds, agent.started_at)}
               </span>
             )}
@@ -86,10 +86,10 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
         <StatusIndicator status={tel.agent_status} />
       </div>
 
-      {agent.tool_name !== "bash" && (
+      {agent.tool_name !== 'bash' && (
         <div className="my-2 border-t border-slate-700/50 pt-2">
           <p className="text-[11px] text-slate-300 font-mono truncate">
-            {tel.model || "..."}
+            {tel.model || '...'}
           </p>
           <div className="mt-1.5">
             <div className="flex justify-between items-center mb-1">
@@ -97,9 +97,9 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
                 Context
               </span>
               <span className="text-[10px] text-slate-400 font-mono">
-                {ctxTokens ? ctxTokens.toLocaleString() : "0"} /{" "}
+                {ctxTokens ? ctxTokens.toLocaleString() : '0'} /{' '}
                 {contextMax >= 1000000
-                  ? `${(contextMax / 1000000).toFixed(1).replace(".0", "")}M`
+                  ? `${(contextMax / 1000000).toFixed(1).replace('.0', '')}M`
                   : `${(contextMax / 1000).toFixed(0)}k`}
               </span>
             </div>
@@ -118,18 +118,18 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
       {mcpServers.length > 0 && (
         <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mb-2">
           <Plug size={10} className="text-slate-500 shrink-0" />
-          <span className="truncate">MCP: {mcpServers.join(", ")}</span>
+          <span className="truncate">MCP: {mcpServers.join(', ')}</span>
         </div>
       )}
 
       <div className="bg-slate-900/50 p-2 rounded-lg mb-2 border border-slate-700/50">
         <EditableTaskDescription
           agentId={agent.agent_id}
-          description={tel.task_description || ""}
+          description={tel.task_description || ''}
         />
         {tel.current_activity && (
           <p
-            className={`text-[10px] text-slate-500 font-mono truncate${tel.task_description ? " mt-1 pt-1 border-t border-slate-700/30" : ""}`}
+            className={`text-[10px] text-slate-500 font-mono truncate${tel.task_description ? ' mt-1 pt-1 border-t border-slate-700/30' : ''}`}
           >
             <Activity size={9} className="inline mr-1 text-slate-500" />
             {tel.current_activity}

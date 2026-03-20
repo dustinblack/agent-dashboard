@@ -6,22 +6,22 @@
  * the theme uses the standard dark palette.
  */
 
-import { THEMES } from "./themeValues";
-import type { ThemeKey } from "./themeValues";
+import { THEMES } from './themeValues';
+import type { ThemeKey } from './themeValues';
 
 /** All slate custom-property names that may be overridden. */
 const SLATE_PROPS = [
-  "--color-slate-50",
-  "--color-slate-100",
-  "--color-slate-200",
-  "--color-slate-300",
-  "--color-slate-400",
-  "--color-slate-500",
-  "--color-slate-600",
-  "--color-slate-700",
-  "--color-slate-800",
-  "--color-slate-900",
-  "--color-slate-950",
+  '--color-slate-50',
+  '--color-slate-100',
+  '--color-slate-200',
+  '--color-slate-300',
+  '--color-slate-400',
+  '--color-slate-500',
+  '--color-slate-600',
+  '--color-slate-700',
+  '--color-slate-800',
+  '--color-slate-900',
+  '--color-slate-950',
 ];
 
 /**
@@ -36,10 +36,10 @@ export function applyTheme(themeKey: ThemeKey): void {
   const root = document.documentElement.style;
 
   // Accent colours — always set.
-  root.setProperty("--color-accent", theme.accent);
-  root.setProperty("--color-accent-hover", theme.accentHover);
-  root.setProperty("--color-accent-muted", theme.accentMuted);
-  root.setProperty("--color-accent-text", theme.accentText);
+  root.setProperty('--color-accent', theme.accent);
+  root.setProperty('--color-accent-hover', theme.accentHover);
+  root.setProperty('--color-accent-muted', theme.accentMuted);
+  root.setProperty('--color-accent-text', theme.accentText);
 
   // Slate scale — override or remove.
   if (theme.slateScale) {

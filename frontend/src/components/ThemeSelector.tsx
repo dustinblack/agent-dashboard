@@ -7,10 +7,10 @@
  * border so it stays visible on dark backgrounds.
  */
 
-import React from "react";
-import { THEMES } from "../theme/themeValues";
-import type { ThemeKey } from "../theme/themeValues";
-import { useTheme } from "../theme/ThemeContext";
+import React from 'react';
+import { THEMES } from '../theme/themeValues';
+import type { ThemeKey } from '../theme/themeValues';
+import { useTheme } from '../theme/ThemeContext';
 
 const THEME_KEYS = Object.keys(THEMES) as ThemeKey[];
 
@@ -22,7 +22,7 @@ const ThemeSelector: React.FC = () => {
       {THEME_KEYS.map((key) => {
         const def = THEMES[key];
         const isActive = key === theme;
-        const isSpaceBlack = key === "space-black";
+        const isSpaceBlack = key === 'space-black';
 
         return (
           <button
@@ -32,17 +32,13 @@ const ThemeSelector: React.FC = () => {
             aria-label={`Switch to ${def.label} theme`}
             onClick={() => setTheme(key)}
             className={[
-              "w-4 h-4 rounded-full transition-all",
-              "cursor-pointer",
-              isActive
-                ? "ring-2 ring-white scale-125"
-                : "hover:scale-110",
-              isSpaceBlack && !isActive
-                ? "ring-1 ring-slate-500"
-                : "",
+              'w-4 h-4 rounded-full transition-all',
+              'cursor-pointer',
+              isActive ? 'ring-2 ring-white scale-125' : 'hover:scale-110',
+              isSpaceBlack && !isActive ? 'ring-1 ring-slate-500' : '',
             ]
               .filter(Boolean)
-              .join(" ")}
+              .join(' ')}
             style={{ backgroundColor: def.dotColor }}
           />
         );

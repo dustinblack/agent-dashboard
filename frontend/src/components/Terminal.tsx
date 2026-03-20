@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
-import { Terminal as XTerm } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import { io, Socket } from "socket.io-client";
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Terminal as XTerm } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { io, Socket } from 'socket.io-client';
 import {
   XCircle,
   GitBranch,
@@ -9,10 +9,10 @@ import {
   TerminalSquare,
   ExternalLink,
   RefreshCw,
-} from "lucide-react";
-import "@xterm/xterm/css/xterm.css";
-import type { AgentDetail, Agent } from "../api";
-import { getAgentDetails, getCompanions, spawnAgent, stopAgent } from "../api";
+} from 'lucide-react';
+import '@xterm/xterm/css/xterm.css';
+import type { AgentDetail, Agent } from '../api';
+import { getAgentDetails, getCompanions, spawnAgent, stopAgent } from '../api';
 
 interface TerminalProps {
   agentId: string;
@@ -20,29 +20,29 @@ interface TerminalProps {
 }
 
 /** Canonical tool type buckets */
-type ToolCategory = "gemini" | "claude" | "bash" | "unknown";
+type ToolCategory = 'gemini' | 'claude' | 'bash' | 'unknown';
 
 function categorize(toolName?: string): ToolCategory {
-  if (!toolName) return "unknown";
+  if (!toolName) return 'unknown';
   const t = toolName.toLowerCase();
-  if (t.includes("gemini")) return "gemini";
-  if (t.includes("claude")) return "claude";
-  if (t.includes("bash") || t.includes("shell")) return "bash";
-  return "unknown";
+  if (t.includes('gemini')) return 'gemini';
+  if (t.includes('claude')) return 'claude';
+  if (t.includes('bash') || t.includes('shell')) return 'bash';
+  return 'unknown';
 }
 
 const TOOL_COLORS: Record<ToolCategory, string> = {
-  gemini: "bg-blue-500",
-  claude: "bg-purple-500",
-  bash: "bg-slate-500",
-  unknown: "bg-slate-500",
+  gemini: 'bg-blue-500',
+  claude: 'bg-purple-500',
+  bash: 'bg-slate-500',
+  unknown: 'bg-slate-500',
 };
 
 const TOOL_LABELS: Record<ToolCategory, string> = {
-  gemini: "Gemini",
-  claude: "Claude",
-  bash: "Bash",
-  unknown: "Agent",
+  gemini: 'Gemini',
+  claude: 'Claude',
+  bash: 'Bash',
+  unknown: 'Agent',
 };
 
 /** Open (or focus) a terminal popup window for the given agent. */
@@ -78,7 +78,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
   useEffect(() => {
     getAgentDetails(agentId)
       .then(setAgentDetail)
-      .catch((err) => console.error("Failed to fetch agent details:", err));
+      .catch((err) => console.error('Failed to fetch agent details:', err));
   }, [agentId]);
 
   // Fetch companions on mount + poll every 10s
@@ -86,7 +86,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     const fetchCompanions = () => {
       getCompanions(agentId)
         .then(setCompanions)
-        .catch((err) => console.error("Failed to fetch companions:", err));
+        .catch((err) => console.error('Failed to fetch companions:', err));
     };
     fetchCompanions();
     const interval = setInterval(fetchCompanions, 10_000);
@@ -111,10 +111,10 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         // using resume mode for session continuity
         const newAgent = await spawnAgent(
           agentDetail.host_id,
-          agentDetail.tool_name || "gemini",
+          agentDetail.tool_name || 'gemini',
           agentDetail.telemetry?.project_dir,
           agentDetail.telemetry?.task_description,
-          "resume",
+          'resume',
         );
 
         // Navigate to the new agent's terminal and update
@@ -124,13 +124,13 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         window.name = `agent_${newAgent.agent_id}`;
         window.location.replace(`/terminal/${newAgent.agent_id}`);
       } catch (err) {
-        console.error("Reconnect failed:", err);
-        setReconnectError("Failed to reconnect — the host may be offline.");
+        console.error('Reconnect failed:', err);
+        setReconnectError('Failed to reconnect — the host may be offline.');
         setReconnecting(false);
       }
     };
     reconnect();
-  }, [sessionLost, agentDetail, reconnecting, reconnectError]);
+  }, [agentId, sessionLost, agentDetail, reconnecting, reconnectError]);
 
   // Listen for live telemetry updates to keep header fresh
   useEffect(() => {
@@ -147,9 +147,9 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         );
       }
     };
-    socketRef.current.on("agent_telemetry_update", handler);
+    socketRef.current.on('agent_telemetry_update', handler);
     return () => {
-      socketRef.current?.off("agent_telemetry_update", handler);
+      socketRef.current?.off('agent_telemetry_update', handler);
     };
   }, [agentId, agentDetail]);
 
@@ -176,7 +176,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         );
         openTerminalWindow(spawned.agent_id);
       } catch (err) {
-        console.error("Failed to spawn companion:", err);
+        console.error('Failed to spawn companion:', err);
       } finally {
         setSpawning(false);
       }
@@ -191,10 +191,10 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     const term = new XTerm({
       cursorBlink: true,
       theme: {
-        background: "#000000",
-        foreground: "#f1f5f9",
-        cursor: "#60a5fa",
-        selectionBackground: "#334155",
+        background: '#000000',
+        foreground: '#f1f5f9',
+        cursor: '#60a5fa',
+        selectionBackground: '#334155',
       },
       fontFamily:
         'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
@@ -213,20 +213,20 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
           fitAddon.fit();
           term.focus();
           if (socketRef.current?.connected) {
-            socketRef.current.emit("terminal_resize", {
+            socketRef.current.emit('terminal_resize', {
               sid: agentId,
               cols: term.cols,
               rows: term.rows,
             });
           }
         } catch (e) {
-          console.error("Fit failed:", e);
+          console.error('Fit failed:', e);
         }
       }
     };
 
     const handleResize = () => performFit();
-    window.addEventListener("resize", handleResize);
+    window.addEventListener('resize', handleResize);
 
     // Debounce ResizeObserver to avoid rapid-fire resize
     // events during layout transitions or animations.
@@ -282,15 +282,15 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     // container so we capture touches before xterm's own
     // handler can preventDefault() on them.
     const screenEl =
-      terminalRef.current?.querySelector<HTMLElement>(".xterm-screen");
+      terminalRef.current?.querySelector<HTMLElement>('.xterm-screen');
     if (screenEl) {
-      screenEl.addEventListener("touchstart", onTouchStart, {
+      screenEl.addEventListener('touchstart', onTouchStart, {
         passive: true,
       });
-      screenEl.addEventListener("touchmove", onTouchMove, {
+      screenEl.addEventListener('touchmove', onTouchMove, {
         passive: false,
       });
-      screenEl.addEventListener("touchend", onTouchEnd, {
+      screenEl.addEventListener('touchend', onTouchEnd, {
         passive: true,
       });
     }
@@ -299,13 +299,13 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     // Buffer rapid successive terminal_output events and
     // flush them in a single term.write() per animation frame
     // to prevent visible scroll jumping during fast output.
-    let outputBuffer = "";
+    let outputBuffer = '';
     let rafId: number | null = null;
     const flushOutput = () => {
       rafId = null;
       if (outputBuffer) {
         term.write(outputBuffer);
-        outputBuffer = "";
+        outputBuffer = '';
       }
     };
 
@@ -318,14 +318,14 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     const baseURL =
       import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
     const socket = io(`${baseURL}/terminal`, {
-      path: "/socket.io",
+      path: '/socket.io',
     });
     socketRef.current = socket;
 
-    socket.on("connect", () => {
+    socket.on('connect', () => {
       isReplaying.current = true;
       historyBuffer = [];
-      socket.emit("join_room", { room: agentId });
+      socket.emit('join_room', { room: agentId });
       performFit();
 
       // Detect stale sessions: if history never completes
@@ -339,7 +339,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       }, 5000);
     });
 
-    socket.on("history_complete", (data: { agent_id: string }) => {
+    socket.on('history_complete', (data: { agent_id: string }) => {
       if (data.agent_id === agentId) {
         // History arrived — session is alive, cancel
         // the stale detection timeout
@@ -347,7 +347,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
 
         // Write all buffered history in one call
         if (historyBuffer.length > 0) {
-          term.write(historyBuffer.join(""));
+          term.write(historyBuffer.join(''));
           historyBuffer = [];
         }
         isReplaying.current = false;
@@ -355,7 +355,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       }
     });
 
-    socket.on("terminal_output", (data: { sid: string; output: string }) => {
+    socket.on('terminal_output', (data: { sid: string; output: string }) => {
       if (data.sid !== agentId) return;
       if (isReplaying.current) {
         // Collect history chunks for batched write
@@ -372,9 +372,9 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     // Mark session as lost if the agent is closed while
     // the terminal is open (e.g. daemon restart cleanup)
     socket.on(
-      "agent_status_update",
+      'agent_status_update',
       (data: { agent_id: string; status: string }) => {
-        if (data.agent_id === agentId && data.status === "closed") {
+        if (data.agent_id === agentId && data.status === 'closed') {
           setSessionLost(true);
           isReplaying.current = false;
         }
@@ -383,7 +383,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
 
     term.onData((data) => {
       if (!isReplaying.current) {
-        socket.emit("terminal_input", {
+        socket.emit('terminal_input', {
           target_sid: agentId,
           input: data,
         });
@@ -391,15 +391,15 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     });
 
     return () => {
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener('resize', handleResize);
       if (resizeTimer) clearTimeout(resizeTimer);
       if (rafId !== null) cancelAnimationFrame(rafId);
       if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
       resizeObserver?.disconnect();
       if (screenEl) {
-        screenEl.removeEventListener("touchstart", onTouchStart);
-        screenEl.removeEventListener("touchmove", onTouchMove);
-        screenEl.removeEventListener("touchend", onTouchEnd);
+        screenEl.removeEventListener('touchstart', onTouchStart);
+        screenEl.removeEventListener('touchmove', onTouchMove);
+        screenEl.removeEventListener('touchend', onTouchEnd);
       }
       socket.disconnect();
       term.dispose();
@@ -418,19 +418,19 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     if (hostName) parts.push(hostName);
     if (gitProject) parts.push(gitProject);
     if (gitBranch) parts.push(gitBranch);
-    document.title = parts.join(" · ");
+    document.title = parts.join(' · ');
     return () => {
-      document.title = "Agent Dashboard";
+      document.title = 'Agent Dashboard';
     };
   }, [category, hostName, gitProject, gitBranch]);
 
   // Build companion buttons based on current tool type
   const companionButtons: { label: string; tool: ToolCategory }[] = [];
-  if (category === "bash") {
-    companionButtons.push({ label: "Gemini", tool: "gemini" });
-    companionButtons.push({ label: "Claude", tool: "claude" });
-  } else if (category === "gemini" || category === "claude") {
-    companionButtons.push({ label: "Bash", tool: "bash" });
+  if (category === 'bash') {
+    companionButtons.push({ label: 'Gemini', tool: 'gemini' });
+    companionButtons.push({ label: 'Claude', tool: 'claude' });
+  } else if (category === 'gemini' || category === 'claude') {
+    companionButtons.push({ label: 'Bash', tool: 'bash' });
   }
 
   return (
@@ -519,7 +519,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
             id="terminal"
             ref={terminalRef}
             className="terminal xterm"
-            style={{ height: "100%" }}
+            style={{ height: '100%' }}
           />
         </div>
 

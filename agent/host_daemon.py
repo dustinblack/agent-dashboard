@@ -1,23 +1,29 @@
 #!/usr/bin/env python3
+"""Host daemon for the Agent Dashboard.
+
+Runs on each development machine to spawn and manage AI coding
+agent sessions (Gemini, Claude, Bash) in pseudo-terminals,
+relay I/O via Socket.IO, and receive OpenTelemetry data.
+"""
+
+import asyncio
+import fcntl
+import json
 import os
 import pty
-import sys
-import asyncio
-import socketio
+import re
 import select
 import signal
-import subprocess
-import re
-import json
-import time
 import struct
-import fcntl
+import subprocess
+import sys
 import termios
-import asyncio
-import aiohttp
-from aiohttp import web
-from typing import Dict, Optional, List
+import time
 from collections import deque
+from typing import Dict, Optional
+
+import socketio
+from aiohttp import web
 
 # Terminal patterns that indicate the agent is waiting for user input.
 # Covers Claude Code, Gemini CLI, and generic yes/no prompts.
@@ -91,6 +97,12 @@ def _split_utf8(data: bytes) -> tuple:
 
 
 class HostDaemon:
+    """Manages agent sessions on a single development host.
+
+    Connects to the hub via Socket.IO, spawns agent processes
+    in PTY sessions, relays I/O, and collects OpenTelemetry data.
+    """
+
     def __init__(self, server_url: str, host_token: str):
         self.server_url = server_url
         self.host_token = host_token
@@ -219,7 +231,7 @@ class HostDaemon:
                 projects = []
                 if os.path.exists(self.projects_root):
                     try:
-                        for root, dirs, files in os.walk(self.projects_root):
+                        for root, dirs, _files in os.walk(self.projects_root):
                             rel_path = os.path.relpath(root, self.projects_root)
                             depth = (
                                 0 if rel_path == "." else len(rel_path.split(os.sep))
@@ -296,7 +308,7 @@ class HostDaemon:
                 .decode()
                 .strip()
             )
-            project = origin.split("/")[-1].replace(".git", "")
+            project = origin.rsplit("/", maxsplit=1)[-1].replace(".git", "")
         except Exception:
             # No remote configured — use the repo root directory name
             try:
@@ -336,7 +348,7 @@ class HostDaemon:
                 if project_dir:
                     mcp_path = os.path.join(project_dir, ".mcp.json")
                     if os.path.isfile(mcp_path):
-                        with open(mcp_path, "r") as f:
+                        with open(mcp_path, "r", encoding="utf-8") as f:
                             data = json.load(f)
                         mcp_servers = data.get("mcpServers", {})
                         servers.extend(mcp_servers.keys())
@@ -344,7 +356,7 @@ class HostDaemon:
                 # User-level ~/.claude.json
                 home_claude = os.path.expanduser("~/.claude.json")
                 if os.path.isfile(home_claude):
-                    with open(home_claude, "r") as f:
+                    with open(home_claude, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     mcp_servers = data.get("mcpServers", {})
                     for name in mcp_servers.keys():
@@ -354,7 +366,7 @@ class HostDaemon:
             elif tool == "gemini":
                 settings_path = os.path.expanduser("~/.gemini/settings.json")
                 if os.path.isfile(settings_path):
-                    with open(settings_path, "r") as f:
+                    with open(settings_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     mcp_servers = data.get("mcpServers", {})
                     servers.extend(mcp_servers.keys())
@@ -510,6 +522,7 @@ class HostDaemon:
             os.write(fd, b"\n")
 
     async def watch_agents(self):
+        """Monitors PTY file descriptors and relays agent output."""
         loop = asyncio.get_running_loop()
         while self.running:
             if not self.agents:
@@ -577,6 +590,7 @@ class HostDaemon:
             await asyncio.sleep(0.01)
 
     def close_agent(self, agent_id: str):
+        """Closes the PTY fd and removes an agent from tracking."""
         if agent_id in self.agents:
             print(f"Closing agent {agent_id}")
             fd = self.agents[agent_id]["master_fd"]
@@ -593,6 +607,7 @@ class HostDaemon:
                 )
 
     def cleanup_closed_agents(self):
+        """Removes agents whose PTY file descriptors are closed."""
         to_delete = []
         for aid, info in self.agents.items():
             try:
@@ -1049,7 +1064,8 @@ class HostDaemon:
             await asyncio.sleep(5)
 
     async def update_agents_git_info(self):
-        """Periodically checks the current working directory of each agent and updates git info."""
+        """Periodically checks the current working directory
+        of each agent and updates git info."""
         while self.running:
             for agent_id, info in list(self.agents.items()):
                 try:
@@ -1080,6 +1096,7 @@ class HostDaemon:
             await asyncio.sleep(5)
 
     async def run(self):
+        """Connects to the hub and starts all background tasks."""
         try:
             await self.sio.connect(
                 self.server_url,
@@ -1115,6 +1132,7 @@ class HostDaemon:
             print("Daemon stopped.")
 
     def stop(self):
+        """Signals all background tasks to stop."""
         print("\nShutting down daemon...")
         self.running = False
         if hasattr(self, "watcher_task") and not self.watcher_task.done():
@@ -1128,12 +1146,13 @@ class HostDaemon:
 
 
 async def main():
-    SERVER_URL = os.getenv("DASHBOARD_URL", "http://localhost:8000")
-    HOST_TOKEN = os.getenv("HOST_TOKEN")
-    if not HOST_TOKEN:
+    """Entry point: reads config from env vars and runs the daemon."""
+    server_url = os.getenv("DASHBOARD_URL", "http://localhost:8000")
+    host_token = os.getenv("HOST_TOKEN")
+    if not host_token:
         print("Error: HOST_TOKEN environment variable is required.")
         sys.exit(1)
-    daemon = HostDaemon(SERVER_URL, HOST_TOKEN)
+    daemon = HostDaemon(server_url, host_token)
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, daemon.stop)

@@ -1,18 +1,23 @@
+"""FastAPI application and REST API endpoints for Agent Dashboard.
+
+Defines Pydantic schemas, authentication endpoints, and CRUD
+operations for hosts, agents, and telemetry.
+"""
+
 import os
+from datetime import datetime, timezone
+from typing import List, Optional
+
+import socketio
 from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
-from typing import List, Optional
-from pydantic import BaseModel, ConfigDict
-from datetime import datetime, timezone
-
-from sqlalchemy import func
 
 from . import models, database, auth, socket
-import socketio
-
-from fastapi.middleware.cors import CORSMiddleware
 
 # Initialize the database
 models.Base.metadata.create_all(bind=database.engine)
@@ -58,14 +63,20 @@ app = socketio.ASGIApp(socket.sio, fastapi_app)
 
 # Pydantic Schemas
 class HostBase(BaseModel):
+    """Base schema for host data."""
+
     name: str
 
 
 class HostCreate(HostBase):
+    """Schema for creating a new host registration."""
+
     host_token: str
 
 
 class HostSchema(HostBase):
+    """Schema for host responses including status and metadata."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -76,6 +87,8 @@ class HostSchema(HostBase):
 
 
 class AgentBase(BaseModel):
+    """Base schema for agent session data."""
+
     agent_id: str
     tool_name: Optional[str] = None
     pid: Optional[int] = None
@@ -83,10 +96,14 @@ class AgentBase(BaseModel):
 
 
 class AgentCreate(AgentBase):
+    """Schema for creating a new agent session."""
+
     host_id: int
 
 
 class AgentSchema(AgentBase):
+    """Schema for agent responses with status and timestamps."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -104,6 +121,8 @@ class AgentDetailSchema(AgentSchema):
 
 
 class SpawnRequest(BaseModel):
+    """Schema for requesting an agent spawn on a host."""
+
     host_id: int
     tool_name: str
     project_dir: Optional[str] = None
@@ -160,7 +179,9 @@ def read_hosts(
     """
     hosts = db.query(models.Host).offset(skip).limit(limit).all()
     print(
-        f"DEBUG: read_hosts returning {len(hosts)} hosts. Sample projects: {[h.last_projects_json for h in hosts]}"
+        f"DEBUG: read_hosts returning {len(hosts)} hosts."
+        f" Sample projects:"
+        f" {[h.last_projects_json for h in hosts]}"
     )
     return hosts
 
@@ -179,11 +200,11 @@ def create_host(
     try:
         db.commit()
         db.refresh(db_host)
-    except Exception as e:
+    except Exception:
         db.rollback()
         raise HTTPException(
             status_code=400,
-            detail="Host registration failed. Name or token might already exist.",
+            detail="Host registration failed." " Name or token might already exist.",
         )
     return db_host
 
@@ -195,7 +216,8 @@ def delete_host(
     user: dict = Depends(auth.get_current_user),
 ):
     """
-    Deletes a registered host and cascades to all its agents and logs. Requires UI login.
+    Deletes a registered host and cascades to all its
+    agents and logs. Requires UI login.
     """
     db_host = db.query(models.Host).filter(models.Host.id == host_id).first()
     if not db_host:

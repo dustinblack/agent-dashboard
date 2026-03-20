@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 
 /**
  * Displays a colored status badge for an agent session.
@@ -7,7 +7,7 @@ import React from "react";
  */
 const StatusIndicator: React.FC<{ status?: string }> = ({ status }) => {
   switch (status) {
-    case "working":
+    case 'working':
       return (
         <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 rounded-full border border-green-500/20">
           <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -16,7 +16,7 @@ const StatusIndicator: React.FC<{ status?: string }> = ({ status }) => {
           </span>
         </div>
       );
-    case "waiting_permission":
+    case 'waiting_permission':
       return (
         <div className="flex items-center gap-1 px-2 py-0.5 bg-red-500/15 rounded-full border border-red-500/30 animate-pulse">
           <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
@@ -25,7 +25,7 @@ const StatusIndicator: React.FC<{ status?: string }> = ({ status }) => {
           </span>
         </div>
       );
-    case "idle":
+    case 'idle':
       return (
         <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 rounded-full border border-amber-500/20">
           <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />

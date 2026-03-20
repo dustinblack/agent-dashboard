@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
-import { PlusCircle, X, ChevronRight, RefreshCw, Folder } from "lucide-react";
-import type { Host } from "../../api";
+import React, { useEffect, useMemo, useState } from 'react';
+import { PlusCircle, X, ChevronRight, RefreshCw, Folder } from 'lucide-react';
+import type { Host } from '../../api';
 
 /** Props for the SpawnModal component. */
 export interface SpawnModalProps {
@@ -23,15 +23,19 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
   onSpawn,
   onRefresh,
 }) => {
-  const projects = host.projects?.available_projects || [];
-  const [selectedProject, setSelectedProject] = useState("");
-  const [task, setTask] = useState("");
+  const projects = useMemo(
+    () => host.projects?.available_projects || [],
+    [host.projects?.available_projects],
+  );
+  const [selectedProject, setSelectedProject] = useState('');
+  const [task, setTask] = useState('');
   const [resumeSession, setResumeSession] = useState(true);
-  const showResume = tool === "claude" || tool === "gemini";
+  const showResume = tool === 'claude' || tool === 'gemini';
 
   // Auto-select first project when list arrives
   useEffect(() => {
     if (projects.length > 0 && !selectedProject) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- initialize from async data
       setSelectedProject(projects[0]);
     }
   }, [projects, selectedProject]);
@@ -87,8 +91,8 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
               >
                 {projects.length === 0 && (
                   <option value="">
-                    Loading projects from{" "}
-                    {host.projects?.projects_root || "/git"}
+                    Loading projects from{' '}
+                    {host.projects?.projects_root || '/git'}
                     ...
                   </option>
                 )}
@@ -104,9 +108,9 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
               />
             </div>
             <p className="text-[10px] text-slate-500 mt-1.5 italic">
-              Projects found in{" "}
+              Projects found in{' '}
               <code className="bg-slate-900 px-1 rounded">
-                {host.projects?.projects_root || "/git"}
+                {host.projects?.projects_root || '/git'}
               </code>
             </p>
           </div>
@@ -119,25 +123,25 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
                 </label>
                 <p className="text-[10px] text-slate-500 mt-0.5">
                   {resumeSession
-                    ? "Continue the most recent session in this project"
-                    : "Start a fresh session"}
+                    ? 'Continue the most recent session in this project'
+                    : 'Start a fresh session'}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setResumeSession(!resumeSession)}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  resumeSession ? "bg-accent" : "bg-slate-600"
+                  resumeSession ? 'bg-accent' : 'bg-slate-600'
                 }`}
               >
                 <span
                   className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
-                    resumeSession ? "translate-x-6" : "translate-x-1"
+                    resumeSession ? 'translate-x-6' : 'translate-x-1'
                   }`}
                 />
               </button>
               <span className="text-xs text-slate-300 font-medium ml-2 w-16">
-                {resumeSession ? "Resume" : "New"}
+                {resumeSession ? 'Resume' : 'New'}
               </span>
             </div>
           )}
@@ -164,13 +168,13 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
           </button>
           <button
             onClick={() =>
-              onSpawn(selectedProject, task, resumeSession ? "resume" : "new")
+              onSpawn(selectedProject, task, resumeSession ? 'resume' : 'new')
             }
             disabled={!selectedProject}
             className={`flex-1 font-bold py-2.5 rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 ${
               selectedProject
-                ? "bg-accent hover:bg-accent-hover text-accent-text"
-                : "bg-slate-700 text-slate-500 cursor-not-allowed border border-slate-600"
+                ? 'bg-accent hover:bg-accent-hover text-accent-text'
+                : 'bg-slate-700 text-slate-500 cursor-not-allowed border border-slate-600'
             }`}
           >
             Initialize Agent

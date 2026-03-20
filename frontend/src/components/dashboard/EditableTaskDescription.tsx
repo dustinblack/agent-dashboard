@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef } from "react";
-import { Info } from "lucide-react";
-import { updateTaskDescription } from "../../api";
+import React, { useEffect, useState, useRef } from 'react';
+import { Info } from 'lucide-react';
+import { updateTaskDescription } from '../../api';
 
 /**
  * Inline-editable task description. Click to edit, Enter to
@@ -16,6 +16,7 @@ const EditableTaskDescription: React.FC<{
 
   // Keep local value in sync with prop changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync prop to local state
     if (!editing) setValue(description);
   }, [description, editing]);
 
@@ -30,7 +31,7 @@ const EditableTaskDescription: React.FC<{
       try {
         await updateTaskDescription(agentId, trimmed);
       } catch (err) {
-        console.error("Failed to update task description:", err);
+        console.error('Failed to update task description:', err);
         setValue(description);
       }
     }
@@ -49,8 +50,8 @@ const EditableTaskDescription: React.FC<{
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") save();
-          if (e.key === "Escape") cancel();
+          if (e.key === 'Enter') save();
+          if (e.key === 'Escape') cancel();
         }}
         onBlur={save}
         className="w-full bg-slate-800 text-[11px] text-slate-200 px-1.5 py-0.5 rounded border border-accent-muted outline-none focus:border-accent"
@@ -66,7 +67,7 @@ const EditableTaskDescription: React.FC<{
       title="Click to edit task description"
     >
       <Info size={10} className="inline mr-1 text-slate-500" />
-      {description || "Click to add description..."}
+      {description || 'Click to add description...'}
     </p>
   );
 };

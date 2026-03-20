@@ -8,16 +8,14 @@
  * brightness of the selected theme.
  */
 
-import React from "react";
+import React from 'react';
 
 interface LogoSvgProps {
   /** Tailwind size classes. Defaults to "w-9 h-9". */
   className?: string;
 }
 
-const LogoSvg: React.FC<LogoSvgProps> = ({
-  className = "w-9 h-9",
-}) => (
+const LogoSvg: React.FC<LogoSvgProps> = ({ className = 'w-9 h-9' }) => (
   <svg
     className={className}
     viewBox="0 0 48 48"

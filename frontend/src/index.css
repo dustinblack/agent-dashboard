@@ -1,12 +1,12 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /* Theme accent colour custom properties.
    These are the defaults (Matrix Green) and are overridden
    at runtime by applyTheme(). */
 :root {
-  --color-accent: #39FF14;
-  --color-accent-hover: #5FFF4A;
-  --color-accent-muted: #1A7A0A;
+  --color-accent: #39ff14;
+  --color-accent-hover: #5fff4a;
+  --color-accent-muted: #1a7a0a;
   --color-accent-text: #0a0a0a;
 }
 

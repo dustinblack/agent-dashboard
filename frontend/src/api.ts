@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const baseURL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
+const baseURL =
+  import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
 
 const api = axios.create({
   baseURL,
@@ -13,8 +14,8 @@ export interface Host {
   status: string;
   created_at: string;
   projects?: {
-      projects_root: string;
-      available_projects: string[];
+    projects_root: string;
+    available_projects: string[];
   };
 }
 
@@ -28,17 +29,17 @@ export interface Agent {
   started_at: string;
   ended_at?: string;
   telemetry?: {
-      project_dir?: string;
-      task_description?: string;
-      git_branch?: string;
-      git_project?: string;
-      model?: string;
-      tokens?: number;
-      context_tokens?: number;
-      current_activity?: string;
-      run_time_seconds?: number;
-      agent_status?: string;
-      mcp_servers?: string[];
+    project_dir?: string;
+    task_description?: string;
+    git_branch?: string;
+    git_project?: string;
+    model?: string;
+    tokens?: number;
+    context_tokens?: number;
+    current_activity?: string;
+    run_time_seconds?: number;
+    agent_status?: string;
+    mcp_servers?: string[];
   };
 }
 
@@ -85,17 +86,18 @@ export const updateTaskDescription = async (
   agentId: string,
   taskDescription: string,
 ): Promise<void> => {
-  await api.patch(
-    `/agents/${agentId}/task-description`,
-    { task_description: taskDescription },
-  );
+  await api.patch(`/agents/${agentId}/task-description`, {
+    task_description: taskDescription,
+  });
 };
 
 export interface AgentDetail extends Agent {
   host_name: string;
 }
 
-export const getAgentDetails = async (agentId: string): Promise<AgentDetail> => {
+export const getAgentDetails = async (
+  agentId: string,
+): Promise<AgentDetail> => {
   const response = await api.get(`/agents/${agentId}/details`);
   return response.data;
 };

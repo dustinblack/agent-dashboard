@@ -8,8 +8,11 @@ from backend.app.auth import get_current_user
 
 # Setup test database
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 
 def override_get_db():
     try:
@@ -18,14 +21,18 @@ def override_get_db():
     finally:
         db.close()
 
+
 fastapi_app.dependency_overrides[get_db] = override_get_db
+
 
 def override_get_current_user():
     return {"email": "test@example.com", "name": "Test User"}
 
+
 fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
 
 client = TestClient(app)
+
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_database():
@@ -33,20 +40,22 @@ def setup_database():
     yield
     Base.metadata.drop_all(bind=engine)
 
+
 def test_health_check():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
 
+
 def test_create_host():
     response = client.post(
-        "/hosts",
-        json={"name": "test-host", "host_token": "test-token"}
+        "/hosts", json={"name": "test-host", "host_token": "test-token"}
     )
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "test-host"
     assert "id" in data
+
 
 def test_read_hosts():
     response = client.get("/hosts")
@@ -54,6 +63,7 @@ def test_read_hosts():
     data = response.json()
     assert len(data) >= 1
     assert data[0]["name"] == "test-host"
+
 
 def test_delete_host():
     r = client.post("/hosts", json={"name": "to-delete", "host_token": "del-token"})
@@ -66,10 +76,12 @@ def test_delete_host():
     r_list = client.get("/hosts")
     assert not any(h["id"] == h_id for h in r_list.json())
 
+
 def test_read_agents():
     response = client.get("/agents")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
 
 def test_update_task_description():
     """Test updating an agent's task description via
@@ -87,12 +99,9 @@ def test_update_task_description():
     host_id = r_host.json()["id"]
     # Mark host online so spawn succeeds
     from backend.app import models
+
     db = next(override_get_db())
-    host = (
-        db.query(models.Host)
-        .filter(models.Host.id == host_id)
-        .first()
-    )
+    host = db.query(models.Host).filter(models.Host.id == host_id).first()
     host.status = "online"
     db.commit()
     db.close()
@@ -116,9 +125,7 @@ def test_update_task_description():
     assert r_patch.json()["status"] == "updated"
 
     # Verify it persisted
-    r_detail = client.get(
-        f"/agents/{agent_id}/details"
-    )
+    r_detail = client.get(f"/agents/{agent_id}/details")
     assert r_detail.status_code == 200
     tel = r_detail.json()["telemetry"]
     assert tel["task_description"] == "Fix the login bug"
@@ -129,9 +136,7 @@ def test_update_task_description():
         json={"task_description": "Refactor auth module"},
     )
     assert r_patch2.status_code == 200
-    r_detail2 = client.get(
-        f"/agents/{agent_id}/details"
-    )
+    r_detail2 = client.get(f"/agents/{agent_id}/details")
     tel2 = r_detail2.json()["telemetry"]
     assert tel2["task_description"] == "Refactor auth module"
 
@@ -152,8 +157,11 @@ def test_cors_preflight():
     }
     response = client.options("/hosts", headers=headers)
     assert response.status_code == 200
-    assert response.headers.get("access-control-allow-origin") == "http://localhost:8080"
+    assert (
+        response.headers.get("access-control-allow-origin") == "http://localhost:8080"
+    )
     assert response.headers.get("access-control-allow-credentials") == "true"
+
 
 def test_cors_get_request():
     """Test that a GET request returns the proper CORS headers."""
@@ -163,5 +171,7 @@ def test_cors_get_request():
     response = client.get("/hosts", headers=headers)
     assert response.status_code == 200
     assert "access-control-allow-origin" in response.headers
-    assert response.headers.get("access-control-allow-origin") == "http://localhost:8080"
+    assert (
+        response.headers.get("access-control-allow-origin") == "http://localhost:8080"
+    )
     assert response.headers.get("access-control-allow-credentials") == "true"
