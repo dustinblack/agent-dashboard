@@ -117,7 +117,11 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
           "resume",
         );
 
-        // Navigate to the new agent's terminal
+        // Navigate to the new agent's terminal and update
+        // the window name so the dashboard's window.open()
+        // can find and focus this popup instead of opening
+        // a duplicate
+        window.name = `agent_${newAgent.agent_id}`;
         window.location.replace(`/terminal/${newAgent.agent_id}`);
       } catch (err) {
         console.error("Reconnect failed:", err);
