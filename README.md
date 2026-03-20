@@ -494,6 +494,15 @@ cd frontend && npm install && cd ..
 ./scripts/install-hooks.sh
 ```
 
+> [!IMPORTANT]
+> **AI agent development:** If you are using an AI coding agent
+> (Claude Code, Gemini CLI, etc.) to develop on this project, always
+> install the pre-commit hook first. AI agents can introduce
+> formatting, linting, and type errors that slip past review. The
+> hook runs format, lint, typecheck, and secret detection checks
+> automatically on every commit, catching these issues before they
+> reach the repository.
+
 ### Running Checks
 
 Use `scripts/check.sh` to run checks by category:
