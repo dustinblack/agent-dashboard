@@ -1,5 +1,5 @@
 # Stage 1: Build the React app
-FROM docker.io/library/node:20-slim AS build
+FROM docker.io/library/node:22-slim AS build
 
 WORKDIR /app
 
