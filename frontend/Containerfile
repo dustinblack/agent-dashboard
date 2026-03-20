@@ -1,10 +1,7 @@
 # Stage 1: Build the React app
-FROM registry.fedoraproject.org/fedora:42 AS build
+FROM docker.io/library/node:20-slim AS build
 
 WORKDIR /app
-
-# Install Node.js and npm
-RUN dnf install --setopt=install_weak_deps=False -y nodejs npm && dnf clean all
 
 # Copy package files and install dependencies
 COPY package*.json ./

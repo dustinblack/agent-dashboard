@@ -49,18 +49,42 @@ jobs:
         if: always()
         run: |
           if [ -f coverage/backend/coverage.json ]; then
-            PCT=$(python3 -c "
-          import json
-          with open('coverage/backend/coverage.json') as f:
+            python3 << 'PYEOF'
+          import json, os
+
+          with open("coverage/backend/coverage.json") as f:
               data = json.load(f)
-          total = data['totals']
-          print(f\"| Statements | {total['covered_lines']}/{total['num_statements']} | {total['percent_covered']:.1f}% |\")
-          ")
-            echo "## Backend Coverage" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Metric | Covered / Total | Percent |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|--------|-----------------|---------|" >> "$GITHUB_STEP_SUMMARY"
-            echo "$PCT" >> "$GITHUB_STEP_SUMMARY"
+
+          backend_stmts = backend_miss = 0
+          agent_stmts = agent_miss = 0
+          for path, info in data["files"].items():
+              s = info["summary"]
+              if path.startswith("agent/"):
+                  agent_stmts += s["num_statements"]
+                  agent_miss += s["missing_lines"]
+              else:
+                  backend_stmts += s["num_statements"]
+                  backend_miss += s["missing_lines"]
+
+          def pct(stmts, miss):
+              return ((stmts - miss) / stmts * 100) if stmts else 0
+
+          total = data["totals"]
+          lines = [
+              "## Python Test Coverage",
+              "",
+              "| Component | Covered / Total | Percent |",
+              "|-----------|-----------------|---------|",
+              f"| Backend (backend/app) | {backend_stmts - backend_miss}/{backend_stmts} | {pct(backend_stmts, backend_miss):.1f}% |",
+              f"| Host Daemon (agent) | {agent_stmts - agent_miss}/{agent_stmts} | {pct(agent_stmts, agent_miss):.1f}% |",
+              f"| **Total** | **{total['covered_lines']}/{total['num_statements']}** | **{total['percent_covered']:.1f}%** |",
+              "",
+              "> Frontend has no test suite yet.",
+          ]
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null")
+          with open(summary_path, "a") as f:
+              f.write("\n".join(lines) + "\n")
+          PYEOF
           fi
 
   frontend-checks:
