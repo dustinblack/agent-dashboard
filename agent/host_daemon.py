@@ -110,6 +110,10 @@ class HostDaemon:
         # OTLP receiver port — configurable to allow multiple
         # daemons on the same host via Network=host
         self.otlp_port = int(os.getenv("OTLP_PORT", "4318"))
+        # Maximum directory depth to scan for git repositories
+        # below PROJECTS_ROOT. Default of 6 covers most GitLab
+        # org hierarchies without being unlimited.
+        self.projects_depth = int(os.getenv("PROJECTS_DEPTH", "6"))
         self.sio = socketio.AsyncClient()
         self.agents: Dict[str, Dict] = (
             {}
@@ -236,7 +240,7 @@ class HostDaemon:
                             depth = (
                                 0 if rel_path == "." else len(rel_path.split(os.sep))
                             )
-                            if depth > 2:
+                            if depth > self.projects_depth:
                                 dirs[:] = []
                                 continue
                             if ".git" in dirs:
