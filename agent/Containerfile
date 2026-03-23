@@ -40,7 +40,16 @@ RUN dnf install --setopt=install_weak_deps=False -y \
     python3-pip \
     python3-devel \
     gcc \
+    slirp4netns \
     && dnf clean all
+
+# Configure podman for containers-in-containers networking.
+# Inside a container, netavark's setns() call is denied even with
+# --privileged. Using slirp4netns avoids creating new network
+# namespaces entirely.
+RUN mkdir -p /etc/containers \
+    && printf '[network]\ndefault_rootless_network_cmd = "slirp4netns"\n' \
+       >> /etc/containers/containers.conf
 
 # Install GitHub CLI
 RUN printf '[gh-cli]\nname=GitHub CLI\nbaseurl=https://cli.github.com/packages/rpm\nenabled=1\ngpgcheck=1\ngpgkey=https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x23F3D4EA75716059\n' \
@@ -73,6 +82,9 @@ RUN gemini --version && claude --version
 # Pre-configure Gemini CLI to skip API key prompt
 RUN mkdir -p /root/.gemini && \
     echo '{"security": {"auth": {"selectedType": "gemini-api"}}}' > /root/.gemini/settings.json
+
+# Install general-purpose Python dev tools for linting and formatting
+RUN pip3 install --no-cache-dir black flake8 pylint
 
 # Copy requirements and install daemon python dependencies
 COPY requirements.txt .
