@@ -29,6 +29,7 @@ The daemon relies on the following environment variables:
 - `DASHBOARD_URL`: (Optional) The URL of the central Dashboard Backend. Defaults to `http://localhost:8000`.
 - `PROJECTS_ROOT`: (Optional) Root directory to scan for project repositories. Defaults to `/git`.
 - `OTLP_PORT`: (Optional) Port for the local OTLP HTTP telemetry receiver. Defaults to `4318`. Set to a different value when running multiple daemons on the same host with `Network=host`.
+- `PROJECTS_DEPTH`: (Optional) Maximum directory depth to scan for git repositories below `PROJECTS_ROOT`. Defaults to `6`.
 
 ### Tool-Specific Configuration
 
