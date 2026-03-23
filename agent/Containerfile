@@ -33,6 +33,7 @@ RUN dnf install --setopt=install_weak_deps=False -y \
     podman \
     fuse-overlayfs \
     golang \
+    glab \
     rust \
     cargo \
     python3 \

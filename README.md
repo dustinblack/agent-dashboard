@@ -274,6 +274,7 @@ podman run -d --name host-daemon --network=host \
   -v $HOME/.claude/:/root/.claude \
   -v $HOME/.config/gcloud:/root/.config/gcloud:ro \
   -v $HOME/.config/gh:/root/.config/gh:ro \
+  -v $HOME/.config/glab-cli:/root/.config/glab-cli:ro \
   localhost/agent-dashboard-daemon:latest
 ```
 
@@ -296,6 +297,7 @@ podman run -d --name host-daemon --network=host \
 | `CLOUD_ML_REGION` | GCP region (e.g., `us-east5`) | — |
 | `ANTHROPIC_VERTEX_PROJECT_ID` | GCP project ID for Vertex AI | — |
 | `GH_TOKEN` | GitHub CLI personal access token | — |
+| `GITLAB_TOKEN` | GitLab CLI personal access token | — |
 
 #### Volume Mounts
 
@@ -308,6 +310,7 @@ podman run -d --name host-daemon --network=host \
 | `~/.claude/` | `/root/.claude` | rw | Claude Code settings |
 | `~/.config/gcloud` | `/root/.config/gcloud` | ro | GCP credentials |
 | `~/.config/gh` | `/root/.config/gh` | ro | GitHub CLI config |
+| `~/.config/glab-cli` | `/root/.config/glab-cli` | ro | GitLab CLI config |
 
 #### GitHub CLI Authentication
 
@@ -327,6 +330,22 @@ podman run -d --name host-daemon --network=host \
 > Environment=GH_TOKEN=ghp_your-token-here    # quadlet
 > ```
 > The `GH_TOKEN` environment variable is recognized by `gh`
+> automatically and takes precedence over stored credentials.
+
+#### GitLab CLI Authentication
+
+> [!IMPORTANT]
+> The container includes the GitLab CLI (`glab`). Similar to `gh`,
+> mounting `~/.config/glab-cli` alone may not be sufficient if your
+> token is stored in the system keyring.
+>
+> Pass your token as an environment variable instead:
+> ```bash
+> # Pass it to the container
+> -e GITLAB_TOKEN="glpat_your-token-here"       # podman/docker run
+> Environment=GITLAB_TOKEN=glpat_your-token-here # quadlet
+> ```
+> The `GITLAB_TOKEN` environment variable is recognized by `glab`
 > automatically and takes precedence over stored credentials.
 
 #### Claude Code (Vertex AI)
@@ -434,6 +453,8 @@ Environment=PROJECTS_ROOT=/git
 # running multiple daemons on the same host)
 Environment=OTLP_PORT=4318
 Environment=GEMINI_API_KEY=your-key-here
+Environment=GH_TOKEN=ghp_your-token-here
+Environment=GITLAB_TOKEN=glpat_your-token-here
 Environment=CLAUDE_CODE_USE_VERTEX=1
 Environment=CLOUD_ML_REGION=us-east5
 Environment=ANTHROPIC_VERTEX_PROJECT_ID=your-gcp-project-id
@@ -446,6 +467,7 @@ Volume=%h/.gemini/:/root/.gemini
 Volume=%h/.claude/:/root/.claude
 Volume=%h/.config/gcloud:/root/.config/gcloud:ro
 Volume=%h/.config/gh:/root/.config/gh:ro
+Volume=%h/.config/glab-cli:/root/.config/glab-cli:ro
 
 [Install]
 WantedBy=default.target

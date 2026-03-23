@@ -16,6 +16,7 @@ The container image bundles the following tools so spawned agents have everythin
 | **Claude Code** (`@anthropic-ai/claude-code`) | Anthropic Claude AI coding agent |
 | **Google Cloud CLI** (`gcloud`) | GCP authentication for Claude Code via Vertex AI |
 | **GitHub CLI** (`gh`) | GitHub interaction (PRs, issues, etc.) |
+| **GitLab CLI** (`glab`) | GitLab interaction (MRs, issues, etc.) |
 | **Git** | Version control |
 | **Podman** | Container builds and runtimes (podman-in-podman) |
 | **Go** (`golang`) | Go builds and tests |
@@ -38,6 +39,7 @@ Credentials and configuration for individual tools are passed into the container
 - `~/.claude` — Claude Code configuration
 - `~/.config/gcloud` — GCP credentials (for Claude Code via Vertex AI)
 - `~/.config/gh` — GitHub CLI configuration (see note below about token access)
+- `~/.config/glab-cli` — GitLab CLI configuration (see note below about token access)
 - `~/.ssh` and `~/.gitconfig` — Git/SSH configuration
 
 ### GitHub CLI Authentication in Containers
@@ -55,6 +57,19 @@ Environment=GH_TOKEN=ghp_your-token-here    # systemd quadlet
 ```
 
 `gh` recognizes `GH_TOKEN` automatically and uses it for all API calls.
+
+### GitLab CLI Authentication in Containers
+
+Similar to the GitHub CLI, `glab` may store tokens in the system keyring, making them inaccessible from inside the container.
+
+**Solution:** Pass your GitLab token via the `GITLAB_TOKEN` environment variable:
+```bash
+# Pass it to the container
+-e GITLAB_TOKEN="glpat_your-token-here"       # podman run
+Environment=GITLAB_TOKEN=glpat_your-token-here # systemd quadlet
+```
+
+`glab` recognizes `GITLAB_TOKEN` automatically and uses it for all API calls.
 
 ## Containerized Usage (Podman / Docker)
 
