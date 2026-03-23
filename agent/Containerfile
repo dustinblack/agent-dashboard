@@ -5,6 +5,7 @@ WORKDIR /app
 # Install basic utilities, nodejs, and npm
 RUN dnf install --setopt=install_weak_deps=False -y \
     bash \
+    bash-completion \
     curl \
     nodejs \
     nodejs-full-i18n \
@@ -26,10 +27,14 @@ RUN dnf install --setopt=install_weak_deps=False -y \
     make \
     ripgrep \
     bind-utils \
+    diffstat \
+    hostname \
     strace \
     tmux \
     file \
     patch \
+    wget \
+    which \
     podman \
     fuse-overlayfs \
     golang \
