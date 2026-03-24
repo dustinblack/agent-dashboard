@@ -1108,6 +1108,13 @@ class HostDaemon:
                         tel["git_project"] = project
                         changed = True
 
+                    # Show cwd as activity for bash sessions
+                    # since they don't emit OTLP telemetry.
+                    if info.get("tool") == "bash" and cwd:
+                        if tel.get("current_activity") != cwd:
+                            tel["current_activity"] = cwd
+                            changed = True
+
                     if changed and self.sio.connected:
                         await self.sio.emit(
                             "agent_telemetry",

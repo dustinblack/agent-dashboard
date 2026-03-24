@@ -6,6 +6,7 @@ import {
   GitBranch,
   Plug,
   Clock,
+  FolderOpen,
 } from 'lucide-react';
 import type { Agent } from '../../api';
 import {
@@ -131,7 +132,11 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
           <p
             className={`text-[10px] text-slate-500 font-mono truncate${tel.task_description ? ' mt-1 pt-1 border-t border-slate-700/30' : ''}`}
           >
-            <Activity size={9} className="inline mr-1 text-slate-500" />
+            {agent.tool_name === 'bash' ? (
+              <FolderOpen size={9} className="inline mr-1 text-slate-500" />
+            ) : (
+              <Activity size={9} className="inline mr-1 text-slate-500" />
+            )}
             {tel.current_activity}
           </p>
         )}
