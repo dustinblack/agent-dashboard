@@ -424,6 +424,11 @@ class HostDaemon:
             "git_project": project,
             "model": "detecting...",
             "tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+            "cost_usd": 0.0,
             "context_tokens": 0,
             "current_activity": "",
             "agent_status": "idle",
@@ -1014,6 +1019,45 @@ class HostDaemon:
                                 value = dp.get("asInt") or dp.get("asDouble") or 0
                                 if value:
                                     tel["tokens"] = tel.get("tokens", 0) + int(value)
+                                    # Split by token type attribute
+                                    # for granular tracking.
+                                    # Claude: input, output,
+                                    #   cacheRead, cacheCreation
+                                    # Gemini: input, output,
+                                    #   thought, cache, tool
+                                    token_type = dp_attrs.get("type", "")
+                                    if token_type == "input":
+                                        tel["input_tokens"] = tel.get(
+                                            "input_tokens", 0
+                                        ) + int(value)
+                                    elif token_type == "output":
+                                        tel["output_tokens"] = tel.get(
+                                            "output_tokens", 0
+                                        ) + int(value)
+                                    elif token_type == "cacheRead":
+                                        tel["cache_read_tokens"] = tel.get(
+                                            "cache_read_tokens", 0
+                                        ) + int(value)
+                                    elif token_type in (
+                                        "cacheCreation",
+                                        "cache",
+                                    ):
+                                        tel["cache_creation_tokens"] = tel.get(
+                                            "cache_creation_tokens", 0
+                                        ) + int(value)
+                                    # Other types (thought, tool)
+                                    # are included in the total
+                                    # but not tracked separately.
+                                    changed = True
+
+                            # Cost tracking from Claude Code's
+                            # cost.usage metric (USD).
+                            if name == "claude_code.cost.usage":
+                                value = dp.get("asDouble") or dp.get("asInt") or 0
+                                if value:
+                                    tel["cost_usd"] = tel.get("cost_usd", 0.0) + float(
+                                        value
+                                    )
                                     changed = True
 
                             # Activity from tool call metrics.
