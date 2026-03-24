@@ -9,6 +9,10 @@ import {
   getToolColors,
   getProgressColor,
   formatDuration,
+  getModelPricing,
+  estimateCost,
+  formatCost,
+  formatTokenCount,
 } from '../utils';
 
 describe('getContextWindow', () => {
@@ -129,5 +133,88 @@ describe('formatDuration', () => {
 
   it('returns empty for undefined args', () => {
     expect(formatDuration()).toBe('');
+  });
+});
+
+describe('getModelPricing', () => {
+  it('returns pricing for claude-opus-4', () => {
+    const p = getModelPricing('claude-opus-4-20250514');
+    expect(p).not.toBeNull();
+    expect(p!.input).toBe(15);
+    expect(p!.output).toBe(75);
+  });
+
+  it('returns pricing for gemini-2.5-pro', () => {
+    const p = getModelPricing('gemini-2.5-pro-latest');
+    expect(p).not.toBeNull();
+    expect(p!.input).toBe(1.25);
+    expect(p!.output).toBe(10);
+  });
+
+  it('returns null for unknown model', () => {
+    expect(getModelPricing('unknown-model')).toBeNull();
+  });
+
+  it('returns null for undefined', () => {
+    expect(getModelPricing()).toBeNull();
+  });
+});
+
+describe('estimateCost', () => {
+  it('calculates cost from input and output tokens', () => {
+    // gemini-2.5-flash: $0.15/MTok input, $0.60/MTok output
+    const cost = estimateCost('gemini-2.5-flash', 1_000_000, 500_000);
+    expect(cost).not.toBeNull();
+    // 1M * 0.15 + 0.5M * 0.60 = 0.15 + 0.30 = 0.45
+    expect(cost!).toBeCloseTo(0.45, 2);
+  });
+
+  it('returns null for unknown model', () => {
+    expect(estimateCost('unknown', 1000, 500)).toBeNull();
+  });
+
+  it('handles zero tokens', () => {
+    const cost = estimateCost('gemini-2.5-flash', 0, 0);
+    expect(cost).toBe(0);
+  });
+});
+
+describe('formatCost', () => {
+  it('formats dollars with 2 decimal places', () => {
+    expect(formatCost(1.5)).toBe('$1.50');
+  });
+
+  it('formats sub-cent with 3 decimal places', () => {
+    expect(formatCost(0.005)).toBe('$0.005');
+  });
+
+  it('formats zero', () => {
+    expect(formatCost(0)).toBe('$0.00');
+  });
+
+  it('returns dash for null', () => {
+    expect(formatCost(null)).toBe('—');
+  });
+});
+
+describe('formatTokenCount', () => {
+  it('formats millions', () => {
+    expect(formatTokenCount(1_500_000)).toBe('1.5M');
+  });
+
+  it('formats exact millions without decimal', () => {
+    expect(formatTokenCount(2_000_000)).toBe('2M');
+  });
+
+  it('formats thousands', () => {
+    expect(formatTokenCount(145_000)).toBe('145k');
+  });
+
+  it('formats exact thousands without decimal', () => {
+    expect(formatTokenCount(1_000)).toBe('1k');
+  });
+
+  it('formats small numbers as-is', () => {
+    expect(formatTokenCount(500)).toBe('500');
   });
 });
