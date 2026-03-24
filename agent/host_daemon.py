@@ -492,7 +492,7 @@ class HostDaemon:
             # command.  The daemon reads this periodically
             # in update_agents_git_info().
             if tool == "bash":
-                sidecar = f"/tmp/.agent-telemetry-{agent_id}"
+                sidecar = f"/tmp/.agent-telemetry-{agent_id}"  # nosec B108
                 env["PROMPT_COMMAND"] = (
                     'printf \'{"cwd":"%s",'
                     '"exit_code":%d,'
@@ -639,7 +639,7 @@ class HostDaemon:
             except OSError:
                 pass
             # Clean up PROMPT_COMMAND sidecar file
-            sidecar = f"/tmp/.agent-telemetry-{agent_id}"
+            sidecar = f"/tmp/.agent-telemetry-{agent_id}"  # nosec B108
             try:
                 os.unlink(sidecar)
             except OSError:
@@ -1135,7 +1135,7 @@ class HostDaemon:
                     # bash sessions to get richer telemetry
                     # (cwd, exit code, last command).
                     if info.get("tool") == "bash":
-                        sidecar = f"/tmp/.agent-telemetry-{agent_id}"
+                        sidecar = f"/tmp/.agent-telemetry-{agent_id}"  # nosec B108
                         try:
                             with open(sidecar, "r", encoding="utf-8") as f:
                                 bash_tel = json.loads(f.read().strip())
