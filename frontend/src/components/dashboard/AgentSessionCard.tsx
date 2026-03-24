@@ -122,7 +122,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
         </div>
       )}
 
-      <div className="bg-slate-900/50 p-2 rounded-lg mb-2 border border-slate-700/50">
+      <div className="bg-slate-900/50 p-2 rounded-lg mb-2 border border-slate-700/50 mt-auto">
         <EditableTaskDescription
           agentId={agent.agent_id}
           description={tel.task_description || ''}
@@ -137,7 +137,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
         )}
       </div>
 
-      <div className="flex gap-2 mt-auto pt-2">
+      <div className="flex gap-2 pt-2">
         <button
           onClick={() => onAttach(agent.agent_id)}
           className="flex-1 bg-accent hover:bg-accent-hover text-accent-text font-bold py-2 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm cursor-pointer"
