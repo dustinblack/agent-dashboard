@@ -101,7 +101,12 @@ The daemon maintains the following telemetry fields for each agent, broadcast to
 |-------|--------|-------------|
 | `model` | OTLP logs/traces/metrics | The AI model name (e.g., `claude-opus-4-6`, `gemini-2.0-flash`) |
 | `context_tokens` | OTLP logs/traces | Current context window usage (latest `input_tokens` per API call). Decreases after compression. |
-| `tokens` | OTLP metrics | Cumulative token high-water mark across all API calls |
+| `tokens` | OTLP metrics | Cumulative token total across all API calls |
+| `input_tokens` | OTLP metrics | Cumulative input tokens, split by `type` attribute on token.usage metrics |
+| `output_tokens` | OTLP metrics | Cumulative output tokens |
+| `cache_read_tokens` | OTLP metrics | Cumulative cache read tokens |
+| `cache_creation_tokens` | OTLP metrics | Cumulative cache creation tokens |
+| `cost_usd` | OTLP metrics (Claude only) | Session cost in USD from `claude_code.cost.usage` metric. For Gemini, cost is estimated on the frontend from pricing tables. |
 | `run_time_seconds` | OTLP metrics | Active session time — Claude: `claude_code.active_time.total` (periodic), Gemini: `gemini_cli.agent.duration` (end-of-session only) |
 | `current_activity` | OTLP logs/traces/metrics, PROMPT_COMMAND | Latest tool or function name being executed. For bash sessions, shows the current working directory via PROMPT_COMMAND sidecar. |
 | `task_description` | User-provided | Editable task description, synced from the dashboard UI via `update_task_description` socket event |
