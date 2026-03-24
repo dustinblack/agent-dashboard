@@ -15,6 +15,9 @@ import {
   getToolColors,
   getProgressColor,
   formatDuration,
+  estimateCost,
+  formatCost,
+  formatTokenCount,
 } from './utils';
 import StatusIndicator from './StatusIndicator';
 import EditableTaskDescription from './EditableTaskDescription';
@@ -38,14 +41,32 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
 }) => {
   const tel = agent.telemetry || {};
   // Use context_tokens (per-call input tokens) for the
-  // progress bar -- reflects current context window usage
-  // after compression. Fall back to cumulative tokens if
-  // context data is not yet available.
-  const ctxTokens = tel.context_tokens || tel.tokens || 0;
+  // progress bar — reflects current context window usage
+  // after compression. Do NOT fall back to cumulative
+  // tokens, which would cause the dynamic scaling to keep
+  // expanding and make the bar useless.
+  const ctxTokens = tel.context_tokens || 0;
   const contextMax = getContextWindow(tel.model, ctxTokens);
   const tokenPct = ctxTokens
     ? Math.min((ctxTokens / contextMax) * 100, 100)
     : 0;
+  const totalTokens = tel.tokens || 0;
+  // Use OTLP-reported cost (Claude) or estimate from
+  // pricing tables (Gemini / other).
+  const displayCost =
+    tel.cost_usd && tel.cost_usd > 0
+      ? tel.cost_usd
+      : estimateCost(
+          tel.model,
+          tel.input_tokens,
+          tel.output_tokens,
+          tel.cache_read_tokens,
+          tel.cache_creation_tokens,
+        );
+  const costSource =
+    tel.cost_usd && tel.cost_usd > 0
+      ? 'Reported by CLI'
+      : 'Estimated from token usage';
   const mcpServers = tel.mcp_servers || [];
 
   return (
@@ -114,6 +135,32 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
               />
             </div>
           </div>
+          {/* Total tokens + cost row */}
+          <div className="flex justify-between items-center mt-2 pt-1.5 border-t border-slate-700/30">
+            <span
+              className="text-[10px] text-slate-400 font-mono"
+              title={costSource}
+            >
+              {formatCost(displayCost)}
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {totalTokens
+                ? `${formatTokenCount(totalTokens)} tokens`
+                : '0 tokens'}
+            </span>
+          </div>
+          {/* Input/output breakdown */}
+          {(tel.input_tokens || tel.output_tokens) && (
+            <p className="text-[9px] text-slate-500 font-mono text-right mt-0.5">
+              {tel.input_tokens
+                ? formatTokenCount(tel.input_tokens) + ' in'
+                : ''}
+              {tel.input_tokens && tel.output_tokens ? ' / ' : ''}
+              {tel.output_tokens
+                ? formatTokenCount(tel.output_tokens) + ' out'
+                : ''}
+            </p>
+          )}
         </div>
       )}
 
