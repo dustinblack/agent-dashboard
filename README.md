@@ -14,18 +14,19 @@ An AI Coding Agent Dashboard designed for the Gemini CLI and Claude Code, allowi
 
 ## Overview
 
-Agent Dashboard is a **multi-host, multi-agent orchestration
-platform** for AI coding agents. It is **not** a visualization
-tool or debugging UI — it is the control plane that spawns,
-manages, and interacts with real Gemini CLI and Claude Code
-sessions running on remote development machines via full PTY
-terminal emulation.
+Agent Dashboard is a **multi-host orchestration platform** for
+AI coding agents. It remotely spawns, monitors, and provides
+interactive terminal access to Gemini CLI and Claude Code
+sessions running across multiple development machines — all
+from a single web interface.
 
-The system has three layers: a React frontend served by Nginx,
-a FastAPI + Socket.IO backend hub, and containerized host
-daemons deployed on each development machine. The daemons spawn
-agent processes in pseudo-terminals, relay I/O over Socket.IO,
-and collect OpenTelemetry data for live telemetry.
+The platform consists of three layers: a **React frontend**
+served by Nginx, a **FastAPI + Socket.IO backend hub** that
+coordinates sessions, and **containerized host daemons** deployed
+on each development machine. The daemons spawn agent processes
+in pseudo-terminals, relay I/O over Socket.IO, and collect
+OpenTelemetry telemetry including token usage, model info, and
+session cost.
 
 ## Features
 
