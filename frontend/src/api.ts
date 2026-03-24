@@ -40,6 +40,8 @@ export interface Agent {
     run_time_seconds?: number;
     agent_status?: string;
     mcp_servers?: string[];
+    last_exit_code?: number;
+    last_cmd?: string;
   };
 }
 

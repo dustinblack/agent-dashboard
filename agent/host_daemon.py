@@ -486,6 +486,23 @@ class HostDaemon:
             env["GEMINI_TELEMETRY_USE_COLLECTOR"] = "true"
             env["GEMINI_TELEMETRY_TARGET"] = "local"
 
+            # Inject PROMPT_COMMAND for bash sessions to
+            # write structured telemetry (cwd, exit code,
+            # last command) to a sidecar file after each
+            # command.  The daemon reads this periodically
+            # in update_agents_git_info().
+            if tool == "bash":
+                sidecar = f"/tmp/.agent-telemetry-{agent_id}"  # nosec B108
+                env["PROMPT_COMMAND"] = (
+                    'printf \'{"cwd":"%s",'
+                    '"exit_code":%d,'
+                    '"last_cmd":"%s"}\\n\' '
+                    '"$PWD" "$?" '
+                    '"$(HISTTIMEFORMAT= history 1'
+                    " | sed 's/^[ ]*[0-9]*[ ]*//')\" "
+                    f"> {sidecar}"
+                )
+
             try:
                 os.execvpe(cmd[0], cmd, env)
             except Exception as e:
@@ -619,6 +636,12 @@ class HostDaemon:
             fd = self.agents[agent_id]["master_fd"]
             try:
                 os.close(fd)
+            except OSError:
+                pass
+            # Clean up PROMPT_COMMAND sidecar file
+            sidecar = f"/tmp/.agent-telemetry-{agent_id}"  # nosec B108
+            try:
+                os.unlink(sidecar)
             except OSError:
                 pass
             del self.agents[agent_id]
@@ -1107,6 +1130,39 @@ class HostDaemon:
                     if project and tel.get("git_project") != project:
                         tel["git_project"] = project
                         changed = True
+
+                    # Read PROMPT_COMMAND sidecar file for
+                    # bash sessions to get richer telemetry
+                    # (cwd, exit code, last command).
+                    if info.get("tool") == "bash":
+                        sidecar = f"/tmp/.agent-telemetry-{agent_id}"  # nosec B108
+                        try:
+                            with open(sidecar, "r", encoding="utf-8") as f:
+                                bash_tel = json.loads(f.read().strip())
+                            bash_cwd = bash_tel.get("cwd")
+                            exit_code = bash_tel.get("exit_code")
+                            last_cmd = bash_tel.get("last_cmd", "")
+                            # Show cwd as the activity display
+                            if bash_cwd and tel.get("current_activity") != bash_cwd:
+                                tel["current_activity"] = bash_cwd
+                                changed = True
+                            # Track last exit code for error
+                            # indication on the card
+                            if exit_code is not None:
+                                if tel.get("last_exit_code") != exit_code:
+                                    tel["last_exit_code"] = exit_code
+                                    changed = True
+                            # Track last command text
+                            if last_cmd and tel.get("last_cmd") != last_cmd:
+                                tel["last_cmd"] = last_cmd
+                                changed = True
+                        except (FileNotFoundError, json.JSONDecodeError):
+                            # Sidecar not yet written or
+                            # partially written — fall back
+                            # to /proc cwd
+                            if cwd and tel.get("current_activity") != cwd:
+                                tel["current_activity"] = cwd
+                                changed = True
 
                     if changed and self.sio.connected:
                         await self.sio.emit(

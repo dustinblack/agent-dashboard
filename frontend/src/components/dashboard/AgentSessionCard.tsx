@@ -6,6 +6,8 @@ import {
   GitBranch,
   Plug,
   Clock,
+  FolderOpen,
+  ChevronRight,
 } from 'lucide-react';
 import type { Agent } from '../../api';
 import {
@@ -122,22 +124,46 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
         </div>
       )}
 
-      <div className="bg-slate-900/50 p-2 rounded-lg mb-2 border border-slate-700/50">
+      <div className="bg-slate-900/50 p-2 rounded-lg mb-2 border border-slate-700/50 mt-auto">
         <EditableTaskDescription
           agentId={agent.agent_id}
           description={tel.task_description || ''}
         />
-        {tel.current_activity && (
-          <p
-            className={`text-[10px] text-slate-500 font-mono truncate${tel.task_description ? ' mt-1 pt-1 border-t border-slate-700/30' : ''}`}
-          >
-            <Activity size={9} className="inline mr-1 text-slate-500" />
-            {tel.current_activity}
-          </p>
+        {agent.tool_name === 'bash' ? (
+          <>
+            {tel.current_activity && (
+              <p
+                className={`text-[10px] text-slate-500 font-mono truncate${tel.task_description ? ' mt-1 pt-1 border-t border-slate-700/30' : ''}`}
+              >
+                <FolderOpen size={9} className="inline mr-1" />
+                {tel.current_activity}
+              </p>
+            )}
+            {tel.last_cmd && (
+              <p className="text-[10px] text-slate-500 font-mono truncate mt-0.5 flex items-center gap-0.5">
+                <ChevronRight size={9} className="shrink-0" />
+                <span className="truncate">{tel.last_cmd}</span>
+                {tel.last_exit_code != null && tel.last_exit_code !== 0 && (
+                  <span className="ml-1 px-1 py-px bg-red-500/20 text-red-400 text-[9px] font-bold rounded shrink-0">
+                    E{tel.last_exit_code}
+                  </span>
+                )}
+              </p>
+            )}
+          </>
+        ) : (
+          tel.current_activity && (
+            <p
+              className={`text-[10px] text-slate-500 font-mono truncate${tel.task_description ? ' mt-1 pt-1 border-t border-slate-700/30' : ''}`}
+            >
+              <Activity size={9} className="inline mr-1 text-slate-500" />
+              {tel.current_activity}
+            </p>
+          )
         )}
       </div>
 
-      <div className="flex gap-2 mt-auto pt-2">
+      <div className="flex gap-2 pt-2">
         <button
           onClick={() => onAttach(agent.agent_id)}
           className="flex-1 bg-accent hover:bg-accent-hover text-accent-text font-bold py-2 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm cursor-pointer"

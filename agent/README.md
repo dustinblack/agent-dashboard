@@ -103,9 +103,11 @@ The daemon maintains the following telemetry fields for each agent, broadcast to
 | `context_tokens` | OTLP logs/traces | Current context window usage (latest `input_tokens` per API call). Decreases after compression. |
 | `tokens` | OTLP metrics | Cumulative token high-water mark across all API calls |
 | `run_time_seconds` | OTLP metrics | Active session time — Claude: `claude_code.active_time.total` (periodic), Gemini: `gemini_cli.agent.duration` (end-of-session only) |
-| `current_activity` | OTLP logs/traces/metrics | Latest tool or function name being executed |
+| `current_activity` | OTLP logs/traces/metrics, PROMPT_COMMAND | Latest tool or function name being executed. For bash sessions, shows the current working directory via PROMPT_COMMAND sidecar. |
 | `task_description` | User-provided | Editable task description, synced from the dashboard UI via `update_task_description` socket event |
 | `agent_status` | Derived | `working`, `idle`, or `waiting_permission` — derived from OTLP activity and terminal output patterns |
 | `mcp_servers` | Config files | MCP server names detected from `.mcp.json`, `~/.claude.json`, or `~/.gemini/settings.json` |
+| `last_cmd` | PROMPT_COMMAND (bash only) | Last executed command text, extracted from bash history |
+| `last_exit_code` | PROMPT_COMMAND (bash only) | Exit code of the last command. Non-zero values trigger an error badge on the card. |
 | `git_branch` | Git | Current branch of the agent's working directory |
 | `git_project` | Git | Repository name extracted from the git remote URL |
