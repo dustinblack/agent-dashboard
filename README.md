@@ -14,42 +14,79 @@ An AI Coding Agent Dashboard designed for the Gemini CLI and Claude Code, allowi
 
 ## Overview
 
-Agent Dashboard provides a centralized web interface for spawning,
-monitoring, and interacting with AI coding agents (Gemini CLI, Claude
-Code, or Bash) across multiple remote machines. It connects a
-React-based frontend to a FastAPI backend hub, which coordinates
-containerized host daemons running on your development machines.
+Agent Dashboard is a **multi-host orchestration platform** for
+AI coding agents. It remotely spawns, monitors, and provides
+interactive terminal access to Gemini CLI and Claude Code
+sessions running across multiple development machines — all
+from a single web interface.
+
+The platform consists of three layers: a **React frontend**
+served by Nginx, a **FastAPI + Socket.IO backend hub** that
+coordinates sessions, and **containerized host daemons** deployed
+on each development machine. The daemons spawn agent processes
+in pseudo-terminals, relay I/O over Socket.IO, and collect
+OpenTelemetry telemetry including token usage, model info, and
+session cost.
 
 ## Features
 
-- **Multi-agent orchestration** — Spawn and manage Gemini, Claude,
-  and Bash sessions across multiple hosts from a single dashboard.
-- **Full terminal emulation** — `xterm-256color` support with proper
-  cursor movement, line-erase sequences, spinners, progress bars,
-  and streaming LLM output.
+### Core Architecture
+- **Multi-host orchestration** — Deploy containerized daemons on
+  any number of development machines. Spawn and manage Gemini,
+  Claude, and Bash sessions across all hosts from a single
+  dashboard.
+- **Remote PTY terminals** — Full `xterm-256color` terminal
+  emulation via pseudo-terminals, not a log viewer or chat
+  interface. Supports cursor movement, line-erase sequences,
+  spinners, progress bars, and streaming LLM output.
+- **Live telemetry (OpenTelemetry)** — Each host daemon runs a
+  local OTLP receiver that captures model names, token usage
+  (input/output/cache breakdown), and session cost directly from
+  agent CLI tools — no screen-scraping or terminal interference.
+- **Cost tracking** — Real session cost from Claude Code's OTLP
+  metrics; estimated cost for Gemini from built-in pricing
+  tables. Displayed per-session on each agent card.
+
+### Agent Management
+- **Project selection** — Daemons scan `PROJECTS_ROOT` for git
+  repositories (configurable depth); select a project directory
+  from the dropdown when spawning an agent.
+- **Session resume** — Agents can resume their latest session on
+  spawn, preserving conversation context across daemon restarts.
+- **Companion sessions** — Open a Bash shell alongside a Claude
+  or Gemini session in the same project directory.
+- **Host management** — Register, monitor, and delete hosts with
+  cascading cleanup of associated sessions.
+
+### Terminal UX
 - **Detached terminal windows** — Attach to any session in a
   standalone browser popup for side-by-side multitasking.
-- **Dynamic resizing** — Terminals scale to match the browser
-  viewport in real-time, relaying geometry changes to the remote PTY.
 - **Session history replay** — Close and re-attach to a terminal
   window; recent output is automatically replayed.
-- **Live telemetry (OpenTelemetry)** — Model names and token usage
-  are captured via a local OTLP receiver (port 4318) on each host,
-  without screen-scraping or terminal interference.
-- **Dynamic window titles** — Browser tabs show tool type, host,
-  project, and git branch (e.g., "Claude · myhost · project · main").
-- **Touch scrolling** — Native vertical touch scrolling in terminal
-  viewports.
-- **Smooth rendering** — Output is batched per animation frame to
-  prevent scroll jumping. History replay writes all chunks in a single
-  pass. ResizeObserver is debounced to avoid resize flicker.
-- **UTF-8 & multi-byte safety** — A byte buffer ensures multi-byte
-  characters (box-drawing, emoji) are never split across reads.
-- **Host management** — Delete offline or retired hosts with cascading
-  cleanup of associated sessions and logs.
-- **Project selection** — The daemon scans `PROJECTS_ROOT` in the
-  background; select a project directory from the dropdown when
-  spawning an agent.
+- **Dynamic resizing** — Terminals scale to match the browser
+  viewport in real-time, relaying geometry changes to the
+  remote PTY.
+- **Smooth rendering** — Output is coalesced at the PTY level
+  and batched per animation frame on the frontend. Resize events
+  are debounced and deferred during active streaming.
+- **UTF-8 & multi-byte safety** — A byte buffer ensures
+  multi-byte characters (box-drawing, emoji) are never split
+  across reads.
+- **Touch scrolling** — Native vertical touch scrolling in
+  terminal viewports.
+
+### Telemetry & Monitoring
+- **Token breakdown** — Per-session tracking of input, output,
+  cache read, and cache creation tokens with compact display.
+- **Context window bar** — Live visualization of current context
+  window usage with dynamic scaling per model.
+- **Bash session telemetry** — Current working directory, last
+  command, and exit code displayed on bash cards via
+  `PROMPT_COMMAND` sidecar injection.
+- **Agent status** — Working, idle, and permission-waiting states
+  derived from OTLP activity and terminal output patterns.
+- **MCP server detection** — Detects configured MCP servers from
+  `.mcp.json`, `~/.claude.json`, or `~/.gemini/settings.json`.
 
 ## Architecture
 
