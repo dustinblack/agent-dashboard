@@ -38,6 +38,11 @@ export interface Agent {
     context_tokens?: number;
     current_activity?: string;
     run_time_seconds?: number;
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_tokens?: number;
+    cache_creation_tokens?: number;
+    cost_usd?: number;
     agent_status?: string;
     mcp_servers?: string[];
     last_exit_code?: number;
