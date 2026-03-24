@@ -553,10 +553,26 @@ class HostDaemon:
                     continue
                 agent_id, info = agent_entry
                 try:
+                    # Drain all available data from the PTY
+                    # in a tight loop so that rapid bursts of
+                    # output (e.g. Claude updating multiple
+                    # status lines with cursor-movement escape
+                    # sequences) are coalesced into a single
+                    # socket emit.  This reduces partial escape
+                    # sequence chunks reaching the frontend,
+                    # which cause visible terminal jumping.
                     raw = os.read(fd, 65536)
                     if not raw:
                         self.close_agent(agent_id)
                         continue
+                    while True:
+                        rd, _, _ = select.select([fd], [], [], 0)
+                        if not rd:
+                            break
+                        chunk = os.read(fd, 65536)
+                        if not chunk:
+                            break
+                        raw += chunk
                     if self.sio.connected:
                         # Prepend any leftover bytes from a
                         # previously split UTF-8 character.
@@ -586,7 +602,10 @@ class HostDaemon:
 
                         await self.sio.emit(
                             "terminal_output",
-                            {"sid": agent_id, "output": decoded_data},
+                            {
+                                "sid": agent_id,
+                                "output": decoded_data,
+                            },
                             namespace="/terminal",
                         )
                 except OSError:
