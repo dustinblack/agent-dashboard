@@ -206,41 +206,74 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     term.loadAddon(fitAddon);
     term.open(terminalRef.current);
     fitAddon.fit();
+    term.focus();
 
-    const performFit = () => {
-      if (terminalRef.current) {
-        try {
-          fitAddon.fit();
-          term.focus();
-          if (socketRef.current?.connected) {
-            socketRef.current.emit('terminal_resize', {
-              sid: agentId,
-              cols: term.cols,
-              rows: term.rows,
-            });
-          }
-        } catch (e) {
-          console.error('Fit failed:', e);
+    // --- Scroll position tracking ---
+    // Track whether the viewport is scrolled to the bottom
+    // so we can restore position after fitAddon.fit()
+    // reflows the buffer.
+    let isAtBottom = true;
+    term.onScroll(() => {
+      const buf = term.buffer.active;
+      isAtBottom = buf.viewportY >= buf.baseY;
+    });
+
+    // --- Streaming-aware resize ---
+    // Defer fitAddon.fit() while output is actively
+    // streaming to prevent visible scroll jumps from
+    // buffer reflow during rapid writes.
+    let isStreaming = false;
+    let pendingFit = false;
+
+    const actualPerformFit = () => {
+      if (!terminalRef.current) return;
+      try {
+        const wasAtBottom = isAtBottom;
+        fitAddon.fit();
+        // Restore scroll position after reflow
+        if (wasAtBottom) {
+          term.scrollToBottom();
         }
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('terminal_resize', {
+            sid: agentId,
+            cols: term.cols,
+            rows: term.rows,
+          });
+        }
+      } catch (e) {
+        console.error('Fit failed:', e);
       }
+      pendingFit = false;
     };
 
-    const handleResize = () => performFit();
-    window.addEventListener('resize', handleResize);
+    const safePerformFit = () => {
+      if (isStreaming) {
+        pendingFit = true;
+        return;
+      }
+      actualPerformFit();
+    };
 
-    // Debounce ResizeObserver to avoid rapid-fire resize
-    // events during layout transitions or animations.
+    // Unified debounce for all resize triggers (window
+    // resize and ResizeObserver) to prevent rapid-fire
+    // fitAddon.fit() calls during layout transitions.
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const RESIZE_DEBOUNCE_MS = 150;
+    const debouncedFit = () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(safePerformFit, RESIZE_DEBOUNCE_MS);
+    };
+
+    window.addEventListener('resize', debouncedFit);
+
     let resizeObserver: ResizeObserver | null = null;
     if (terminalRef.current) {
-      resizeObserver = new ResizeObserver(() => {
-        if (resizeTimer) clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(performFit, 150);
-      });
+      resizeObserver = new ResizeObserver(debouncedFit);
       resizeObserver.observe(terminalRef.current);
     }
 
-    requestAnimationFrame(performFit);
+    requestAnimationFrame(actualPerformFit);
     xtermRef.current = term;
 
     // --- Touch scrolling ---
@@ -307,6 +340,13 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         term.write(outputBuffer);
         outputBuffer = '';
       }
+      // Output drained — clear streaming flag and run
+      // any deferred fit that was blocked during output.
+      isStreaming = false;
+      if (pendingFit) {
+        pendingFit = false;
+        requestAnimationFrame(actualPerformFit);
+      }
     };
 
     // Buffer history chunks and write them all at once on
@@ -326,7 +366,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       isReplaying.current = true;
       historyBuffer = [];
       socket.emit('join_room', { room: agentId });
-      performFit();
+      actualPerformFit();
 
       // Detect stale sessions: if history never completes
       // within 5s, the daemon likely no longer has this agent
@@ -351,7 +391,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
           historyBuffer = [];
         }
         isReplaying.current = false;
-        performFit();
+        actualPerformFit();
       }
     });
 
@@ -363,6 +403,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       } else {
         // Buffer live output and flush per animation frame
         outputBuffer += data.output;
+        isStreaming = true;
         if (rafId === null) {
           rafId = requestAnimationFrame(flushOutput);
         }
@@ -391,7 +432,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     });
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', debouncedFit);
       if (resizeTimer) clearTimeout(resizeTimer);
       if (rafId !== null) cancelAnimationFrame(rafId);
       if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
@@ -436,7 +477,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
   return (
     <div className="flex-1 flex flex-col h-full w-full bg-black overflow-hidden">
       {/* Header Bar */}
-      <div className="h-12 flex items-center justify-between bg-slate-800 border-b border-slate-700 px-4 shrink-0">
+      <div className="h-12 flex items-center justify-between bg-slate-800 border-b border-slate-700 px-4 shrink-0 overflow-hidden">
         {/* Left side: tool badge + context */}
         <div className="flex items-center gap-3 min-w-0">
           {/* Tool badge */}
