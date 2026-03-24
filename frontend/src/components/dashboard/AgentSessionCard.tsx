@@ -150,7 +150,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
             </span>
           </div>
           {/* Input/output breakdown */}
-          {(tel.input_tokens || tel.output_tokens) && (
+          {tel.input_tokens || tel.output_tokens ? (
             <p className="text-[9px] text-slate-500 font-mono text-right mt-0.5">
               {tel.input_tokens
                 ? formatTokenCount(tel.input_tokens) + ' in'
@@ -160,7 +160,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
                 ? formatTokenCount(tel.output_tokens) + ' out'
                 : ''}
             </p>
-          )}
+          ) : null}
         </div>
       )}
 
