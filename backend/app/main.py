@@ -390,11 +390,14 @@ async def stop_agent(
     if not db_agent:
         raise HTTPException(status_code=404, detail="Agent not found.")
 
-    if db_agent.status == "closed":
-        return {"status": "already closed"}
+    if db_agent.status in ("closed", "stopped"):
+        return {"status": "already stopped"}
 
-    # 1. Update database immediately so the UI removes the card on next refresh
-    db_agent.status = "closed"
+    # 1. Update database with "stopped" status to distinguish
+    # user-initiated stops from daemon-side disconnects
+    # ("closed"). This prevents the terminal auto-reconnect
+    # from respawning the agent.
+    db_agent.status = "stopped"
     db_agent.ended_at = datetime.now(timezone.utc)
     db.commit()
 
@@ -406,10 +409,12 @@ async def stop_agent(
         namespace="/terminal",
     )
 
-    # 3. Notify all UI clients via Socket.IO for real-time removal
+    # 3. Notify all UI clients via Socket.IO for real-time removal.
+    # Use "stopped" so terminal windows know this was user-initiated
+    # and should not auto-reconnect.
     await socket.sio.emit(
         "agent_status_update",
-        {"agent_id": agent_id, "status": "closed"},
+        {"agent_id": agent_id, "status": "stopped"},
         namespace="/terminal",
     )
 

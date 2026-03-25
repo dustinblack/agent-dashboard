@@ -26,3 +26,6 @@ dist-ssr/
 # Coverage reports
 coverage/
 htmlcov/
+
+# Local Agent Configs
+.claude/settings.local.json

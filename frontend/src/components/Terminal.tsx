@@ -72,6 +72,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
   const [sessionLost, setSessionLost] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [reconnectError, setReconnectError] = useState<string | null>(null);
+  const reconnectingRef = useRef(false);
   const historyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch agent details on mount
@@ -102,6 +103,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
 
     const reconnect = async () => {
       setReconnecting(true);
+      reconnectingRef.current = true;
       try {
         // Stop the stale agent record (ignore errors —
         // it may already be cleaned up)
@@ -410,12 +412,21 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       }
     });
 
-    // Mark session as lost if the agent is closed while
-    // the terminal is open (e.g. daemon restart cleanup)
+    // Handle agent lifecycle events. "stopped" means the
+    // user intentionally stopped the agent — close the
+    // terminal window. "closed" means a daemon-side
+    // disconnect — trigger auto-reconnect.
     socket.on(
       'agent_status_update',
       (data: { agent_id: string; status: string }) => {
-        if (data.agent_id === agentId && data.status === 'closed') {
+        if (data.agent_id !== agentId) return;
+        if (data.status === 'stopped' && !reconnectingRef.current) {
+          // User-initiated stop — close the window
+          // instead of auto-reconnecting. Skip if
+          // we're reconnecting (our own stopAgent call
+          // triggers this event).
+          window.close();
+        } else if (data.status === 'closed') {
           setSessionLost(true);
           isReplaying.current = false;
         }

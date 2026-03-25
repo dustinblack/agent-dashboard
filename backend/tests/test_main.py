@@ -264,7 +264,7 @@ def test_stop_agent_already_closed():
     # Stop again — should be idempotent
     r2 = client.post(f"/agents/{agent_id}/stop")
     assert r2.status_code == 200
-    assert r2.json()["status"] == "already closed"
+    assert r2.json()["status"] == "already stopped"
 
 
 def test_get_agent_details_not_found():

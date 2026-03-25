@@ -70,6 +70,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
   const handleStop = async (agentId: string) => {
     if (!window.confirm('Are you sure you want to stop this agent?')) return;
     try {
+      // Close the terminal popup window if it's open, before
+      // stopping the agent, to prevent the auto-reconnect
+      // from respawning it.
+      const popup = window.open('', `agent_${agentId}`);
+      if (popup && !popup.closed) {
+        popup.close();
+      }
       await stopAgent(agentId);
       setTimeout(fetchData, 500);
     } catch (err) {
@@ -119,7 +126,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
     socket.on(
       'agent_status_update',
       (data: { agent_id: string; status: string }) => {
-        if (data.status === 'closed') {
+        if (data.status === 'closed' || data.status === 'stopped') {
           setAgents((prev) => prev.filter((a) => a.agent_id !== data.agent_id));
         } else {
           setAgents((prev) =>
