@@ -1003,14 +1003,20 @@ class HostDaemon:
                                 tel["model"] = model
                                 changed = True
 
-                            # Token accumulation from tool-
-                            # specific usage counters.
+                            # Token tracking from tool-specific
+                            # usage counters.
                             # Claude: claude_code.token.usage
                             # Gemini: gemini_cli.token.usage
                             # Note: Gemini also emits
                             # gen_ai.client.token.usage with
                             # identical values — intentionally
                             # excluded to avoid double-counting.
+                            #
+                            # These are OTLP cumulative Sum
+                            # metrics — each report contains the
+                            # total since process start, NOT a
+                            # delta.  Use max() to take the
+                            # latest value without double-counting.
                             token_metrics = (
                                 "claude_code.token.usage",
                                 "gemini_cli.token.usage",
@@ -1018,45 +1024,58 @@ class HostDaemon:
                             if name in token_metrics:
                                 value = dp.get("asInt") or dp.get("asDouble") or 0
                                 if value:
-                                    tel["tokens"] = tel.get("tokens", 0) + int(value)
-                                    # Split by token type attribute
-                                    # for granular tracking.
+                                    int_value = int(value)
+                                    # Split by token type for
+                                    # granular tracking.
                                     # Claude: input, output,
                                     #   cacheRead, cacheCreation
                                     # Gemini: input, output,
                                     #   thought, cache, tool
                                     token_type = dp_attrs.get("type", "")
                                     if token_type == "input":
-                                        tel["input_tokens"] = tel.get(
-                                            "input_tokens", 0
-                                        ) + int(value)
+                                        tel["input_tokens"] = max(
+                                            tel.get("input_tokens", 0),
+                                            int_value,
+                                        )
                                     elif token_type == "output":
-                                        tel["output_tokens"] = tel.get(
-                                            "output_tokens", 0
-                                        ) + int(value)
+                                        tel["output_tokens"] = max(
+                                            tel.get("output_tokens", 0),
+                                            int_value,
+                                        )
                                     elif token_type == "cacheRead":
-                                        tel["cache_read_tokens"] = tel.get(
-                                            "cache_read_tokens", 0
-                                        ) + int(value)
+                                        tel["cache_read_tokens"] = max(
+                                            tel.get("cache_read_tokens", 0),
+                                            int_value,
+                                        )
                                     elif token_type in (
                                         "cacheCreation",
                                         "cache",
                                     ):
-                                        tel["cache_creation_tokens"] = tel.get(
-                                            "cache_creation_tokens", 0
-                                        ) + int(value)
-                                    # Other types (thought, tool)
-                                    # are included in the total
-                                    # but not tracked separately.
+                                        tel["cache_creation_tokens"] = max(
+                                            tel.get("cache_creation_tokens", 0),
+                                            int_value,
+                                        )
+                                    # Recompute total from the
+                                    # per-type counters to stay
+                                    # consistent.
+                                    tel["tokens"] = (
+                                        tel.get("input_tokens", 0)
+                                        + tel.get("output_tokens", 0)
+                                        + tel.get("cache_read_tokens", 0)
+                                        + tel.get("cache_creation_tokens", 0)
+                                    )
                                     changed = True
 
                             # Cost tracking from Claude Code's
                             # cost.usage metric (USD).
+                            # Cumulative Sum — use max() to
+                            # avoid double-counting.
                             if name == "claude_code.cost.usage":
                                 value = dp.get("asDouble") or dp.get("asInt") or 0
                                 if value:
-                                    tel["cost_usd"] = tel.get("cost_usd", 0.0) + float(
-                                        value
+                                    tel["cost_usd"] = max(
+                                        tel.get("cost_usd", 0.0),
+                                        float(value),
                                     )
                                     changed = True
 
