@@ -433,12 +433,23 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       },
     );
 
+    // Filter terminal responses (like DA — Device Attributes)
+    // from user input before relaying to the daemon. xterm.js
+    // responds to DA queries (ESC [ c) from the remote process
+    // with ESC [ ? ... c, which flows back through onData.
+    // Some CLIs (Gemini) capture this response as stdin input,
+    // showing "1;2c" in the prompt.
+    // eslint-disable-next-line no-control-regex
+    const DA_RESPONSE = /\x1b\[\?[\d;]*c/;
     term.onData((data) => {
       if (!isReplaying.current) {
-        socket.emit('terminal_input', {
-          target_sid: agentId,
-          input: data,
-        });
+        const filtered = data.replace(DA_RESPONSE, '');
+        if (filtered) {
+          socket.emit('terminal_input', {
+            target_sid: agentId,
+            input: filtered,
+          });
+        }
       }
     });
 
