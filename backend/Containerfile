@@ -3,7 +3,7 @@ FROM registry.fedoraproject.org/fedora:42
 WORKDIR /app
 
 # Install Python and build dependencies
-RUN dnf install --setopt=install_weak_deps=False -y \
+RUN dnf install --setopt=install_weak_deps=False --setopt=retries=3 -y \
     python3 \
     python3-pip \
     python3-devel \

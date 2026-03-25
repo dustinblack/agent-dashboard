@@ -3,7 +3,7 @@ FROM registry.fedoraproject.org/fedora:42
 WORKDIR /app
 
 # Install basic utilities, nodejs, and npm
-RUN dnf install --setopt=install_weak_deps=False -y \
+RUN dnf install --setopt=install_weak_deps=False --setopt=retries=3 -y \
     bash \
     bash-completion \
     curl \
@@ -59,7 +59,7 @@ RUN mkdir -p /etc/containers \
 # Install GitHub CLI
 RUN printf '[gh-cli]\nname=GitHub CLI\nbaseurl=https://cli.github.com/packages/rpm\nenabled=1\ngpgcheck=1\ngpgkey=https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x23F3D4EA75716059\n' \
     > /etc/yum.repos.d/gh-cli.repo \
-    && dnf install --setopt=install_weak_deps=False -y gh \
+    && dnf install --setopt=install_weak_deps=False --setopt=retries=3 -y gh \
     && dnf clean all
 
 # Install Google Cloud CLI (required for Claude Code via Vertex AI)
@@ -70,7 +70,7 @@ RUN ARCH=$(uname -m) \
     && if [ "$ARCH" = "x86_64" ]; then GCLOUD_ARCH="x86_64"; \
        elif [ "$ARCH" = "aarch64" ]; then GCLOUD_ARCH="arm"; \
        else echo "Unsupported architecture: $ARCH" && exit 1; fi \
-    && curl -sSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-${GCLOUD_ARCH}.tar.gz" \
+    && curl -sSL --retry 3 "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-${GCLOUD_ARCH}.tar.gz" \
        -o /tmp/gcloud.tar.gz \
     && tar -xzf /tmp/gcloud.tar.gz -C /opt \
     && rm /tmp/gcloud.tar.gz \
