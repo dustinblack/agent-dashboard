@@ -88,6 +88,46 @@ session cost.
 - **MCP server detection** — Detects configured MCP servers from
   `.mcp.json`, `~/.claude.json`, or `~/.gemini/settings.json`.
 
+## Similar Tools
+
+The following projects offer alternative approaches to AI agent orchestration:
+
+- **Agent Dashboard** (This project)
+  - A web-based platform that provides multi-host orchestration and remote pseudo-terminal (PTY) access to AI agent sessions with live OpenTelemetry metrics.
+  - **Ideal for:** Remote, web-based interaction with isolated AI agent sessions across multiple host machines via full PTY emulation.
+  - **Not ideal for:** Users who prefer to work exclusively within a local, native terminal multiplexer.
+  - **Restrictions:** Designed specifically to orchestrate supported CLI agents (currently Gemini CLI, Claude Code, and Bash) rather than general-purpose GUI agents or arbitrary scripts.
+
+- **[Agent Commander](https://github.com/cvsloane/agent-commander)**
+  - A terminal-native orchestration tool built on `tmux` that manages local and remote AI agent sessions via live streaming and terminal-based approvals.
+  - **Ideal for:** Terminal-native users who want to orchestrate multi-host AI agent sessions directly from the command line.
+  - **Not ideal for:** Users seeking a graphical web dashboard or those unfamiliar with terminal multiplexers.
+  - **Restrictions:** Heavily dependent on `tmux` and operates strictly within the constraints of terminal-based user interfaces.
+
+- **[Agent Orchestrator](https://github.com/ComposioHQ/agent-orchestrator)**
+  - An open-source orchestration layer (by Composio) for fleets of parallel AI coding agents (Claude Code, Aider, Codex). It uses a dual-layer design with a **Planner** to decompose backlog issues (GitHub/Linear/Jira) and an **Executor** to handle technical interactions in isolated **git worktrees**.
+  - **Ideal for:** Automating a full "Agent Ops" lifecycle, including autonomous CI healing (detecting and fixing breaking code), review handling (routing comments back to agents), and parallel PR management.
+  - **Not ideal for:** One-off interactive chat sessions or developers who prefer a strictly local, dependency-free setup.
+  - **Restrictions:** Its integration layer (tools, trackers, and notifications) is powered by the **Composio API**, typically requiring an API key and tying it to the Composio ecosystem. It is heavily optimized for CI-centric workflows.
+
+- **[Botminter](https://botminter.github.io/botminter/)**
+  - A "batteries-included" CLI tool that treats an AI coding team and its processes as a version-controlled Git repository. It functions as an orchestrator (using the **Ralph orchestrator**) to provision specialized agents following specific organizational "profiles."
+  - **Ideal for:** Teams wanting to standardize AI workflows across an entire organization with version-controlled coding standards, documentation rules, and architectural patterns.
+  - **Not ideal for:** Simple, one-off tasks or users who prefer a graphical dashboard over a CLI-first, configuration-as-code approach.
+  - **Restrictions:** Currently in **Pre-Alpha** and heavily optimized for the **Claude Code** ecosystem, with deep integrations for GitHub repos and boards. Its profiles are currently primarily designed for Claude.
+
+- **[Claude Squad](https://github.com/smtg-ai/claude-squad)**
+  - A command-line multiplexer for running multiple AI coding assistants simultaneously, utilizing `git worktree` to isolate concurrent tasks into separate branches.
+  - **Ideal for:** Multiplexing multiple AI coding assistants simultaneously in isolated local environments from the command line.
+  - **Not ideal for:** Managing remote agent sessions across different physical machines or needing a web-based UI.
+  - **Restrictions:** Relies on local `git worktree` isolation and is primarily focused on a specific set of supported CLI assistants (Claude, Gemini, Aider) rather than arbitrary commands.
+
+- **[Zinc](https://github.com/comebertrand/zinc)**
+  - A persistent background daemon and Terminal User Interface (TUI) multiplexer designed specifically for AI coding agents.
+  - **Ideal for:** Running AI coding agents as persistent background daemons and seamlessly switching between them using a TUI.
+  - **Not ideal for:** Web-based multi-machine orchestration or graphical monitoring of token/cost telemetry.
+  - **Restrictions:** Local-only execution with no built-in mechanism for multi-host remote orchestration or advanced visual telemetry.
+
 ## Architecture
 
 ```mermaid
