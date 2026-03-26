@@ -25,27 +25,29 @@ from typing import Dict, Optional
 import socketio
 from aiohttp import web
 
-# Terminal patterns that indicate the agent is waiting for user input.
-# Covers Claude Code, Gemini CLI, and generic yes/no prompts.
+# Terminal patterns that indicate the agent is waiting for
+# user input.  These are matched against stripped terminal
+# output (ANSI escape sequences removed) to avoid false
+# matches on escape codes.  A match sets a "candidate"
+# flag; the status only transitions to waiting_permission
+# after the agent has been idle (no output) for
+# PERMISSION_IDLE_SECONDS.
 PERMISSION_PATTERNS = [
     re.compile(p, re.IGNORECASE)
     for p in [
-        # Generic yes/no prompts
+        # Generic yes/no prompts (anchored to common
+        # bracket/paren formats)
         r"\[Y/n\]",
         r"\[y/N\]",
         r"\(yes/no\)",
         r"\(y/n\)",
-        # Claude Code specific
-        r"Do you want to",
-        r"Allow\s",
-        r"approve|deny",
-        # Gemini CLI specific
+        # Claude Code permission prompts
         r"Do you want to proceed",
-        r"waiting for your",
-        # General input prompts
-        r"press enter",
-        r"Press any key",
-        r"confirm\?",
+        # Gemini CLI permission prompts
+        r"Allow .+ to run",
+        r"Do you want to allow",
+        # General input prompts (anchored with ?)
+        r"press enter to continue",
         r"Continue\?",
         r"Proceed\?",
         # Claude Code plan mode interactive menus
@@ -54,6 +56,14 @@ PERMISSION_PATTERNS = [
         r"Skip interview and plan",  # plan mode menu option
     ]
 ]
+
+# Seconds of idle output after a pattern match before
+# the status transitions to waiting_permission.
+PERMISSION_IDLE_SECONDS = 2
+
+# Regex to strip ANSI escape sequences from terminal
+# output before pattern matching.
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 def _split_utf8(data: bytes) -> tuple:
@@ -220,7 +230,12 @@ class HostDaemon:
             agent_id = data.get("target_sid")
             user_input = data.get("input", "")
             if agent_id in self.agents and user_input:
-                master_fd = self.agents[agent_id]["master_fd"]
+                # Clear permission state on user input —
+                # the user has responded to any prompt.
+                info = self.agents[agent_id]
+                info["permission_waiting"] = False
+                info["permission_candidate"] = 0
+                master_fd = info["master_fd"]
                 try:
                     os.write(master_fd, user_input.encode("utf-8"))
                 except OSError:
@@ -533,7 +548,7 @@ class HostDaemon:
                 "last_otlp_time": 0.0,
                 "last_output_time": time.monotonic(),
                 "permission_waiting": False,
-                "permission_waiting_since": 0,
+                "permission_candidate": 0,
                 "utf8_buffer": b"",
             }
             if self.sio.connected:
@@ -609,18 +624,21 @@ class HostDaemon:
                         self.agents[agent_id]["last_output_time"] = time.monotonic()
 
                         # Check for permission prompts.
-                        # Use a sticky flag: once set, only clear
-                        # after 10s of non-matching output so that
-                        # trailing ANSI sequences don't flicker the
-                        # badge off before the status poll fires.
+                        # Strip ANSI escapes before matching to
+                        # avoid false positives on escape codes.
+                        # A match sets a candidate timestamp;
+                        # the status poll promotes it to
+                        # permission_waiting after the agent
+                        # has been idle for PERMISSION_IDLE_SECONDS.
+                        stripped = _ANSI_ESCAPE.sub("", decoded_data)
                         now = time.monotonic()
-                        if any(p.search(decoded_data) for p in PERMISSION_PATTERNS):
-                            info["permission_waiting"] = True
-                            info["permission_waiting_since"] = now
-                        elif info.get("permission_waiting"):
-                            elapsed = now - info.get("permission_waiting_since", 0)
-                            if elapsed > 10:
-                                info["permission_waiting"] = False
+                        if any(p.search(stripped) for p in PERMISSION_PATTERNS):
+                            info["permission_candidate"] = now
+                        # New output clears permission_waiting
+                        # since the agent is actively producing
+                        # output (not waiting for input).
+                        if info.get("permission_waiting"):
+                            info["permission_waiting"] = False
 
                         await self.sio.emit(
                             "terminal_output",
@@ -938,8 +956,7 @@ class HostDaemon:
                         span_name = (span.get("name") or "").lower()
                         if any(kw in span_name for kw in _wait_keywords):
                             info = self.agents[agent_id]
-                            info["permission_waiting"] = True
-                            info["permission_waiting_since"] = time.monotonic()
+                            info["permission_candidate"] = time.monotonic()
                             changed = True
 
                         # Check span events for waiting
@@ -948,8 +965,7 @@ class HostDaemon:
                             event_name = (event.get("name") or "").lower()
                             if any(kw in event_name for kw in _wait_keywords):
                                 info = self.agents[agent_id]
-                                info["permission_waiting"] = True
-                                info["permission_waiting_since"] = time.monotonic()
+                                info["permission_candidate"] = time.monotonic()
                                 changed = True
 
                 if changed and self.sio.connected:
@@ -1149,6 +1165,15 @@ class HostDaemon:
             for agent_id, info in list(self.agents.items()):
                 tel = info["telemetry"]
                 old_status = tel.get("agent_status")
+
+                # Promote permission candidate to
+                # permission_waiting if the agent has been
+                # idle (no output) since the pattern match.
+                candidate_time = info.get("permission_candidate", 0)
+                if candidate_time > 0:
+                    idle_since = now - info.get("last_output_time", 0)
+                    if idle_since >= PERMISSION_IDLE_SECONDS:
+                        info["permission_waiting"] = True
 
                 if info.get("permission_waiting"):
                     new_status = "waiting_permission"
