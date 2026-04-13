@@ -53,8 +53,13 @@ session cost.
   from the dropdown when spawning an agent.
 - **Session resume** — Agents can resume their latest session on
   spawn, preserving conversation context across daemon restarts.
+- **Git worktree isolation** — Optionally spawn agents in
+  isolated git worktrees so multiple agents can work on the
+  same repository without conflicts. Smart defaults enable
+  isolation when another agent is already active on the project.
 - **Companion sessions** — Open a Bash shell alongside a Claude
-  or Gemini session in the same project directory.
+  or Gemini session in the same project directory. Companions
+  inherit the parent's working context (worktree or original).
 - **Host management** — Register, monitor, and delete hosts with
   cascading cleanup of associated sessions.
 

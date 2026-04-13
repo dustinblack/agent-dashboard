@@ -114,5 +114,19 @@ The daemon maintains the following telemetry fields for each agent, broadcast to
 | `mcp_servers` | Config files | MCP server names detected from `.mcp.json`, `~/.claude.json`, or `~/.gemini/settings.json` |
 | `last_cmd` | PROMPT_COMMAND (bash only) | Last executed command text, extracted from bash history |
 | `last_exit_code` | PROMPT_COMMAND (bash only) | Exit code of the last command. Non-zero values trigger an error badge on the card. |
+| `worktree_path` | Daemon (spawn) | Absolute path to the git worktree directory, if the agent was spawned with worktree isolation. Null otherwise. |
 | `git_branch` | Git | Current branch of the agent's working directory |
 | `git_project` | Git | Repository name extracted from the git remote URL |
+
+### Git Worktree Isolation
+
+When spawning an agent, the user can enable "Worktree Isolation" to create a separate git worktree for the session. This prevents concurrent agents from conflicting on the same working tree.
+
+**Lifecycle:**
+1. **Creation**: The daemon creates a worktree at `{PROJECTS_ROOT}/.agent-worktrees/{project}/agent-{id[:8]}` with a new branch `agent/{tool}-{id[:8]}` based on the current HEAD.
+2. **Working directory**: The agent process runs in the worktree directory instead of the original project.
+3. **Cleanup**: When the agent is stopped or closed, the daemon removes the worktree (`git worktree remove --force`) and deletes the branch (`git branch -D`).
+
+**Companion sessions** inherit the parent agent's working directory (worktree or original) and do not create additional worktrees. This ensures companion chains (e.g. Claude → Bash → Gemini) all share the same working context.
+
+**Smart default**: The spawn modal defaults the worktree toggle to ON when another agent is already active on the same project and host.
