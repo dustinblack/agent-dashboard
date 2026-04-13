@@ -170,11 +170,19 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       if (!agentDetail || spawning) return;
       setSpawning(true);
       try {
-        const projectDir = agentDetail.telemetry?.project_dir;
+        // Use the worktree path if present so the
+        // companion inherits the same working directory
+        // as the parent agent (worktree or original).
+        const projectDir =
+          agentDetail.telemetry?.worktree_path ||
+          agentDetail.telemetry?.project_dir;
         const spawned = await spawnAgent(
           agentDetail.host_id,
           targetTool,
           projectDir,
+          undefined, // taskDescription
+          undefined, // sessionMode
+          false, // useWorktree — share parent's directory
         );
         openTerminalWindow(spawned.agent_id);
       } catch (err) {
