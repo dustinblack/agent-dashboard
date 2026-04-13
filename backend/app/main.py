@@ -295,30 +295,50 @@ def get_agent_companions(
     user: dict = Depends(auth.get_current_user),
 ):
     """
-    Returns active companion agents on the same host with the same
-    project_dir. A companion is any other active agent sharing the
-    same host_id and project_dir (extracted from telemetry_json).
+    Returns active companion agents on the same host sharing
+    the same effective working directory. Companions are matched
+    by worktree_path when present (agents sharing the same
+    worktree), or by project_dir when neither agent has a
+    worktree (agents sharing the original repo). This prevents
+    worktree-isolated agents from being matched as companions
+    to non-worktree agents on the same project.
     Requires UI login.
     """
     db_agent = db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
     if not db_agent:
         raise HTTPException(status_code=404, detail="Agent not found.")
 
-    project_dir = (db_agent.telemetry_json or {}).get("project_dir")
+    tel = db_agent.telemetry_json or {}
+    worktree_path = tel.get("worktree_path")
+    project_dir = tel.get("project_dir")
     if not project_dir:
         return []
 
-    companions = (
-        db.query(models.Agent)
-        .filter(
-            models.Agent.host_id == db_agent.host_id,
-            models.Agent.status == "active",
-            models.Agent.agent_id != agent_id,
-            func.json_extract(models.Agent.telemetry_json, "$.project_dir")
-            == project_dir,
+    # Match companions by effective working directory:
+    # if this agent is in a worktree, find others in the
+    # same worktree. If not, find others also without a
+    # worktree on the same project.
+    base_filter = [
+        models.Agent.host_id == db_agent.host_id,
+        models.Agent.status == "active",
+        models.Agent.agent_id != agent_id,
+    ]
+    if worktree_path:
+        base_filter.append(
+            func.json_extract(models.Agent.telemetry_json, "$.worktree_path")
+            == worktree_path
         )
-        .all()
-    )
+    else:
+        base_filter.append(
+            func.json_extract(models.Agent.telemetry_json, "$.project_dir")
+            == project_dir
+        )
+        # Exclude agents that have a worktree_path set
+        base_filter.append(
+            func.json_extract(models.Agent.telemetry_json, "$.worktree_path").is_(None)
+        )
+
+    companions = db.query(models.Agent).filter(*base_filter).all()
     return companions
 
 
