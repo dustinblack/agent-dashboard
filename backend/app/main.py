@@ -128,6 +128,7 @@ class SpawnRequest(BaseModel):
     project_dir: Optional[str] = None
     task_description: Optional[str] = None
     session_mode: Optional[str] = "resume"
+    use_worktree: Optional[bool] = False
     cols: Optional[int] = 120
     rows: Optional[int] = 40
 
@@ -351,6 +352,7 @@ async def spawn_agent(
         telemetry_json={
             "project_dir": request.project_dir,
             "task_description": request.task_description,
+            "use_worktree": request.use_worktree or False,
         },
     )
     db.add(db_agent)
@@ -367,6 +369,7 @@ async def spawn_agent(
             "project_dir": request.project_dir,
             "task_description": request.task_description,
             "session_mode": request.session_mode or "resume",
+            "use_worktree": request.use_worktree or False,
             "cols": request.cols or 120,
             "rows": request.rows or 40,
         },
