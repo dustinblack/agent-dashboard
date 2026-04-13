@@ -49,6 +49,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
     projectDir?: string,
     taskDescription?: string,
     sessionMode?: string,
+    useWorktree?: boolean,
   ) => {
     try {
       const newAgent = await spawnAgent(
@@ -57,6 +58,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
         projectDir,
         taskDescription,
         sessionMode,
+        useWorktree,
       );
       setActiveSpawn(null);
       await fetchData();
@@ -264,14 +266,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
         <SpawnModal
           host={hosts.find((h) => h.id === activeSpawn.hostId)!}
           tool={activeSpawn.tool}
+          activeAgents={activeAgents.filter(
+            (a) => a.host_id === activeSpawn.hostId,
+          )}
           onClose={() => setActiveSpawn(null)}
-          onSpawn={(dir, task, sessionMode) =>
+          onSpawn={(dir, task, sessionMode, useWorktree) =>
             handleSpawn(
               activeSpawn.hostId,
               activeSpawn.tool,
               dir,
               task,
               sessionMode,
+              useWorktree,
             )
           }
           onRefresh={requestProjects}
