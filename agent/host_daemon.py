@@ -487,6 +487,34 @@ class HostDaemon:
                 worktree_path = None
                 worktree_branch = None
 
+        # Detect if full_path is inside an existing worktree
+        # (e.g. companion session spawned into a parent's
+        # worktree). Set worktree_path so the UI shows the
+        # worktree indicator, and resolve the original
+        # project_dir for MCP detection and companion matching.
+        worktree_marker = os.path.join(self.projects_root, ".agent-worktrees")
+        if not worktree_path and full_path and full_path.startswith(worktree_marker):
+            worktree_path = full_path
+            # Resolve original project_dir from the worktree's
+            # git configuration.
+            try:
+                git_common = (
+                    subprocess.check_output(
+                        ["git", "rev-parse", "--git-common-dir"],
+                        cwd=full_path,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    .decode()
+                    .strip()
+                )
+                # git-common-dir returns the .git dir of the
+                # parent repo (e.g. /git/project/.git)
+                if git_common and not git_common.startswith("/"):
+                    git_common = os.path.normpath(os.path.join(full_path, git_common))
+                original_project_dir = os.path.dirname(git_common)
+            except Exception:
+                pass
+
         print(
             f"Spawning agent {agent_id} with tool: {tool} "
             f"mode: {session_mode} in {full_path}"
