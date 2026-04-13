@@ -5,6 +5,7 @@ import { io, Socket } from 'socket.io-client';
 import {
   XCircle,
   GitBranch,
+  GitFork,
   Monitor,
   TerminalSquare,
   ExternalLink,
@@ -110,11 +111,18 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         await stopAgent(agentId).catch(() => {});
 
         // Spawn a new agent with the same parameters,
-        // using resume mode for session continuity
+        // using resume mode for session continuity.
+        // If the stale session was in a worktree, use
+        // the worktree path so the agent resumes in the
+        // same isolated directory with its branch and
+        // uncommitted work intact.
+        const projectDir =
+          agentDetail.telemetry?.worktree_path ||
+          agentDetail.telemetry?.project_dir;
         const newAgent = await spawnAgent(
           agentDetail.host_id,
           agentDetail.tool_name || 'gemini',
-          agentDetail.telemetry?.project_dir,
+          projectDir,
           agentDetail.telemetry?.task_description,
           'resume',
         );
@@ -170,11 +178,19 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       if (!agentDetail || spawning) return;
       setSpawning(true);
       try {
-        const projectDir = agentDetail.telemetry?.project_dir;
+        // Use the worktree path if present so the
+        // companion inherits the same working directory
+        // as the parent agent (worktree or original).
+        const projectDir =
+          agentDetail.telemetry?.worktree_path ||
+          agentDetail.telemetry?.project_dir;
         const spawned = await spawnAgent(
           agentDetail.host_id,
           targetTool,
           projectDir,
+          undefined, // taskDescription
+          undefined, // sessionMode
+          false, // useWorktree — share parent's directory
         );
         openTerminalWindow(spawned.agent_id);
       } catch (err) {
@@ -474,6 +490,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
   const hostName = agentDetail?.host_name;
   const gitProject = agentDetail?.telemetry?.git_project;
   const gitBranch = agentDetail?.telemetry?.git_branch;
+  const worktreePath = agentDetail?.telemetry?.worktree_path;
 
   // Update browser window title with host / project / branch
   useEffect(() => {
@@ -481,11 +498,12 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     if (hostName) parts.push(hostName);
     if (gitProject) parts.push(gitProject);
     if (gitBranch) parts.push(gitBranch);
+    if (worktreePath) parts.push('worktree');
     document.title = parts.join(' · ');
     return () => {
       document.title = 'Agent Dashboard';
     };
-  }, [category, hostName, gitProject, gitBranch]);
+  }, [category, hostName, gitProject, gitBranch, worktreePath]);
 
   // Build companion buttons based on current tool type
   const companionButtons: { label: string; tool: ToolCategory }[] = [];
@@ -530,6 +548,12 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
                   className="text-emerald-400 shrink-0 ml-1"
                 />
                 <span className="text-emerald-300">{gitBranch}</span>
+              </>
+            )}
+            {worktreePath && (
+              <>
+                <GitFork size={12} className="text-amber-400 shrink-0 ml-1" />
+                <span className="text-amber-300">worktree</span>
               </>
             )}
           </div>
