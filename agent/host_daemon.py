@@ -733,6 +733,38 @@ class HostDaemon:
                 os.unlink(sidecar)
             except OSError:
                 pass
+            # Clean up git worktree if one was created
+            wt_path = self.agents[agent_id].get("worktree_path")
+            wt_branch = self.agents[agent_id].get("worktree_branch")
+            orig_dir = self.agents[agent_id].get("original_project_dir")
+            if wt_path and orig_dir:
+                try:
+                    subprocess.run(
+                        ["git", "worktree", "remove", "--force", wt_path],
+                        cwd=orig_dir,
+                        capture_output=True,
+                        check=False,
+                    )
+                    print(f"Removed worktree {wt_path}")
+                except Exception as e:
+                    print(f"Failed to remove worktree {wt_path}: {e}")
+                if wt_branch:
+                    try:
+                        subprocess.run(
+                            ["git", "branch", "-D", wt_branch],
+                            cwd=orig_dir,
+                            capture_output=True,
+                            check=False,
+                        )
+                    except Exception as e:
+                        print(f"Failed to delete branch {wt_branch}: {e}")
+                # Clean up empty parent directories
+                try:
+                    parent = os.path.dirname(wt_path)
+                    if os.path.isdir(parent) and not os.listdir(parent):
+                        os.rmdir(parent)
+                except OSError:
+                    pass
             del self.agents[agent_id]
             if self.sio.connected:
                 asyncio.create_task(
