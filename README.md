@@ -98,7 +98,7 @@ session cost.
 The following projects offer alternative approaches to AI agent orchestration:
 
 - **Agent Dashboard** (This project)
-  - A web-based platform that provides multi-host orchestration and remote pseudo-terminal (PTY) access to AI agent sessions with live OpenTelemetry metrics.
+  - A web-based platform that provides multi-host orchestration and remote pseudo-terminal (PTY) access to AI agent sessions with live OpenTelemetry metrics. Supports optional git worktree isolation for running multiple agents on the same repository, real-time cost tracking, and companion session chaining.
   - **Ideal for:** Remote, web-based interaction with isolated AI agent sessions across multiple host machines via full PTY emulation.
   - **Not ideal for:** Users who prefer to work exclusively within a local, native terminal multiplexer.
   - **Restrictions:** Designed specifically to orchestrate supported CLI agents (currently Gemini CLI, Claude Code, and Bash) rather than general-purpose GUI agents or arbitrary scripts.
