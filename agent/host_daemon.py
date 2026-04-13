@@ -175,6 +175,7 @@ class HostDaemon:
             project_dir = data.get("project_dir")
             task_description = data.get("task_description")
             session_mode = data.get("session_mode", "resume")
+            use_worktree = data.get("use_worktree", False)
             cols = data.get("cols", 120)
             rows = data.get("rows", 40)
             await self.spawn_agent(
@@ -183,6 +184,7 @@ class HostDaemon:
                 project_dir,
                 task_description,
                 session_mode,
+                use_worktree,
                 cols,
                 rows,
             )
@@ -401,6 +403,7 @@ class HostDaemon:
         project_dir: Optional[str] = None,
         task: Optional[str] = None,
         session_mode: str = "resume",
+        use_worktree: bool = False,
         cols: int = 120,
         rows: int = 40,
     ):
@@ -413,6 +416,9 @@ class HostDaemon:
             task: Optional task description for the session.
             session_mode: 'resume' to continue the latest session
                           (default), or 'new' for a fresh session.
+            use_worktree: If True, create a git worktree for
+                          isolation from other agents on the same
+                          repo.
             cols: Initial terminal width in columns (default 120).
             rows: Initial terminal height in rows (default 40).
         """
@@ -425,15 +431,71 @@ class HostDaemon:
         if full_path:
             full_path = os.path.abspath(full_path)
 
+        # Create a git worktree for isolation if requested.
+        # The worktree is stored under PROJECTS_ROOT/.agent-worktrees/
+        # to keep the original repo clean.  MCP detection and
+        # companion matching use the original project_dir.
+        original_project_dir = full_path
+        worktree_path = None
+        worktree_branch = None
+        if use_worktree and full_path:
+            try:
+                project_name = os.path.relpath(full_path, self.projects_root)
+                short_id = agent_id[:8]
+                worktree_dir = os.path.join(
+                    self.projects_root,
+                    ".agent-worktrees",
+                    project_name,
+                    f"agent-{short_id}",
+                )
+                worktree_branch = f"agent/{tool}-{short_id}"
+                os.makedirs(os.path.dirname(worktree_dir), exist_ok=True)
+                # Prune stale worktree refs before creating
+                subprocess.run(
+                    ["git", "worktree", "prune"],
+                    cwd=full_path,
+                    capture_output=True,
+                    check=False,
+                )
+                subprocess.check_output(
+                    [
+                        "git",
+                        "worktree",
+                        "add",
+                        "-b",
+                        worktree_branch,
+                        worktree_dir,
+                    ],
+                    cwd=full_path,
+                    stderr=subprocess.STDOUT,
+                )
+                worktree_path = worktree_dir
+                full_path = worktree_dir
+                # Worktrees have no prior session state
+                session_mode = "new"
+                print(
+                    f"Created worktree for {agent_id}: "
+                    f"{worktree_dir} (branch {worktree_branch})"
+                )
+            except Exception as e:
+                print(
+                    f"Failed to create worktree for "
+                    f"{agent_id}: {e}. "
+                    f"Falling back to original directory."
+                )
+                full_path = original_project_dir
+                worktree_path = None
+                worktree_branch = None
+
         print(
             f"Spawning agent {agent_id} with tool: {tool} "
             f"mode: {session_mode} in {full_path}"
         )
 
         branch, project = self.get_git_info(full_path)
-        mcp_servers = self._detect_mcp_servers(full_path, tool)
+        mcp_servers = self._detect_mcp_servers(original_project_dir, tool)
         telemetry = {
-            "project_dir": full_path,
+            "project_dir": original_project_dir,
             "task_description": task,
             "git_branch": branch,
             "git_project": project,
@@ -449,6 +511,7 @@ class HostDaemon:
             "agent_status": "idle",
             "mcp_servers": mcp_servers,
             "run_time_seconds": 0,
+            "worktree_path": worktree_path,
         }
 
         # Build command based on session_mode.
@@ -550,6 +613,9 @@ class HostDaemon:
                 "permission_waiting": False,
                 "permission_candidate": 0,
                 "utf8_buffer": b"",
+                "worktree_path": worktree_path,
+                "worktree_branch": worktree_branch,
+                "original_project_dir": original_project_dir,
             }
             if self.sio.connected:
                 await self.sio.emit(
