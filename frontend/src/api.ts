@@ -47,6 +47,7 @@ export interface Agent {
     mcp_servers?: string[];
     last_exit_code?: number;
     last_cmd?: string;
+    worktree_path?: string;
   };
 }
 
@@ -70,6 +71,7 @@ export const spawnAgent = async (
   projectDir?: string,
   taskDescription?: string,
   sessionMode?: string,
+  useWorktree?: boolean,
   cols?: number,
   rows?: number,
 ): Promise<Agent> => {
@@ -79,6 +81,7 @@ export const spawnAgent = async (
     project_dir: projectDir,
     task_description: taskDescription,
     session_mode: sessionMode || 'resume',
+    use_worktree: useWorktree || false,
     cols: cols || 120,
     rows: rows || 40,
   });
