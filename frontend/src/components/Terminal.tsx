@@ -5,6 +5,7 @@ import { io, Socket } from 'socket.io-client';
 import {
   XCircle,
   GitBranch,
+  GitFork,
   Monitor,
   TerminalSquare,
   ExternalLink,
@@ -482,6 +483,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
   const hostName = agentDetail?.host_name;
   const gitProject = agentDetail?.telemetry?.git_project;
   const gitBranch = agentDetail?.telemetry?.git_branch;
+  const worktreePath = agentDetail?.telemetry?.worktree_path;
 
   // Update browser window title with host / project / branch
   useEffect(() => {
@@ -489,11 +491,12 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     if (hostName) parts.push(hostName);
     if (gitProject) parts.push(gitProject);
     if (gitBranch) parts.push(gitBranch);
+    if (worktreePath) parts.push('worktree');
     document.title = parts.join(' · ');
     return () => {
       document.title = 'Agent Dashboard';
     };
-  }, [category, hostName, gitProject, gitBranch]);
+  }, [category, hostName, gitProject, gitBranch, worktreePath]);
 
   // Build companion buttons based on current tool type
   const companionButtons: { label: string; tool: ToolCategory }[] = [];
@@ -538,6 +541,12 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
                   className="text-emerald-400 shrink-0 ml-1"
                 />
                 <span className="text-emerald-300">{gitBranch}</span>
+              </>
+            )}
+            {worktreePath && (
+              <>
+                <GitFork size={12} className="text-amber-400 shrink-0 ml-1" />
+                <span className="text-amber-300">worktree</span>
               </>
             )}
           </div>
