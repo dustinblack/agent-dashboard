@@ -8,6 +8,7 @@ import {
   Clock,
   FolderOpen,
   ChevronRight,
+  GitFork,
 } from 'lucide-react';
 import type { Agent } from '../../api';
 import {
@@ -89,6 +90,14 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
             {tel.git_branch && (
               <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
                 <GitBranch size={10} /> {tel.git_branch}
+              </span>
+            )}
+            {tel.worktree_path && (
+              <span
+                className="flex items-center gap-1 text-[10px] text-amber-400/70 font-mono"
+                title={`Worktree: ${tel.worktree_path}`}
+              >
+                <GitFork size={10} /> worktree
               </span>
             )}
             {(tel.run_time_seconds || agent.started_at) && (
