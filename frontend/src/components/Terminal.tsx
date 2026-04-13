@@ -111,11 +111,18 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         await stopAgent(agentId).catch(() => {});
 
         // Spawn a new agent with the same parameters,
-        // using resume mode for session continuity
+        // using resume mode for session continuity.
+        // If the stale session was in a worktree, use
+        // the worktree path so the agent resumes in the
+        // same isolated directory with its branch and
+        // uncommitted work intact.
+        const projectDir =
+          agentDetail.telemetry?.worktree_path ||
+          agentDetail.telemetry?.project_dir;
         const newAgent = await spawnAgent(
           agentDetail.host_id,
           agentDetail.tool_name || 'gemini',
-          agentDetail.telemetry?.project_dir,
+          projectDir,
           agentDetail.telemetry?.task_description,
           'resume',
         );
