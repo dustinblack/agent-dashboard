@@ -22,8 +22,14 @@ FROM registry.fedoraproject.org/fedora-minimal:42
 # Install nginx
 RUN microdnf install -y nginx && microdnf clean all
 
-# Remove default nginx configs to avoid conflicts
-RUN rm -f /etc/nginx/conf.d/default.conf /etc/nginx/nginx.conf.default
+# Remove default nginx configs and the default server block
+# in the main nginx.conf to avoid conflicts with our config.
+# Fedora's nginx.conf includes a catch-all server on :80
+# before conf.d/ is loaded, which would 404 on client-side
+# routes like /terminal/{id}.
+RUN rm -f /etc/nginx/conf.d/default.conf \
+         /etc/nginx/nginx.conf.default \
+    && sed -i '/^    server {/,/^    }/d' /etc/nginx/nginx.conf
 
 # Copy custom NGINX configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
