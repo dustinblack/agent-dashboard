@@ -226,6 +226,8 @@ podman run -d --name host-daemon --network=host --privileged \
 
 ```mermaid
 graph LR
+    User["User<br/>(Browser)"]
+
     subgraph Hub Server
         FE["Frontend<br/>(React + xterm.js)"]
         BE["Backend<br/>(FastAPI + Socket.IO)"]
@@ -245,6 +247,7 @@ graph LR
         HDN["Host Daemon"]
     end
 
+    User <-->|"HTTP + WebSocket"| FE
     FE <-->|"Socket.IO"| BE
     FE -->|"REST API"| BE
     BE <--> DB
@@ -256,6 +259,7 @@ graph LR
     A2 -.->|"OTel metrics,<br/>traces, logs"| OTLP1
     OTLP1 -->|"Telemetry<br/>via Socket.IO"| BE
 
+    style User fill:#4a1942,color:#fff
     style FE fill:#1e3a5f,color:#fff
     style BE fill:#1e3a5f,color:#fff
     style DB fill:#374151,color:#fff
