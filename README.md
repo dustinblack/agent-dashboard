@@ -29,12 +29,13 @@ interactive terminal access to Gemini CLI and Claude Code
 sessions running across multiple development machines — all
 from a single web interface.
 
-**How it works:** Install the hub (backend + frontend) on any
-server with `podman-compose up`. Deploy a daemon container on
-each development machine. Open the web dashboard to spawn,
-monitor, and interact with AI agent sessions remotely — full
-terminal access, live telemetry, and cost tracking from your
-browser.
+> [!TIP]
+> **How it works:** Install the hub (backend + frontend) on any
+> server with `podman-compose up`. Deploy a daemon container on
+> each development machine. Open the web dashboard to spawn,
+> monitor, and interact with AI agent sessions remotely — full
+> terminal access, live telemetry, and cost tracking from your
+> browser.
 
 The platform consists of three layers: a **React frontend**
 served by Nginx, a **FastAPI + Socket.IO backend hub** that
