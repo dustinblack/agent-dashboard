@@ -91,6 +91,11 @@ session cost.
   cascading cleanup of associated sessions.
 
 ### Terminal UX
+
+<p align="center">
+  <img src="docs/images/agent-dashboard_claude-session-window.png" alt="Claude Code session in a detached terminal window" width="800">
+</p>
+
 - **Detached terminal windows** — Attach to any session in a
   standalone browser popup for side-by-side multitasking.
 - **Session history replay** — Close and re-attach to a terminal
