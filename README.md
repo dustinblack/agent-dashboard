@@ -326,28 +326,24 @@ for background on the underlying git feature.
 
 ```mermaid
 graph TD
-    subgraph "Original Repository"
-        MAIN["main branch<br/>(working tree)"]
+    subgraph "Original Repository (/git/project)"
         GIT[".git"]
+        C1["Claude Agent"]
     end
 
-    subgraph ".agent-worktrees/project/"
-        WT1["agent-a1b2c3d4/<br/>(worktree)"]
-        WT2["agent-e5f6g7h8/<br/>(worktree)"]
+    subgraph "Worktree A (.agent-worktrees/project/agent-a1b2c3d4)"
+        C2["Claude Agent<br/>(isolated)"]
+        B1["Bash Companion<br/>(isolated)"]
     end
 
-    GIT ---|"git worktree add"| WT1
-    GIT ---|"git worktree add"| WT2
+    subgraph "Worktree B (.agent-worktrees/project/agent-e5f6g7h8)"
+        G1["Gemini Agent<br/>(isolated)"]
+    end
 
-    C1["Claude Agent"] --> MAIN
-    C2["Claude Agent<br/>(isolated)"] --> WT1
-    B1["Bash Companion"] --> WT1
-    G1["Gemini Agent<br/>(isolated)"] --> WT2
+    GIT -.->|"git worktree add"| C2
+    GIT -.->|"git worktree add"| G1
 
-    style MAIN fill:#1a3326,color:#fff
     style GIT fill:#374151,color:#fff
-    style WT1 fill:#3b2e1a,color:#fff
-    style WT2 fill:#3b2e1a,color:#fff
     style C1 fill:#2d1f4e,color:#fff
     style C2 fill:#2d1f4e,color:#fff
     style B1 fill:#374151,color:#fff
