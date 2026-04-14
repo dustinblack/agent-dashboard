@@ -319,36 +319,53 @@ sequenceDiagram
 
 ### Git Worktree Isolation
 
-Worktree-isolated agents get their own branch and working tree.
-Companions share the parent's worktree. The original repo stays
-clean. See [git worktree](https://git-scm.com/docs/git-worktree)
-for background on the underlying git feature.
+When multiple agents need to work on the same git repository,
+they can conflict — editing the same files, switching branches,
+or corrupting the index. Git
+[worktrees](https://git-scm.com/docs/git-worktree) solve this
+by creating lightweight copies of the working tree that share
+the same `.git` history but have independent file state.
+
+When you enable "Isolate in worktree" in the spawn modal, the
+daemon creates a new worktree with its own branch. The agent
+works in this isolated copy while the original repository stays
+untouched. Companion sessions (e.g. a Bash shell opened from
+an isolated Claude session) share the same worktree so they
+can collaborate without creating yet another copy.
 
 ```mermaid
-graph TD
-    subgraph "Original Repository (/git/project)"
-        GIT[".git"]
-        C1["Claude Agent"]
+graph LR
+    subgraph REPO ["Original Repo"]
+        GIT[".git history<br/>(shared)"]
+        C1["Claude Agent<br/>works here directly"]
     end
 
-    subgraph "Worktree A (.agent-worktrees/project/agent-a1b2c3d4)"
-        C2["Claude Agent<br/>(isolated)"]
-        B1["Bash Companion<br/>(isolated)"]
+    subgraph WT1 ["Worktree A"]
+        C2["Claude Agent"]
+        B1["Bash Companion"]
     end
 
-    subgraph "Worktree B (.agent-worktrees/project/agent-e5f6g7h8)"
-        G1["Gemini Agent<br/>(isolated)"]
+    subgraph WT2 ["Worktree B"]
+        G1["Gemini Agent"]
     end
 
-    GIT -.->|"git worktree add"| C2
-    GIT -.->|"git worktree add"| G1
+    GIT -.->|"creates"| WT1
+    GIT -.->|"creates"| WT2
 
     style GIT fill:#374151,color:#fff
     style C1 fill:#2d1f4e,color:#fff
     style C2 fill:#2d1f4e,color:#fff
     style B1 fill:#374151,color:#fff
     style G1 fill:#1e3a5f,color:#fff
+    style REPO fill:#1a3326,color:#fff
+    style WT1 fill:#3b2e1a,color:#fff
+    style WT2 fill:#3b2e1a,color:#fff
 ```
+
+In this example, three agents work on the same project without
+conflicts: one Claude agent works directly in the original repo,
+while a second Claude (with a Bash companion) and a Gemini agent
+each have their own isolated worktree with a separate branch.
 
 ## Troubleshooting
 
