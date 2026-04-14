@@ -73,8 +73,12 @@ session cost.
 - **Project selection** — Daemons scan `PROJECTS_ROOT` for git
   repositories (configurable depth); select a project directory
   from the dropdown when spawning an agent.
-- **Session resume** — Agents can resume their latest session on
-  spawn, preserving conversation context across daemon restarts.
+- **Session resume** — The spawn modal includes a session mode
+  toggle (Resume / New) for Claude and Gemini agents. Resume
+  continues the most recent conversation in the selected project
+  directory or worktree, preserving context across daemon
+  restarts. New
+  starts a fresh session. Resume is the default.
 - **[Git worktree](https://git-scm.com/docs/git-worktree)
   isolation** — Optionally spawn agents in isolated git worktrees
   so multiple agents can work on the same repository without
@@ -332,12 +336,28 @@ or corrupting the index. Git
 by creating lightweight copies of the working tree that share
 the same `.git` history but have independent file state.
 
-When you enable "Isolate in worktree" in the spawn modal, the
-daemon creates a new worktree with its own branch. The agent
-works in this isolated copy while the original repository stays
-untouched. Companion sessions (e.g. a Bash shell opened from
-an isolated Claude session) share the same worktree so they
-can collaborate without creating yet another copy.
+The spawn modal includes an **"Isolate in worktree"** toggle
+that controls this behavior. The toggle defaults to **off** —
+agents work directly in the original project directory, which
+is the normal single-agent workflow. However, if the dashboard
+detects that another agent is already active on the same project
+and host, the toggle automatically switches on as a **smart
+default** to prevent conflicts. You can always override the
+toggle in either direction before spawning.
+
+Companion sessions (e.g. a Bash shell opened from a Claude
+session) always inherit the parent's working directory —
+whether that's the original repo or a worktree. No additional
+worktree is created for companions.
+
+When enabled, the daemon creates a new worktree with its own
+branch under `.agent-worktrees/`. On the initial spawn, the
+session mode is set to "New" since the fresh worktree has no
+prior conversation history. However, if the agent is later
+reconnected (e.g. after a daemon restart), it resumes in the
+same worktree where the previous session's context is preserved.
+The worktree and its branch are automatically cleaned up when
+the agent is stopped.
 
 ```mermaid
 graph LR
