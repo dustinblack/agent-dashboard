@@ -383,7 +383,11 @@ each have their own isolated worktree with a separate branch.
 
 ## Similar Tools
 
-The following projects offer alternative approaches to AI agent orchestration:
+There are a growing number of projects in the AI agent
+orchestration space. To help you evaluate whether Agent
+Dashboard fits your workflow, here are some alternatives we
+are aware of along with an objective comparison of their
+strengths and trade-offs:
 
 - **Agent Dashboard** (This project)
   - A web-based platform that provides multi-host orchestration and remote pseudo-terminal (PTY) access to AI agent sessions with live OpenTelemetry metrics. Supports optional git worktree isolation for running multiple agents on the same repository, real-time cost tracking, and companion session chaining.
