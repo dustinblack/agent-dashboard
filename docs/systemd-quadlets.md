@@ -1,8 +1,13 @@
 # Running as a System Service (Systemd Quadlets)
 
-For production deployments, use systemd quadlets so that
-containers start automatically on boot without relying on the
-source directory or `compose.yml`.
+For production deployments, use systemd
+[quadlets](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html)
+so that containers start automatically on boot without relying
+on the source directory or `compose.yml`. Quadlets are simple
+INI-style files that tell systemd how to run a container as a
+managed service — similar to writing a `docker-compose.yml` but
+integrated directly with systemd for startup ordering, restart
+policies, and logging.
 
 ## Hub Services
 

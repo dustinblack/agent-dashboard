@@ -211,7 +211,9 @@ podman run -d --name host-daemon --network=host --privileged \
 
 > See the [Host Daemon Reference](docs/host-daemon.md) for the
 > full list of environment variables, volume mounts, and
-> authentication configuration.
+> authentication configuration. To run containers as systemd
+> services that start automatically on boot, see
+> [Running as a System Service](docs/systemd-quadlets.md).
 
 ### 5. Use the Dashboard
 
