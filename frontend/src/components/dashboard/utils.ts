@@ -60,6 +60,11 @@ export const getContextWindow = (
   tokensUsed: number = 0,
 ): number => {
   let baseMax = 200000;
+  // Track whether the model was matched in the catalog
+  // or a known family. Contraction only applies to truly
+  // unrecognized models where the context window is a
+  // blind default.
+  let recognized = false;
   if (model) {
     let normalizedModel = model.toLowerCase();
 
@@ -69,29 +74,36 @@ export const getContextWindow = (
       normalizedModel = normalizedModel.replace('[1m]', '');
     }
 
-    let found = false;
     for (const [key, size] of Object.entries(CONTEXT_WINDOWS)) {
       if (normalizedModel.includes(key)) {
         baseMax = size;
-        found = true;
+        recognized = true;
         break;
       }
     }
-    if (!found) {
-      if (normalizedModel.includes('gemini')) baseMax = 1048576;
-      else if (normalizedModel.includes('claude')) baseMax = 200000;
+    if (!recognized) {
+      // Family-level fallbacks for models not yet in the
+      // catalog but belonging to a known provider family.
+      if (normalizedModel.includes('gemini')) {
+        baseMax = 1048576;
+        recognized = true;
+      } else if (normalizedModel.includes('claude')) {
+        baseMax = 200000;
+        recognized = true;
+      }
     }
 
     // Override with 1M if the [1m] suffix was present
     if (has1mSuffix) {
       baseMax = 1_000_000;
+      recognized = true;
     }
   }
 
   if (!tokensUsed) return baseMax;
 
   // Expansion: If tokens exceed the hardcoded limit,
-  // expand to next tier.
+  // expand to next tier so the bar doesn't pin at 100%.
   if (tokensUsed >= baseMax) {
     const higherTiers = CONTEXT_TIERS.filter((t) => t > tokensUsed);
     return higherTiers.length > 0
@@ -99,16 +111,19 @@ export const getContextWindow = (
       : Math.ceil(tokensUsed * 1.5);
   }
 
-  // Contraction: If usage is very low compared to the
-  // hardcoded baseMax, dynamically contract the visual
-  // maximum so the progress bar remains meaningful.
-  const idealMax = Math.max(tokensUsed * 1.5, 32000);
-  if (idealMax < baseMax) {
-    const lowerTiers = CONTEXT_TIERS.filter(
-      (t) => t >= idealMax && t <= baseMax,
-    );
-    if (lowerTiers.length > 0) {
-      return lowerTiers[0];
+  // Contraction: For unrecognized models only, use token
+  // usage to heuristically guess a reasonable context
+  // window. Floor at 128k since the smallest known modern
+  // model context is 128k (GPT-4o).
+  if (!recognized) {
+    const idealMax = Math.max(tokensUsed * 1.5, 128000);
+    if (idealMax < baseMax) {
+      const lowerTiers = CONTEXT_TIERS.filter(
+        (t) => t >= idealMax && t <= baseMax,
+      );
+      if (lowerTiers.length > 0) {
+        return lowerTiers[0];
+      }
     }
   }
 
