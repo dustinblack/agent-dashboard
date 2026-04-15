@@ -9,6 +9,7 @@ import {
   FolderOpen,
   ChevronRight,
   GitFork,
+  TriangleAlert,
 } from 'lucide-react';
 import type { Agent } from '../../api';
 import {
@@ -19,6 +20,7 @@ import {
   estimateCost,
   formatCost,
   formatTokenCount,
+  isModelRecognized,
 } from './utils';
 import StatusIndicator from './StatusIndicator';
 import EditableTaskDescription from './EditableTaskDescription';
@@ -120,9 +122,16 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
 
       {agent.tool_name !== 'bash' && (
         <div className="my-2 border-t border-slate-700/50 pt-2">
-          <p className="text-[11px] text-slate-300 font-mono truncate">
-            {tel.model || '...'}
-          </p>
+          <div className="flex items-center gap-1">
+            <p className="text-[11px] text-slate-300 font-mono truncate">
+              {tel.model || '...'}
+            </p>
+            {tel.model && !isModelRecognized(tel.model) && (
+              <span title="Unrecognized model — context window and pricing may be inaccurate">
+                <TriangleAlert size={12} className="text-amber-400 shrink-0" />
+              </span>
+            )}
+          </div>
           <div className="mt-1.5">
             <div className="flex justify-between items-center mb-1">
               <span className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">

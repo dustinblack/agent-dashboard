@@ -12,24 +12,41 @@ export const CONTEXT_TIERS = [
 /**
  * Known context window sizes keyed by partial model name.
  * Used for matching against normalized model identifiers.
+ *
+ * Key ordering is critical: `.includes()` matching stops
+ * at the first hit, so more-specific keys must precede
+ * less-specific ones within each model family.
+ *
+ * Claude models with a `[1m]` suffix (e.g.
+ * "claude-opus-4-6[1m]") use 1M context; without the
+ * suffix they default to 200k. The suffix is parsed in
+ * `getContextWindow()` before consulting this map.
+ *
+ * Last verified: 2026-04-15
  */
 export const CONTEXT_WINDOWS: Record<string, number> = {
+  // Claude — all default to 200k; 1M via [1m] suffix
+  'claude-opus-4-6': 200000,
+  'claude-sonnet-4-6': 200000,
+  'claude-opus-4-5': 200000,
+  'claude-opus-4-1': 200000,
+  'claude-opus-4': 200000,
+  'claude-sonnet-4-5': 200000,
+  'claude-sonnet-4': 200000,
+  'claude-haiku-4': 200000,
   'claude-3-5': 200000,
   'claude-3': 200000,
-  'claude-opus-4': 1000000,
-  'claude-sonnet-4': 1000000,
-  'claude-haiku-4': 1000000,
-  'gemini-3.1-pro': 2000000,
-  'gemini-3.1-flash': 1000000,
-  'gemini-3-flash': 1000000,
-  'gemini-2.5-pro': 2000000,
-  'gemini-2.5-flash': 1000000,
-  'gemini-2.0-flash': 1000000,
-  'gemini-1.5-pro': 2000000,
-  'gemini-exp': 2000000,
-  'gemini-1.5-flash': 1000000,
-  'gpt-4': 128000,
+  // Gemini — all 1,048,576 input tokens
+  'gemini-3.1-pro': 1048576,
+  'gemini-3.1-flash': 1048576,
+  'gemini-3-flash': 1048576,
+  'gemini-2.5-pro': 1048576,
+  'gemini-2.5-flash-lite': 1048576,
+  'gemini-2.5-flash': 1048576,
+  'gemini-2.0-flash': 1048576,
+  // GPT
   'gpt-4o': 128000,
+  'gpt-4': 128000,
 };
 
 /**
@@ -44,9 +61,15 @@ export const getContextWindow = (
 ): number => {
   let baseMax = 200000;
   if (model) {
-    const normalizedModel = model.toLowerCase();
-    let found = false;
+    let normalizedModel = model.toLowerCase();
 
+    // Detect [1m] context suffix (e.g. "claude-opus-4-6[1m]")
+    const has1mSuffix = normalizedModel.includes('[1m]');
+    if (has1mSuffix) {
+      normalizedModel = normalizedModel.replace('[1m]', '');
+    }
+
+    let found = false;
     for (const [key, size] of Object.entries(CONTEXT_WINDOWS)) {
       if (normalizedModel.includes(key)) {
         baseMax = size;
@@ -55,8 +78,13 @@ export const getContextWindow = (
       }
     }
     if (!found) {
-      if (normalizedModel.includes('gemini')) baseMax = 1000000;
+      if (normalizedModel.includes('gemini')) baseMax = 1048576;
       else if (normalizedModel.includes('claude')) baseMax = 200000;
+    }
+
+    // Override with 1M if the [1m] suffix was present
+    if (has1mSuffix) {
+      baseMax = 1_000_000;
     }
   }
 
@@ -85,6 +113,23 @@ export const getContextWindow = (
   }
 
   return baseMax;
+};
+
+/**
+ * Returns true if the model string matches a known entry in
+ * the CONTEXT_WINDOWS map. Returns true for undefined/empty
+ * model (no warning when telemetry hasn't reported yet).
+ *
+ * Use this to flag models that may need to be added to the
+ * hardcoded lookup tables.
+ */
+export const isModelRecognized = (model?: string): boolean => {
+  if (!model) return true;
+  const normalized = model.toLowerCase().replace('[1m]', '');
+  for (const key of Object.keys(CONTEXT_WINDOWS)) {
+    if (normalized.includes(key)) return true;
+  }
+  return false;
 };
 
 /**
@@ -128,7 +173,7 @@ export const getProgressColor = (pct: number): string => {
  * cost directly (e.g. Gemini). Claude Code reports its own
  * cost via OTLP so these are only used as fallback.
  *
- * Last verified: 2026-03-24
+ * Last verified: 2026-04-15
  */
 export interface ModelPricing {
   /** Dollars per million input tokens. */
@@ -142,11 +187,32 @@ export interface ModelPricing {
 }
 
 export const MODEL_PRICING: Record<string, ModelPricing> = {
+  // Claude — ordered most-specific first
+  'claude-opus-4-6': {
+    input: 5,
+    output: 25,
+    cacheRead: 0.5,
+    cacheWrite: 6.25,
+  },
+  'claude-sonnet-4-6': {
+    input: 3,
+    output: 15,
+    cacheRead: 0.3,
+    cacheWrite: 3.75,
+  },
+  'claude-opus-4-5': { input: 5, output: 25 },
+  'claude-opus-4-1': { input: 15, output: 75 },
   'claude-opus-4': {
     input: 15,
     output: 75,
     cacheRead: 1.5,
     cacheWrite: 18.75,
+  },
+  'claude-sonnet-4-5': {
+    input: 3,
+    output: 15,
+    cacheRead: 0.3,
+    cacheWrite: 3.75,
   },
   'claude-sonnet-4': {
     input: 3,
@@ -155,10 +221,10 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     cacheWrite: 3.75,
   },
   'claude-haiku-4': {
-    input: 0.8,
-    output: 4,
-    cacheRead: 0.08,
-    cacheWrite: 1,
+    input: 1,
+    output: 5,
+    cacheRead: 0.1,
+    cacheWrite: 1.25,
   },
   'claude-3-5-sonnet': {
     input: 3,
@@ -172,6 +238,7 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     cacheRead: 0.08,
     cacheWrite: 1,
   },
+  // Gemini
   'gemini-3.1-pro': { input: 2, output: 12 },
   'gemini-3.1-flash': { input: 0.25, output: 1.5 },
   'gemini-3-flash': { input: 0.5, output: 3 },
@@ -186,7 +253,7 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
  */
 export const getModelPricing = (model?: string): ModelPricing | null => {
   if (!model) return null;
-  const normalized = model.toLowerCase();
+  const normalized = model.toLowerCase().replace('[1m]', '');
   for (const [key, pricing] of Object.entries(MODEL_PRICING)) {
     if (normalized.includes(key)) return pricing;
   }
