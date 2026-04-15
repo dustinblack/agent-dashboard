@@ -237,12 +237,12 @@ jobs:
       - name: Build backend container
         run: |
           podman build --no-cache -t agent-dashboard-backend \
-            -f backend/Containerfile backend/
+            -f backend/Containerfile .
 
       - name: Build frontend container
         run: |
           podman build --no-cache -t agent-dashboard-frontend \
-            -f frontend/Containerfile frontend/
+            -f frontend/Containerfile .
 
       - name: Build agent daemon container
         run: |
