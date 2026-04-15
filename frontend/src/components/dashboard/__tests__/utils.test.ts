@@ -67,11 +67,25 @@ describe('getContextWindow', () => {
     expect(result).toBeGreaterThan(250000);
   });
 
-  it('contracts on very low usage', () => {
-    // gemini-2.5-pro base is 1048576; usage of 10k contracts
+  it('does not contract recognized models', () => {
+    // gemini-2.5-pro is in the catalog — should always
+    // return its actual context window regardless of low
+    // token usage.
     const result = getContextWindow('gemini-2.5-pro', 10000);
-    expect(result).toBeLessThan(1048576);
-    expect(result).toBeGreaterThanOrEqual(32000);
+    expect(result).toBe(1048576);
+  });
+
+  it('contracts unrecognized models with 128k floor', () => {
+    // Unknown model defaults to 200k; low usage should
+    // contract but not below 128k.
+    const result = getContextWindow('mystery-model-v1', 5000);
+    expect(result).toBe(128000);
+  });
+
+  it('does not contract unrecognized model above floor', () => {
+    // If usage * 1.5 exceeds 128k, contract to that tier
+    const result = getContextWindow('mystery-model-v1', 100000);
+    expect(result).toBe(200000);
   });
 
   it('returns baseMax when no tokens used', () => {
