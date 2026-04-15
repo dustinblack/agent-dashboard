@@ -75,14 +75,16 @@ class AgentCard(Static):
         if cost and cost > 0:
             line.append(f"  ${cost:.2f}", style="cyan")
 
-        # Task description on second line
+        # Task description on second line — indent has
+        # no special styling so it inherits the default
+        # background, then the description text is styled.
         task = tel.get("task_description", "")
         if task:
-            # Truncate to fit
             max_len = 60
             desc = task[:max_len]
             if len(task) > max_len:
                 desc += "..."
-            line.append(f"\n   {desc}", style="dim italic")
+            line.append("\n   ")
+            line.append(desc, style="dim italic")
 
         return line
