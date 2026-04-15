@@ -24,16 +24,36 @@ describe('getContextWindow', () => {
     expect(getContextWindow('claude-3-5-sonnet')).toBe(200000);
   });
 
-  it('returns 1M for claude-opus-4 model', () => {
-    expect(getContextWindow('claude-opus-4-20250514')).toBe(1000000);
+  it('returns 200k for claude-opus-4 (deprecated)', () => {
+    expect(getContextWindow('claude-opus-4-20250514')).toBe(200000);
   });
 
-  it('returns 2M for gemini-2.5-pro model', () => {
-    expect(getContextWindow('gemini-2.5-pro-latest')).toBe(2000000);
+  it('returns 200k for claude-opus-4-6 without suffix', () => {
+    expect(getContextWindow('claude-opus-4-6')).toBe(200000);
   });
 
-  it('falls back to 1M for unknown gemini model', () => {
-    expect(getContextWindow('gemini-99-turbo')).toBe(1000000);
+  it('returns 200k for claude-haiku-4', () => {
+    expect(getContextWindow('claude-haiku-4-5')).toBe(200000);
+  });
+
+  it('returns 1M when model has [1m] suffix', () => {
+    expect(getContextWindow('claude-opus-4-6[1m]')).toBe(1000000);
+  });
+
+  it('returns 1M for sonnet with [1m] suffix', () => {
+    expect(getContextWindow('claude-sonnet-4-6[1m]')).toBe(1000000);
+  });
+
+  it('returns 1048576 for gemini-2.5-pro model', () => {
+    expect(getContextWindow('gemini-2.5-pro-latest')).toBe(1048576);
+  });
+
+  it('returns 1048576 for gemini-2.5-flash-lite', () => {
+    expect(getContextWindow('gemini-2.5-flash-lite')).toBe(1048576);
+  });
+
+  it('falls back to 1048576 for unknown gemini model', () => {
+    expect(getContextWindow('gemini-99-turbo')).toBe(1048576);
   });
 
   it('falls back to 200k for unknown claude model', () => {
@@ -41,15 +61,15 @@ describe('getContextWindow', () => {
   });
 
   it('expands beyond limit when tokens exceed base', () => {
-    // claude-3-5 base is 200k; if usage is 250k, should expand
+    // claude-3-5 base is 200k; if usage is 250k, expand
     const result = getContextWindow('claude-3-5-sonnet', 250000);
     expect(result).toBeGreaterThan(250000);
   });
 
   it('contracts on very low usage', () => {
-    // gemini-2.5-pro base is 2M; usage of 10k should contract
+    // gemini-2.5-pro base is 1048576; usage of 10k contracts
     const result = getContextWindow('gemini-2.5-pro', 10000);
-    expect(result).toBeLessThan(2000000);
+    expect(result).toBeLessThan(1048576);
     expect(result).toBeGreaterThanOrEqual(32000);
   });
 
@@ -137,11 +157,32 @@ describe('formatDuration', () => {
 });
 
 describe('getModelPricing', () => {
-  it('returns pricing for claude-opus-4', () => {
+  it('returns pricing for claude-opus-4 (deprecated)', () => {
     const p = getModelPricing('claude-opus-4-20250514');
     expect(p).not.toBeNull();
     expect(p!.input).toBe(15);
     expect(p!.output).toBe(75);
+  });
+
+  it('returns pricing for claude-opus-4-6', () => {
+    const p = getModelPricing('claude-opus-4-6');
+    expect(p).not.toBeNull();
+    expect(p!.input).toBe(5);
+    expect(p!.output).toBe(25);
+  });
+
+  it('strips [1m] suffix for pricing lookup', () => {
+    const p = getModelPricing('claude-opus-4-6[1m]');
+    expect(p).not.toBeNull();
+    expect(p!.input).toBe(5);
+    expect(p!.output).toBe(25);
+  });
+
+  it('returns updated pricing for claude-haiku-4', () => {
+    const p = getModelPricing('claude-haiku-4-5');
+    expect(p).not.toBeNull();
+    expect(p!.input).toBe(1);
+    expect(p!.output).toBe(5);
   });
 
   it('returns pricing for gemini-2.5-pro', () => {
