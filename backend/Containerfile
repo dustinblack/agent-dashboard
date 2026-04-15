@@ -6,7 +6,7 @@ RUN apk add --no-cache git
 COPY .gi[t] /tmp/.git
 ARG APP_VERSION=
 RUN if [ -d /tmp/.git ]; then \
-        git -C /tmp describe --always --dirty > /tmp/VERSION; \
+        git -C /tmp describe --always --tags > /tmp/VERSION; \
     elif [ -n "$APP_VERSION" ]; then \
         echo "$APP_VERSION" > /tmp/VERSION; \
     else \
