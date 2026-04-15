@@ -8,19 +8,25 @@ RUN dnf install --setopt=install_weak_deps=False --setopt=retries=3 -y \
     python3-pip \
     python3-devel \
     gcc \
+    git \
     && dnf clean all
 
 # Copy requirements and install
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Embed application version (set at build time via
-# --build-arg APP_VERSION=v0.4.0 or git describe output)
-ARG APP_VERSION=dev
-RUN echo "$APP_VERSION" > /app/VERSION
+# Detect version from git tags automatically.
+# Produces clean tags (v0.4.0) for releases or
+# descriptive versions (v0.4.0-3-g20799ff) for dev builds.
+# Falls back to "dev" if .git is not in the build context.
+COPY .git /tmp/.git
+RUN git -C /tmp describe --always --dirty 2>/dev/null \
+    > /app/VERSION \
+    || echo "dev" > /app/VERSION \
+    && rm -rf /tmp/.git
 
 # Copy application code
-COPY . .
+COPY backend/ .
 
 # Ensure data directory exists for SQLite
 RUN mkdir -p /app/data
