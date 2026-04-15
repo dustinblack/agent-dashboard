@@ -14,6 +14,11 @@ RUN dnf install --setopt=install_weak_deps=False --setopt=retries=3 -y \
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
+# Embed application version (set at build time via
+# --build-arg APP_VERSION=v0.4.0 or git describe output)
+ARG APP_VERSION=dev
+RUN echo "$APP_VERSION" > /app/VERSION
+
 # Copy application code
 COPY . .
 
