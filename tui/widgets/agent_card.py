@@ -35,7 +35,7 @@ class AgentCard(Static):
         agent: Agent data dict from the backend API.
     """
 
-    agent = reactive({})
+    agent = reactive({}, always_update=True)
 
     def __init__(self, agent: dict, **kwargs):
         super().__init__(**kwargs)

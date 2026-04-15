@@ -175,7 +175,7 @@ class DashboardClient:
             await self._sio.connect(
                 self.base_url,
                 namespaces=["/terminal"],
-                socketio_path="/socket.io",
+                socketio_path="socket.io",
             )
             self._connected = True
 

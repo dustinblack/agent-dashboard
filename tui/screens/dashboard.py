@@ -40,6 +40,8 @@ class DashboardScreen(Screen):
         Binding("s", "spawn", "Spawn"),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
+        Binding("down", "cursor_down", "Down", show=False),
+        Binding("up", "cursor_up", "Up", show=False),
     ]
 
     def __init__(self, client: DashboardClient, **kwargs):
@@ -243,16 +245,28 @@ class DashboardScreen(Screen):
     # --- Live update handlers ---
 
     def _on_agent_telemetry(self, agent_id: str, telemetry: Dict) -> None:
-        """Handles live telemetry updates."""
-        for agent in self.agents:
+        """Handles live telemetry updates.
+
+        Updates the agent data in place and refreshes only
+        the affected card and detail pane rather than
+        rebuilding the entire list.
+        """
+        for i, agent in enumerate(self.agents):
             if agent.get("agent_id") == agent_id:
                 agent["telemetry"] = {
                     **(agent.get("telemetry") or {}),
                     **telemetry,
                 }
+                # Update just this card's display
+                try:
+                    card = self.query_one(f"#agent-{i}", AgentCard)
+                    card.agent = agent
+                except Exception:
+                    pass
+                # Update detail pane if this agent is selected
+                if i == self._selected_index:
+                    self._update_detail(agent)
                 break
-        # Rebuild the list to reflect changes
-        self._rebuild_list()
 
     def _on_agent_status(self, agent_id: str, status: str) -> None:
         """Handles agent status changes."""

@@ -67,6 +67,7 @@ class AgentDashboardApp(App):
         self.base_url = base_url
         self.client = DashboardClient(base_url)
         self._in_tmux = bool(os.environ.get("TMUX"))
+        self._attach_cmd: str | None = None
 
     def on_mount(self) -> None:
         """Pushes the main dashboard screen on startup."""
@@ -96,9 +97,17 @@ class AgentDashboardApp(App):
             parts.append(branch)
         window_name = ":".join(parts)
 
-        # Build the terminal client command
+        # Build the terminal client command. Use the
+        # current working directory to ensure the tui
+        # package is importable in the tmux subprocess.
+        # Build the terminal client command. Use the
+        # current working directory to ensure the tui
+        # package is importable in the tmux subprocess.
+        # Add a read prompt on exit so error messages
+        # are visible before the tmux window closes.
+        cwd = os.getcwd()
         client_cmd = (
-            f"{sys.executable} -m tui.terminal_client "
+            f"cd {cwd} && {sys.executable} -m tui.terminal_client "
             f"{agent_id} --url {self.base_url}"
         )
 
@@ -116,17 +125,11 @@ class AgentDashboardApp(App):
             )
             self.notify(f"Attached in tmux window: {window_name}")
         else:
-            # Suspend the TUI and run terminal client in
-            # foreground. Resume TUI when it exits.
-            self.suspend()  # pylint: disable=no-member
-            try:
-                subprocess.run(
-                    client_cmd,
-                    shell=True,
-                    check=False,
-                )
-            finally:
-                self.resume()  # pylint: disable=no-member
+            # Not in tmux — exit the TUI and run the
+            # terminal client directly. The user can
+            # relaunch the TUI after disconnecting.
+            self._attach_cmd = client_cmd
+            self.exit()
 
     async def on_unmount(self) -> None:
         """Clean up client connections on exit."""
@@ -145,6 +148,15 @@ def main():
 
     app = AgentDashboardApp(args.url)
     app.run()
+
+    # If the user pressed attach without tmux, the TUI
+    # exits and we run the terminal client directly.
+    if app._attach_cmd:  # pylint: disable=protected-access
+        subprocess.run(
+            app._attach_cmd,  # pylint: disable=protected-access
+            shell=True,
+            check=False,
+        )
 
 
 if __name__ == "__main__":

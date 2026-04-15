@@ -31,7 +31,7 @@ _DA_RESPONSE = re.compile(r"\x1b\[\?[\d;]*c")
 # Stale session timeout — if history_complete is not
 # received within this many seconds, the session is
 # considered stale and we exit.
-_STALE_TIMEOUT = 5.0
+_STALE_TIMEOUT = 10.0
 
 
 class TerminalClient:
@@ -54,7 +54,7 @@ class TerminalClient:
         self._history_buf: list[str] = []
         self._old_settings: Optional[list] = None
         self._running = False
-        self._stale_timer: Optional[asyncio.TimerHandle] = None
+        self._defer_flush = False
 
     async def run(self):
         """Main entry point. Connects, replays history,
@@ -78,17 +78,40 @@ class TerminalClient:
 
         await self.client.join_room(self.agent_id)
 
-        # Start stale session timer
-        loop = asyncio.get_running_loop()
-        self._stale_timer = loop.call_later(_STALE_TIMEOUT, self._on_stale)
+        # Wait for history_complete before entering raw
+        # mode. History chunks are buffered (not flushed)
+        # during this wait.
+        self._defer_flush = True
+        for _ in range(int(_STALE_TIMEOUT * 10)):
+            await asyncio.sleep(0.1)
+            if not self._replaying:
+                break
+        if self._replaying:
+            print(
+                "Session is stale — the agent may no " "longer be running.",
+                file=sys.stderr,
+            )
+            await self.client.close()
+            return 1
 
         # Send initial resize
+        loop = asyncio.get_running_loop()
         rows, cols = self._get_terminal_size()
         await self.client.send_resize(self.agent_id, cols, rows)
 
-        # Set terminal to raw mode for passthrough
+        # Enter raw mode BEFORE flushing history so that
+        # escape sequences in the history don't corrupt
+        # the outer terminal/tmux.
         self._enter_raw_mode()
         self._running = True
+
+        # Now flush buffered history
+        for chunk in self._history_buf:
+            filtered = _DA_RESPONSE.sub("", chunk)
+            if filtered:
+                self._write_output(filtered)
+        self._history_buf.clear()
+        self._defer_flush = False
 
         # Handle SIGWINCH for terminal resize
         loop.add_signal_handler(
@@ -121,24 +144,41 @@ class TerminalClient:
             # Filter DA responses
             filtered = _DA_RESPONSE.sub("", output)
             if filtered:
-                sys.stdout.write(filtered)
-                sys.stdout.flush()
+                self._write_output(filtered)
+
+    def _write_output(self, data: str):
+        """Writes output to stdout, retrying on
+        BlockingIOError. In raw mode, the PTY output
+        buffer can fill up during rapid output bursts.
+        """
+        encoded = data.encode("utf-8", errors="replace")
+        fd = sys.stdout.fileno()
+        while encoded:
+            try:
+                written = os.write(fd, encoded)
+                encoded = encoded[written:]
+            except BlockingIOError:
+                # Buffer full — brief yield then retry
+                import time
+
+                time.sleep(0.001)  # 1ms backoff
 
     def _on_history_complete(self, agent_id: str):
-        """Handles history replay completion."""
+        """Handles history replay completion.
+
+        If _defer_flush is True (during initial connect),
+        just marks replay done — the caller will flush
+        after entering raw mode. Otherwise flushes
+        immediately (for reconnect scenarios).
+        """
         if agent_id != self.agent_id:
             return
-        # Cancel stale timer
-        if self._stale_timer:
-            self._stale_timer.cancel()
-            self._stale_timer = None
-        # Flush buffered history
-        for chunk in self._history_buf:
-            filtered = _DA_RESPONSE.sub("", chunk)
-            if filtered:
-                sys.stdout.write(filtered)
-        sys.stdout.flush()
-        self._history_buf.clear()
+        if not self._defer_flush:
+            for chunk in self._history_buf:
+                filtered = _DA_RESPONSE.sub("", chunk)
+                if filtered:
+                    self._write_output(filtered)
+            self._history_buf.clear()
         self._replaying = False
 
     def _on_status(self, agent_id: str, status: str):
@@ -152,28 +192,47 @@ class TerminalClient:
                 file=sys.stderr,
             )
 
-    def _on_stale(self):
-        """Called when history_complete is not received
-        within the timeout. The session is stale.
-        """
-        self._running = False
-        self._restore_terminal()
-        print(
-            "\r\nSession is stale — the agent may no longer be running.\r\n",
-            file=sys.stderr,
-        )
-
     async def _read_stdin(self):
-        """Reads stdin in raw mode and sends to the agent."""
+        """Reads stdin in raw mode and sends to the agent.
+
+        Detach sequence: press Enter then ~. (tilde-dot)
+        to disconnect from the session, similar to SSH.
+        Ctrl+C (0x03) also triggers a clean disconnect.
+        """
         loop = asyncio.get_running_loop()
         reader = asyncio.StreamReader()
         protocol = asyncio.StreamReaderProtocol(reader)
         await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+        last_was_newline = False
+        last_was_tilde = False
         while self._running:
             try:
                 data = await asyncio.wait_for(reader.read(4096), timeout=0.1)
                 if not data:
                     break
+                # Check for detach sequences byte by byte
+                for byte in data:
+                    char = chr(byte)
+                    # Ctrl+C — disconnect immediately
+                    if byte == 0x03:
+                        self._running = False
+                        return
+                    # Enter → ~ → . sequence (like SSH)
+                    if last_was_tilde and char == ".":
+                        self._running = False
+                        return
+                    if last_was_newline and char == "~":
+                        last_was_tilde = True
+                        last_was_newline = False
+                        continue
+                    # If we buffered a tilde but next char
+                    # wasn't '.', send the tilde through
+                    if last_was_tilde:
+                        await self.client.send_input(self.agent_id, "~")
+                        last_was_tilde = False
+                    last_was_newline = char in ("\r", "\n")
+                    last_was_tilde = False
+
                 text = data.decode("utf-8", errors="replace")
                 # Filter DA responses from input
                 filtered = _DA_RESPONSE.sub("", text)
