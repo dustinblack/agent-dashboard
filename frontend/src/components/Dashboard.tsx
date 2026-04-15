@@ -1,6 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { getHosts, getAgents, spawnAgent, stopAgent, deleteHost } from '../api';
-import type { Host, Agent } from '../api';
+import {
+  getHosts,
+  getAgents,
+  spawnAgent,
+  stopAgent,
+  deleteHost,
+  getVersion,
+} from '../api';
+import type { Host, Agent, VersionInfo } from '../api';
 import { Cpu, Activity } from 'lucide-react';
 import { io } from 'socket.io-client';
 import LogoSvg from './LogoSvg';
@@ -22,6 +29,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
     hostId: number;
     tool: string;
   } | null>(null);
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+
+  // Fetch version info on mount
+  const appVersion = import.meta.env.VITE_APP_VERSION || 'dev';
+  useEffect(() => {
+    getVersion()
+      .then(setVersionInfo)
+      .catch(() => {}); // Degrade gracefully
+  }, []);
 
   const projectsCache = useRef<Record<number, Host['projects']>>({});
 
@@ -218,6 +234,39 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
         <h1 className="text-3xl font-bold flex items-center gap-3 text-slate-50">
           <LogoSvg className="w-9 h-9" />
           Agent Dashboard
+          <span className="text-xs font-normal text-slate-500 font-mono self-end mb-0.5">
+            {appVersion}
+            {versionInfo?.update_available && versionInfo.latest && (
+              <>
+                {' '}
+                <span className="text-slate-600">→</span>{' '}
+                <a
+                  href={versionInfo.latest_url || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline"
+                >
+                  {versionInfo.latest} available
+                </a>
+              </>
+            )}
+            {!versionInfo?.update_available &&
+              versionInfo?.is_dev &&
+              versionInfo?.latest && (
+                <>
+                  {' '}
+                  <span className="text-slate-600">·</span>{' '}
+                  <a
+                    href={versionInfo.latest_url || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-slate-500 hover:underline"
+                  >
+                    latest: {versionInfo.latest}
+                  </a>
+                </>
+              )}
+          </span>
         </h1>
         <div className="flex items-center gap-4">
           <ThemeSelector />

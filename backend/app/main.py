@@ -4,10 +4,13 @@ Defines Pydantic schemas, authentication endpoints, and CRUD
 operations for hosts, agents, and telemetry.
 """
 
+import asyncio
 import os
+import re
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 
+import httpx
 import socketio
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +24,53 @@ from . import models, database, auth, socket
 
 # Initialize the database
 models.Base.metadata.create_all(bind=database.engine)
+
+# --- Version tracking ---
+# Read embedded version from /app/VERSION (written at build
+# time). Falls back to "dev" if the file doesn't exist.
+_CURRENT_VERSION = "dev"
+try:
+    with open("/app/VERSION", "r", encoding="utf-8") as _vf:
+        _CURRENT_VERSION = _vf.read().strip() or "dev"
+except FileNotFoundError:
+    pass
+
+# Regex to detect clean semver tags (e.g. v0.4.0) vs
+# development builds (e.g. v0.4.0-3-g20799ff or just a hash)
+_SEMVER_TAG = re.compile(r"^v?\d+\.\d+\.\d+$")
+
+# Cached latest release info from GitHub
+_latest_release: Dict[str, Optional[str]] = {
+    "tag": None,
+    "url": None,
+}
+
+# GitHub repo for release checks
+_GITHUB_REPO = os.getenv(
+    "GITHUB_REPO",
+    "dustinblack/agent-dashboard",
+)
+# Interval between GitHub release checks (seconds)
+_VERSION_CHECK_INTERVAL = 1800  # 30 minutes
+
+
+def _parse_semver(version: str) -> Optional[tuple]:
+    """Parses a version string into a (major, minor, patch)
+    tuple. Returns None if the version is not a clean semver
+    tag.
+    """
+    match = re.match(r"^v?(\d+)\.(\d+)\.(\d+)$", version)
+    if match:
+        return tuple(int(x) for x in match.groups())
+    return None
+
+
+def _is_dev_build(version: str) -> bool:
+    """Returns True if the version is a development build
+    (not a clean semver tag).
+    """
+    return not _SEMVER_TAG.match(version)
+
 
 fastapi_app = FastAPI(title="AI Coding Agent Dashboard API")
 
@@ -500,3 +550,69 @@ def health_check():
     Simple public health check endpoint.
     """
     return {"status": "healthy"}
+
+
+@fastapi_app.get("/version")
+def get_version():
+    """Returns current version and latest available release.
+
+    The current version is embedded at build time. The latest
+    release is fetched from GitHub periodically in the
+    background. For tagged builds, update_available is true
+    when a newer semver release exists. For development builds,
+    update_available is always false but the latest release
+    info is still returned for informational display.
+    """
+    current = _CURRENT_VERSION
+    latest = _latest_release["tag"]
+    latest_url = _latest_release["url"]
+    is_dev = _is_dev_build(current)
+
+    update_available = False
+    if not is_dev and latest:
+        current_ver = _parse_semver(current)
+        latest_ver = _parse_semver(latest)
+        if current_ver and latest_ver:
+            update_available = latest_ver > current_ver
+
+    return {
+        "current": current,
+        "is_dev": is_dev,
+        "latest": latest,
+        "latest_url": latest_url,
+        "update_available": update_available,
+    }
+
+
+async def _check_latest_release():
+    """Background task that periodically fetches the latest
+    GitHub release and caches the result. Runs every 30 minutes.
+    Errors are logged but do not affect application operation.
+    """
+    while True:
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f"https://api.github.com/repos/{_GITHUB_REPO}" "/releases/latest",
+                    headers={"Accept": "application/vnd.github.v3+json"},
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    _latest_release["tag"] = data.get("tag_name")
+                    _latest_release["url"] = data.get("html_url")
+                    print(
+                        f"Version check: current={_CURRENT_VERSION}"
+                        f" latest={_latest_release['tag']}"
+                    )
+                else:
+                    print(f"Version check failed: " f"HTTP {resp.status_code}")
+        except Exception as e:
+            print(f"Version check error: {e}")
+        await asyncio.sleep(_VERSION_CHECK_INTERVAL)
+
+
+@fastapi_app.on_event("startup")
+async def start_version_checker():
+    """Launches the background GitHub release checker."""
+    asyncio.create_task(_check_latest_release())

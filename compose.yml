@@ -3,8 +3,8 @@ version: '3.8'
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Containerfile
+      context: .
+      dockerfile: backend/Containerfile
     ports:
       - "8000:8000"
     volumes:
@@ -16,8 +16,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Containerfile
+      context: .
+      dockerfile: frontend/Containerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-}
     ports:

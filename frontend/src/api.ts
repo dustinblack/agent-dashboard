@@ -122,4 +122,17 @@ export const getMe = async () => {
   return response.data;
 };
 
+export interface VersionInfo {
+  current: string;
+  is_dev: boolean;
+  latest: string | null;
+  latest_url: string | null;
+  update_available: boolean;
+}
+
+export const getVersion = async (): Promise<VersionInfo> => {
+  const response = await api.get('/version');
+  return response.data;
+};
+
 export default api;
