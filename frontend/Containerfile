@@ -1,10 +1,17 @@
-# Stage 0: Detect version from git
+# Stage 0: Detect version from git (if available)
 FROM docker.io/library/alpine:3 AS version
 RUN apk add --no-cache git
-COPY .git /tmp/.git
-RUN git -C /tmp describe --always --dirty 2>/dev/null \
-    > /tmp/VERSION \
-    || echo "dev" > /tmp/VERSION
+# Use glob pattern .gi[t] so COPY succeeds even when
+# .git is absent (e.g. building from a tarball).
+COPY .gi[t] /tmp/.git
+ARG APP_VERSION=
+RUN if [ -d /tmp/.git ]; then \
+        git -C /tmp describe --always --dirty > /tmp/VERSION; \
+    elif [ -n "$APP_VERSION" ]; then \
+        echo "$APP_VERSION" > /tmp/VERSION; \
+    else \
+        echo "dev" > /tmp/VERSION; \
+    fi
 
 # Stage 1: Build the React app
 FROM docker.io/library/node:22-slim AS build

@@ -1,3 +1,19 @@
+# Stage 0: Detect version from git (if available)
+FROM docker.io/library/alpine:3 AS version
+RUN apk add --no-cache git
+# Use glob pattern .gi[t] so COPY succeeds even when
+# .git is absent (e.g. building from a tarball).
+COPY .gi[t] /tmp/.git
+ARG APP_VERSION=
+RUN if [ -d /tmp/.git ]; then \
+        git -C /tmp describe --always --dirty > /tmp/VERSION; \
+    elif [ -n "$APP_VERSION" ]; then \
+        echo "$APP_VERSION" > /tmp/VERSION; \
+    else \
+        echo "dev" > /tmp/VERSION; \
+    fi
+
+# Stage 1: Application
 FROM registry.fedoraproject.org/fedora:42
 
 WORKDIR /app
@@ -8,22 +24,14 @@ RUN dnf install --setopt=install_weak_deps=False --setopt=retries=3 -y \
     python3-pip \
     python3-devel \
     gcc \
-    git \
     && dnf clean all
 
 # Copy requirements and install
 COPY backend/requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Detect version from git tags automatically.
-# Produces clean tags (v0.4.0) for releases or
-# descriptive versions (v0.4.0-3-g20799ff) for dev builds.
-# Falls back to "dev" if .git is not in the build context.
-COPY .git /tmp/.git
-RUN git -C /tmp describe --always --dirty 2>/dev/null \
-    > /app/VERSION \
-    || echo "dev" > /app/VERSION \
-    && rm -rf /tmp/.git
+# Embed detected version
+COPY --from=version /tmp/VERSION /app/VERSION
 
 # Copy application code
 COPY backend/ .
