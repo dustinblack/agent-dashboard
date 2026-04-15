@@ -1025,7 +1025,6 @@ class HostDaemon:
                 if not agent_id:
                     print(f"OTLP: no agent match for resource " f"attrs: {res_attrs}")
                     continue
-                self.agents[agent_id]["last_otlp_time"] = time.monotonic()
                 tel = self.agents[agent_id]["telemetry"]
                 changed = False
 
@@ -1037,12 +1036,14 @@ class HostDaemon:
                         if self._update_telemetry_from_attrs(tel, attrs):
                             changed = True
 
-                if changed and self.sio.connected:
-                    await self.sio.emit(
-                        "agent_telemetry",
-                        {"agent_id": agent_id, "telemetry": tel},
-                        namespace="/terminal",
-                    )
+                if changed:
+                    self.agents[agent_id]["last_otlp_time"] = time.monotonic()
+                    if self.sio.connected:
+                        await self.sio.emit(
+                            "agent_telemetry",
+                            {"agent_id": agent_id, "telemetry": tel},
+                            namespace="/terminal",
+                        )
 
             # Process OTLP Traces (resourceSpans → scopeSpans → spans)
             for res_span in data.get("resourceSpans", []):
@@ -1054,7 +1055,6 @@ class HostDaemon:
 
                 if not agent_id:
                     continue
-                self.agents[agent_id]["last_otlp_time"] = time.monotonic()
                 tel = self.agents[agent_id]["telemetry"]
                 changed = False
 
@@ -1094,12 +1094,14 @@ class HostDaemon:
                                 info["permission_candidate"] = time.monotonic()
                                 changed = True
 
-                if changed and self.sio.connected:
-                    await self.sio.emit(
-                        "agent_telemetry",
-                        {"agent_id": agent_id, "telemetry": tel},
-                        namespace="/terminal",
-                    )
+                if changed:
+                    self.agents[agent_id]["last_otlp_time"] = time.monotonic()
+                    if self.sio.connected:
+                        await self.sio.emit(
+                            "agent_telemetry",
+                            {"agent_id": agent_id, "telemetry": tel},
+                            namespace="/terminal",
+                        )
 
             # Process OTLP Metrics
             # (resourceMetrics → scopeMetrics → metrics → dataPoints)
@@ -1114,7 +1116,6 @@ class HostDaemon:
 
                 if not agent_id:
                     continue
-                self.agents[agent_id]["last_otlp_time"] = time.monotonic()
                 tel = self.agents[agent_id]["telemetry"]
                 changed = False
 
@@ -1253,12 +1254,14 @@ class HostDaemon:
                                     tel["run_time_seconds"] = int(value / 1000)
                                     changed = True
 
-                if changed and self.sio.connected:
-                    await self.sio.emit(
-                        "agent_telemetry",
-                        {"agent_id": agent_id, "telemetry": tel},
-                        namespace="/terminal",
-                    )
+                if changed:
+                    self.agents[agent_id]["last_otlp_time"] = time.monotonic()
+                    if self.sio.connected:
+                        await self.sio.emit(
+                            "agent_telemetry",
+                            {"agent_id": agent_id, "telemetry": tel},
+                            namespace="/terminal",
+                        )
 
             return web.Response(status=200)
         except Exception as e:
