@@ -133,11 +133,13 @@ The `compose.yml` in the project root starts the hub services:
 services:
   backend:
     # FastAPI + Socket.IO hub on port 8000
+    # Build context is repo root (for git version detection)
     # Persists SQLite DB in dashboard_data volume
     # BYPASS_AUTH=true skips OIDC for private networks
 
   frontend:
     # React UI served by Nginx on port 8080
+    # Build context is repo root (for git version detection)
     # VITE_API_URL build arg configures backend connection
 ```
 
@@ -147,6 +149,12 @@ services:
 | `BYPASS_AUTH` | Set to `true` to skip OIDC auth (default in compose) |
 | `DATABASE_URL` | SQLite path inside the backend container |
 | `dashboard_data` | Named volume for database persistence |
+
+> [!NOTE]
+> Both services use the **repo root** as their build context
+> so they can detect the application version from git tags
+> automatically. The version is displayed in the dashboard
+> header and used for upgrade notifications.
 
 ## Included Tools
 

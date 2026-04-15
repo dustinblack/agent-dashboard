@@ -124,6 +124,10 @@ session cost.
   derived from OTLP activity and terminal output patterns.
 - **MCP server detection** — Detects configured MCP servers from
   `.mcp.json`, `~/.claude.json`, or `~/.gemini/settings.json`.
+- **Version & upgrade notification** — The dashboard header
+  displays the current version (auto-detected from git tags at
+  build time) and checks GitHub for newer releases, showing a
+  subtle upgrade indicator when one is available.
 
 ## Getting Started
 
