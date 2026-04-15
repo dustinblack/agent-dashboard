@@ -13,6 +13,7 @@ import {
   estimateCost,
   formatCost,
   formatTokenCount,
+  isModelRecognized,
 } from '../utils';
 
 describe('getContextWindow', () => {
@@ -75,6 +76,32 @@ describe('getContextWindow', () => {
 
   it('returns baseMax when no tokens used', () => {
     expect(getContextWindow('gpt-4o', 0)).toBe(128000);
+  });
+});
+
+describe('isModelRecognized', () => {
+  it('returns true for known claude model', () => {
+    expect(isModelRecognized('claude-opus-4-6')).toBe(true);
+  });
+
+  it('returns true for known model with [1m] suffix', () => {
+    expect(isModelRecognized('claude-opus-4-6[1m]')).toBe(true);
+  });
+
+  it('returns true for known gemini model', () => {
+    expect(isModelRecognized('gemini-2.5-pro-latest')).toBe(true);
+  });
+
+  it('returns false for unknown model', () => {
+    expect(isModelRecognized('some-new-model-v9')).toBe(false);
+  });
+
+  it('returns true for undefined model', () => {
+    expect(isModelRecognized()).toBe(true);
+  });
+
+  it('returns true for empty string', () => {
+    expect(isModelRecognized('')).toBe(true);
   });
 });
 

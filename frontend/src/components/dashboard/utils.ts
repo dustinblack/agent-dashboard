@@ -116,6 +116,23 @@ export const getContextWindow = (
 };
 
 /**
+ * Returns true if the model string matches a known entry in
+ * the CONTEXT_WINDOWS map. Returns true for undefined/empty
+ * model (no warning when telemetry hasn't reported yet).
+ *
+ * Use this to flag models that may need to be added to the
+ * hardcoded lookup tables.
+ */
+export const isModelRecognized = (model?: string): boolean => {
+  if (!model) return true;
+  const normalized = model.toLowerCase().replace('[1m]', '');
+  for (const key of Object.keys(CONTEXT_WINDOWS)) {
+    if (normalized.includes(key)) return true;
+  }
+  return false;
+};
+
+/**
  * Returns Tailwind color classes for agent tool type badges.
  * Gemini = blue, Claude = purple, Bash = slate.
  */
