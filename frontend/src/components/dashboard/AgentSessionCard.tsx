@@ -127,11 +127,9 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
               {tel.model || '...'}
             </p>
             {tel.model && !isModelRecognized(tel.model) && (
-              <TriangleAlert
-                size={12}
-                className="text-amber-400 shrink-0"
-                title="Unrecognized model — context window and pricing may be inaccurate"
-              />
+              <span title="Unrecognized model — context window and pricing may be inaccurate">
+                <TriangleAlert size={12} className="text-amber-400 shrink-0" />
+              </span>
             )}
           </div>
           <div className="mt-1.5">
