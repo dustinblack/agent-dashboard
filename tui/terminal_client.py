@@ -68,12 +68,7 @@ class TerminalClient:
 
         # Connect and join the agent room
         try:
-            print(
-                f"Connecting to {self.base_url}...",
-                file=sys.stderr,
-            )
             await self.client.connect()
-            print("Connected.", file=sys.stderr)
         except Exception as e:
             print(
                 f"Failed to connect to {self.base_url}: {e}",
@@ -81,12 +76,7 @@ class TerminalClient:
             )
             return 1
 
-        print(
-            f"Joining room {self.agent_id}...",
-            file=sys.stderr,
-        )
         await self.client.join_room(self.agent_id)
-        print("Joined. Waiting for history...", file=sys.stderr)
 
         # Wait for history_complete before entering raw
         # mode. History chunks are buffered (not flushed)
@@ -108,11 +98,6 @@ class TerminalClient:
             # Only consider stale if no chunks arrived for
             # the full timeout AND we never got any chunks
             if idle_ticks >= int(_STALE_TIMEOUT * 10):
-                print(
-                    f"Timeout: chunks={last_chunk_count} "
-                    f"replaying={self._replaying}",
-                    file=sys.stderr,
-                )
                 if last_chunk_count == 0:
                     # No chunks at all — try auto-reconnect
                     new_id = await self._auto_reconnect()

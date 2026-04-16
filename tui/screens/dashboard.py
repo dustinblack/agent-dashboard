@@ -141,7 +141,7 @@ class DashboardScreen(Screen):
             if not self.agents:
                 await container.mount(
                     Static(
-                        "  No active agents. " "Press [bold]s[/bold] to spawn.",
+                        "  No active agents. Press [bold]s[/bold] to spawn.",
                         markup=True,
                     )
                 )

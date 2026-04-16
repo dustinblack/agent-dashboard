@@ -97,17 +97,10 @@ class AgentDashboardApp(App):
             parts.append(branch)
         window_name = ":".join(parts)
 
-        # Build the terminal client command. Use the
-        # current working directory to ensure the tui
-        # package is importable in the tmux subprocess.
-        # Build the terminal client command. Use the
-        # current working directory to ensure the tui
-        # package is importable in the tmux subprocess.
-        # Add a read prompt on exit so error messages
-        # are visible before the tmux window closes.
+        # Build the terminal client command. Ensure the
+        # tmux subprocess uses the same working directory,
+        # venv, and PYTHONPATH as the TUI.
         cwd = os.getcwd()
-        # Ensure the tmux subprocess uses the same Python
-        # environment (venv, PYTHONPATH) as the TUI.
         venv = os.environ.get("VIRTUAL_ENV", "")
         activate = f"source {venv}/bin/activate && " if venv else ""
         client_cmd = (
