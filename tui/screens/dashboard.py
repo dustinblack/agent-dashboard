@@ -62,6 +62,13 @@ class DashboardScreen(Screen):
         yield VersionBar(id="version-bar")
         yield Footer()
 
+    def on_screen_resume(self) -> None:
+        """Called when the screen regains focus (e.g. after
+        returning from a tmux attach). Rebuilds the list
+        to fix any rendering issues.
+        """
+        self._rebuild_list()
+
     async def on_mount(self) -> None:
         """Called when the screen is mounted. Loads initial
         data and starts background connection.
