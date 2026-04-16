@@ -110,11 +110,13 @@ class AgentDashboardApp(App):
         # environment (venv, PYTHONPATH) as the TUI.
         venv = os.environ.get("VIRTUAL_ENV", "")
         activate = f"source {venv}/bin/activate && " if venv else ""
+        log = "/tmp/tui-attach.log"
         client_cmd = (
             f"cd {cwd} && {activate}"
             f"PYTHONPATH={cwd}:$PYTHONPATH "
             f"{sys.executable} -m tui.terminal_client "
             f"{agent_id} --url {self.base_url}"
+            f" >{log} 2>&1; echo EXIT:$? >>{log}; sleep 60"
         )
 
         if self._in_tmux:
