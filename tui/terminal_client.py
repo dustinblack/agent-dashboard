@@ -68,7 +68,12 @@ class TerminalClient:
 
         # Connect and join the agent room
         try:
+            print(
+                f"Connecting to {self.base_url}...",
+                file=sys.stderr,
+            )
             await self.client.connect()
+            print("Connected.", file=sys.stderr)
         except Exception as e:
             print(
                 f"Failed to connect to {self.base_url}: {e}",
@@ -76,7 +81,12 @@ class TerminalClient:
             )
             return 1
 
+        print(
+            f"Joining room {self.agent_id}...",
+            file=sys.stderr,
+        )
         await self.client.join_room(self.agent_id)
+        print("Joined. Waiting for history...", file=sys.stderr)
 
         # Wait for history_complete before entering raw
         # mode. History chunks are buffered (not flushed)
@@ -98,12 +108,23 @@ class TerminalClient:
             # Only consider stale if no chunks arrived for
             # the full timeout AND we never got any chunks
             if idle_ticks >= int(_STALE_TIMEOUT * 10):
+                print(
+                    f"Timeout: chunks={last_chunk_count} "
+                    f"replaying={self._replaying}",
+                    file=sys.stderr,
+                )
                 if last_chunk_count == 0:
-                    # No chunks at all — truly stale
-                    print(
-                        "Session is stale — the agent may " "no longer be running.",
-                        file=sys.stderr,
-                    )
+                    # No chunks at all — try auto-reconnect
+                    new_id = await self._auto_reconnect()
+                    if new_id:
+                        # Restart with the new agent
+                        self.agent_id = new_id
+                        self._replaying = True
+                        self._history_buf.clear()
+                        await self.client.join_room(new_id)
+                        last_chunk_count = 0
+                        idle_ticks = 0
+                        continue
                     await self.client.close()
                     return 1
                 # Got chunks but no history_complete —
@@ -207,6 +228,53 @@ class TerminalClient:
                 f"\r\nAgent session {status}.\r\n",
                 file=sys.stderr,
             )
+
+    async def _auto_reconnect(self) -> str | None:
+        """Attempts to reconnect a stale session by stopping
+        the old agent record and spawning a replacement with
+        resume mode, similar to the web UI's auto-reconnect.
+
+        Returns the new agent_id if successful, None if failed.
+        """
+        print(
+            "Session appears stale, attempting reconnect...",
+            file=sys.stderr,
+        )
+        try:
+            # Get the stale agent's details for respawning
+            details = await self.client.get_agent_details(self.agent_id)
+            tel = details.get("telemetry") or {}
+            host_id = details.get("host_id")
+            tool = details.get("tool_name", "gemini")
+            project_dir = tel.get("worktree_path") or tel.get("project_dir")
+            task = tel.get("task_description")
+
+            # Stop the stale record
+            try:
+                await self.client.stop_agent(self.agent_id)
+            except Exception:
+                pass
+
+            # Spawn a replacement with resume mode
+            new_agent = await self.client.spawn_agent(
+                host_id=host_id,
+                tool_name=tool,
+                project_dir=project_dir,
+                task_description=task,
+                session_mode="resume",
+            )
+            new_id = new_agent.get("agent_id")
+            print(
+                f"Reconnected as {new_id}",
+                file=sys.stderr,
+            )
+            return new_id
+        except Exception as e:
+            print(
+                f"Reconnect failed: {e}",
+                file=sys.stderr,
+            )
+            return None
 
     async def _read_stdin(self):
         """Reads stdin in raw mode and sends to the agent.
