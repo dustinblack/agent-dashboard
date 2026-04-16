@@ -49,7 +49,10 @@ class DashboardScreen(Screen):
         self.client = client
         self.hosts: List[Dict] = []
         self.agents: List[Dict] = []
-        self._selected_index: int = 0
+        # Track selection by agent_id, not positional index
+        self._selected_id: Optional[str] = None
+        # Ordered list of agent_ids matching display order
+        self._display_order: List[str] = []
         self._version_info: Dict = {}
         self._rebuilding = False
 
@@ -157,7 +160,7 @@ class DashboardScreen(Screen):
                 ),
             )
 
-            card_index = 0
+            self._display_order = []
             for host in sorted_hosts:
                 host_agents = [
                     a for a in self.agents if a.get("host_id") == host.get("id")
@@ -167,25 +170,38 @@ class DashboardScreen(Screen):
 
                 await container.mount(HostHeader(host))
                 for agent in host_agents:
+                    aid = agent.get("agent_id", "")
+                    widget_id = f"agent-{aid.replace('-', '')}"
                     card = AgentCard(
                         agent,
-                        id=f"agent-{card_index}",
+                        id=widget_id,
                         classes="agent-card",
                     )
-                    if card_index == self._selected_index:
+                    if aid == self._selected_id:
                         card.add_class("selected")
                     await container.mount(card)
-                    card_index += 1
+                    self._display_order.append(aid)
 
-            # Update detail pane
-            if self.agents and self._selected_index < len(self.agents):
-                self._update_detail(self.agents[self._selected_index])
+            # Update selection
+            if self._selected_id not in self._display_order and self._display_order:
+                self._selected_id = self._display_order[0]
+            if self._selected_id:
+                self._update_detail(self._agent_by_id(self._selected_id))
             else:
-                self._selected_index = 0
-                if self.agents:
-                    self._update_detail(self.agents[0])
+                self._update_detail(None)
         finally:
             self._rebuilding = False
+
+    def _agent_by_id(self, agent_id: str) -> Optional[Dict]:
+        """Finds an agent dict by agent_id."""
+        for a in self.agents:
+            if a.get("agent_id") == agent_id:
+                return a
+        return None
+
+    def _widget_id(self, agent_id: str) -> str:
+        """Returns the Textual widget ID for an agent."""
+        return f"agent-{agent_id.replace('-', '')}"
 
     def _update_detail(self, agent: Optional[Dict]) -> None:
         """Updates the detail pane with the selected agent."""
@@ -194,41 +210,42 @@ class DashboardScreen(Screen):
 
     def _move_selection(self, delta: int) -> None:
         """Moves the selection cursor by delta positions."""
-        if not self.agents:
+        if not self._display_order:
             return
-        # Remove old selection
-        old_id = f"#agent-{self._selected_index}"
+        # Find current position in display order
         try:
-            old_card = self.query_one(old_id, AgentCard)
+            idx = self._display_order.index(self._selected_id)
+        except ValueError:
+            idx = 0
+        # Remove old selection highlight
+        try:
+            old_card = self.query_one(
+                f"#{self._widget_id(self._selected_id)}",
+                AgentCard,
+            )
             old_card.remove_class("selected")
         except Exception:
             pass
-
         # Move
-        self._selected_index = max(
-            0,
-            min(
-                self._selected_index + delta,
-                len(self.agents) - 1,
-            ),
-        )
-
-        # Add new selection
-        new_id = f"#agent-{self._selected_index}"
+        idx = max(0, min(idx + delta, len(self._display_order) - 1))
+        self._selected_id = self._display_order[idx]
+        # Add new selection highlight
         try:
-            new_card = self.query_one(new_id, AgentCard)
+            new_card = self.query_one(
+                f"#{self._widget_id(self._selected_id)}",
+                AgentCard,
+            )
             new_card.add_class("selected")
             new_card.scroll_visible()
         except Exception:
             pass
-
         # Update detail
-        self._update_detail(self.agents[self._selected_index])
+        self._update_detail(self._agent_by_id(self._selected_id))
 
     def _get_selected_agent(self) -> Optional[Dict]:
         """Returns the currently selected agent dict."""
-        if self.agents and self._selected_index < len(self.agents):
-            return self.agents[self._selected_index]
+        if self._selected_id:
+            return self._agent_by_id(self._selected_id)
         return None
 
     # --- Actions ---
@@ -284,22 +301,22 @@ class DashboardScreen(Screen):
         the affected card and detail pane rather than
         rebuilding the entire list.
         """
-        for i, agent in enumerate(self.agents):
-            if agent.get("agent_id") == agent_id:
-                agent["telemetry"] = {
-                    **(agent.get("telemetry") or {}),
-                    **telemetry,
-                }
-                # Update just this card's display
-                try:
-                    card = self.query_one(f"#agent-{i}", AgentCard)
-                    card.agent = agent
-                except Exception:
-                    pass
-                # Update detail pane if this agent is selected
-                if i == self._selected_index:
-                    self._update_detail(agent)
-                break
+        agent = self._agent_by_id(agent_id)
+        if not agent:
+            return
+        agent["telemetry"] = {
+            **(agent.get("telemetry") or {}),
+            **telemetry,
+        }
+        # Update this card's display
+        try:
+            card = self.query_one(f"#{self._widget_id(agent_id)}", AgentCard)
+            card.agent = agent
+        except Exception:
+            pass
+        # Update detail pane if this agent is selected
+        if agent_id == self._selected_id:
+            self._update_detail(agent)
 
     def _on_agent_status(self, agent_id: str, status: str) -> None:
         """Handles agent status changes.
@@ -309,27 +326,26 @@ class DashboardScreen(Screen):
         entire list.
         """
         if status in ("stopped", "closed"):
-            # Find the card index before removing
-            idx = None
-            for i, a in enumerate(self.agents):
-                if a.get("agent_id") == agent_id:
-                    idx = i
-                    break
             self.agents = [a for a in self.agents if a.get("agent_id") != agent_id]
+            if agent_id in self._display_order:
+                self._display_order.remove(agent_id)
             # Remove the specific card widget
-            if idx is not None:
-                try:
-                    card = self.query_one(f"#agent-{idx}", AgentCard)
-                    card.remove()
-                except Exception:
-                    pass
+            try:
+                card = self.query_one(
+                    f"#{self._widget_id(agent_id)}",
+                    AgentCard,
+                )
+                card.remove()
+            except Exception:
+                pass
             # Update selection
-            if self._selected_index >= len(self.agents):
-                self._selected_index = max(0, len(self.agents) - 1)
-            if self.agents:
-                self._update_detail(self.agents[self._selected_index])
-            else:
-                self._update_detail(None)
+            if self._selected_id == agent_id:
+                if self._display_order:
+                    self._selected_id = self._display_order[0]
+                    self._update_detail(self._agent_by_id(self._selected_id))
+                else:
+                    self._selected_id = None
+                    self._update_detail(None)
 
     def _on_host_telemetry(self, host_id: int, telemetry: Dict) -> None:
         """Handles host telemetry updates."""
