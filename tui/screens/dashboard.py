@@ -64,25 +64,34 @@ class DashboardScreen(Screen):
 
     async def on_mount(self) -> None:
         """Called when the screen is mounted. Loads initial
-        data and connects Socket.IO for live updates.
+        data and starts background connection.
         """
         # Set up live update callbacks
         self.client.on_agent_telemetry = self._on_agent_telemetry
         self.client.on_agent_status = self._on_agent_status
         self.client.on_host_telemetry = self._on_host_telemetry
 
-        # Connect Socket.IO for live updates
-        try:
-            await self.client.connect()
-        except Exception as e:
-            self.query_one("#loading-msg", Static).update(f"  Connection failed: {e}")
-            return
-
-        # Load initial data
+        # Load initial data via REST (doesn't need Socket.IO)
         await self._refresh_data()
+
+        # Connect Socket.IO in the background for live
+        # updates — this avoids blocking mount if the
+        # connection is slow.
+        self._connect_socketio()
 
         # Load version info
         self._load_version()
+
+    @work(thread=False)
+    async def _connect_socketio(self) -> None:
+        """Connects Socket.IO in the background."""
+        try:
+            await self.client.connect()
+        except Exception as e:
+            self.notify(
+                f"Live updates unavailable: {e}",
+                severity="warning",
+            )
 
     @work(thread=False)
     async def _load_version(self) -> None:

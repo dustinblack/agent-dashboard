@@ -80,19 +80,35 @@ class TerminalClient:
 
         # Wait for history_complete before entering raw
         # mode. History chunks are buffered (not flushed)
-        # during this wait.
+        # during this wait. The timeout resets whenever a
+        # new chunk arrives, so large histories (1000
+        # chunks) don't falsely trigger stale detection.
         self._defer_flush = True
-        for _ in range(int(_STALE_TIMEOUT * 10)):
+        last_chunk_count = 0
+        idle_ticks = 0
+        while self._replaying:
             await asyncio.sleep(0.1)
-            if not self._replaying:
+            current_count = len(self._history_buf)
+            if current_count > last_chunk_count:
+                # Chunks are still arriving — reset timer
+                last_chunk_count = current_count
+                idle_ticks = 0
+            else:
+                idle_ticks += 1
+            # Only consider stale if no chunks arrived for
+            # the full timeout AND we never got any chunks
+            if idle_ticks >= int(_STALE_TIMEOUT * 10):
+                if last_chunk_count == 0:
+                    # No chunks at all — truly stale
+                    print(
+                        "Session is stale — the agent may " "no longer be running.",
+                        file=sys.stderr,
+                    )
+                    await self.client.close()
+                    return 1
+                # Got chunks but no history_complete —
+                # proceed anyway (daemon might have a bug)
                 break
-        if self._replaying:
-            print(
-                "Session is stale — the agent may no " "longer be running.",
-                file=sys.stderr,
-            )
-            await self.client.close()
-            return 1
 
         # Send initial resize
         loop = asyncio.get_running_loop()

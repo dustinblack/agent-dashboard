@@ -106,8 +106,14 @@ class AgentDashboardApp(App):
         # Add a read prompt on exit so error messages
         # are visible before the tmux window closes.
         cwd = os.getcwd()
+        # Ensure the tmux subprocess uses the same Python
+        # environment (venv, PYTHONPATH) as the TUI.
+        venv = os.environ.get("VIRTUAL_ENV", "")
+        activate = f"source {venv}/bin/activate && " if venv else ""
         client_cmd = (
-            f"cd {cwd} && {sys.executable} -m tui.terminal_client "
+            f"cd {cwd} && {activate}"
+            f"PYTHONPATH={cwd}:$PYTHONPATH "
+            f"{sys.executable} -m tui.terminal_client "
             f"{agent_id} --url {self.base_url}"
         )
 

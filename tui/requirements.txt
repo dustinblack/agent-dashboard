@@ -1,3 +1,4 @@
 textual>=8.0
 python-socketio[asyncio_client]
+aiohttp
 httpx

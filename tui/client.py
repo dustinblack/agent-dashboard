@@ -176,13 +176,17 @@ class DashboardClient:
                 self.base_url,
                 namespaces=["/terminal"],
                 socketio_path="socket.io",
+                transports=["websocket", "polling"],
             )
             self._connected = True
 
     async def disconnect(self):
         """Disconnects from the Socket.IO server."""
         if self._connected:
-            await self._sio.disconnect()
+            try:
+                await self._sio.disconnect()
+            except Exception:
+                pass
             self._connected = False
 
     async def join_room(self, agent_id: str):
