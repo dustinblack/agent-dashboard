@@ -60,6 +60,29 @@ class AgentDashboardApp(App):
     .agent-card.selected {
         background: $accent 20%;
     }
+
+    #spawn-form {
+        padding: 1 2;
+    }
+
+    #spawn-title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    .field-label {
+        margin-top: 1;
+        color: $text-muted;
+    }
+
+    #spawn-btn {
+        margin-top: 2;
+    }
+
+    #spawn-status {
+        margin-top: 1;
+        color: $warning;
+    }
     """
 
     def __init__(self, base_url: str, **kwargs):

@@ -287,10 +287,10 @@ class DashboardScreen(Screen):
         await self.app.attach_agent(agent)
 
     def action_spawn(self) -> None:
-        """Opens the spawn screen."""
+        """Opens the global spawn screen."""
         from tui.screens.spawn import SpawnScreen
 
-        self.app.push_screen(SpawnScreen(self.client, self.hosts))
+        self.app.push_screen(SpawnScreen(self.client, self.hosts, self.agents))
 
     # --- Live update handlers ---
 
