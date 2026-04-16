@@ -68,6 +68,11 @@ session cost.
 - **Cost tracking** — Real session cost from Claude Code's OTLP
   metrics; estimated cost for Gemini from built-in pricing
   tables. Displayed per-session on each agent card.
+- **TUI frontend** — Terminal-based dashboard alternative to
+  the web UI, built with Python Textual. Manage agents from
+  any terminal via `podman exec` or SSH. Uses tmux for
+  multi-pane agent terminal access. See
+  [TUI documentation](docs/tui.md).
 
 ### Agent Management
 - **Project selection** — Daemons scan `PROJECTS_ROOT` for git
