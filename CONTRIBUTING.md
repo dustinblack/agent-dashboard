@@ -43,6 +43,8 @@ This project is built with AI-first development in mind. We encourage the use of
 
 If you are using an AI development agent, please ensure that it is aware of and adheres to the standards defined in **[AGENTS.md](AGENTS.md)**. These standards are designed to ensure that agent-generated code remains consistent, high-quality, and easy to maintain.
 
+**Mandatory Pre-commit Hooks:** When using an AI agent, it is critically important to ensure you have installed the pre-commit hooks (`./scripts/install-hooks.sh`). AI agents can introduce formatting, linting, or type errors that might slip past manual review. The hooks ensure that the project's shared quality check scripts run automatically during every commit, providing an essential layer of automated verification that remains outside the direct purview of the AI agent.
+
 ### 4. Code Standards & Quality Checks
 We maintain high standards for code quality.
 
