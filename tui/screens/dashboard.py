@@ -51,6 +51,7 @@ class DashboardScreen(Screen):
         self.agents: List[Dict] = []
         self._selected_index: int = 0
         self._version_info: Dict = {}
+        self._rebuilding = False
 
     def compose(self) -> ComposeResult:
         """Builds the dashboard layout."""
@@ -121,9 +122,25 @@ class DashboardScreen(Screen):
         self._rebuild_list()
 
     def _rebuild_list(self) -> None:
-        """Rebuilds the agent list from current data."""
+        """Rebuilds the agent list from current data.
+
+        Guarded against concurrent calls from telemetry
+        updates to prevent DuplicateIds errors.
+        """
+        if self._rebuilding:
+            return
+        self._rebuilding = True
+        try:
+            self._do_rebuild_list()
+        finally:
+            self._rebuilding = False
+
+    def _do_rebuild_list(self) -> None:
+        """Internal list rebuild implementation."""
         container = self.query_one("#agent-list", VerticalScroll)
-        container.remove_children()
+        # Remove all existing children by querying them
+        for child in list(container.children):
+            child.remove()
 
         if not self.agents:
             container.mount(
