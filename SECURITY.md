@@ -2,12 +2,16 @@
 
 ## Supported Versions
 
+Prior to a `v1.0.0` release, we follow a single linear development stream. Only the **most recent minor version** is supported. 
+
+While a minor version is current (e.g., `v0.4.x`), it may receive patch updates (e.g., `v0.4.1`). However, as soon as a new minor version is released (e.g., `v0.5.0`), all previous minor versions (e.g., `v0.4.x`) are immediately considered end-of-life and will no longer receive security or bug fix updates.
+
 Currently, we provide security updates for the following versions:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| v0.4.x  | :white_check_mark: |
-| < v0.4  | :x:                |
+| Latest  | :white_check_mark: |
+| < Latest| :x:                |
 
 ## Reporting a Vulnerability
 
