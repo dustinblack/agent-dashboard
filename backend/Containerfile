@@ -18,17 +18,21 @@ FROM registry.fedoraproject.org/fedora:42
 
 WORKDIR /app
 
-# Install Python and build dependencies
+# Install Python, build dependencies, and tmux for TUI
 RUN dnf install --setopt=install_weak_deps=False --setopt=retries=3 -y \
     python3 \
     python3-pip \
     python3-devel \
     gcc \
+    tmux \
     && dnf clean all
 
-# Copy requirements and install
+# Copy requirements and install (backend + TUI)
 COPY backend/requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+COPY tui/requirements.txt /tmp/tui-requirements.txt
+RUN pip3 install --no-cache-dir \
+    -r requirements.txt \
+    -r /tmp/tui-requirements.txt
 
 # Embed detected version
 COPY --from=version /tmp/VERSION /app/VERSION
@@ -36,11 +40,18 @@ COPY --from=version /tmp/VERSION /app/VERSION
 # Copy application code
 COPY backend/ .
 
+# Copy TUI code
+COPY tui/ /app/tui/
+
 # Ensure data directory exists for SQLite
 RUN mkdir -p /app/data
 
 # Expose FastAPI port
 EXPOSE 8000
 
-# Run uvicorn server
+# Run uvicorn server (TUI available via:
+#   podman exec -it <container> python3 -m tui
+#   or with tmux:
+#   podman exec -it <container> tmux new \
+#     "python3 -m tui --url http://localhost:8000")
 CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
