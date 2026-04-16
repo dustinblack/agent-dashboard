@@ -38,8 +38,17 @@ Always work on a new branch for each contribution:
 git checkout -b your-feature-name
 ```
 
+#### Working with AI Development Agents
+This project is built with AI-first development in mind. We encourage the use of AI development agents (e.g., Gemini CLI) to assist with implementation, refactoring, and testing.
+
+If you are using an AI development agent, please ensure that it is aware of and adheres to the standards defined in **[AGENTS.md](AGENTS.md)**. These standards are designed to ensure that agent-generated code remains consistent, high-quality, and easy to maintain.
+
 ### 4. Code Standards & Quality Checks
-We maintain high standards for code quality. Before submitting a pull request, please run the following checks:
+We maintain high standards for code quality.
+
+If you followed the instructions in step 2 to install the pre-commit hook (`./scripts/install-hooks.sh`), the quality checks will run automatically whenever you `git commit`.
+
+You can also run them manually at any time to verify your work before committing:
 
 ```bash
 # To run all fast checks (format, lint, typecheck, secrets)
@@ -49,14 +58,16 @@ We maintain high standards for code quality. Before submitting a pull request, p
 ./scripts/check.sh ci
 ```
 
-| Check | Tool |
-| ----- | ---- |
-| **Python Formatting** | `black` |
-| **Python Linting** | `flake8` + `pylint` |
-| **Frontend Formatting** | `prettier` |
-| **Frontend Linting** | `eslint` |
-| **Frontend Types** | `tsc` (TypeScript) |
-| **Secrets Detection** | `gitleaks` |
+| Command | What it runs |
+|---------|-------------|
+| `./scripts/check.sh format` | `black` (Python), `prettier` (frontend) |
+| `./scripts/check.sh lint` | `flake8` + `pylint` (Python), `eslint` (frontend) |
+| `./scripts/check.sh typecheck` | TypeScript type checking (`tsc`) |
+| `./scripts/check.sh test` | Backend unit tests with coverage |
+| `./scripts/check.sh security` | `bandit` (Python), `npm audit` (frontend) |
+| `./scripts/check.sh secrets` | Secret detection (`gitleaks`) |
+| `./scripts/check.sh precommit` | format + lint + typecheck + secrets (fast) |
+| `./scripts/check.sh ci` | format + lint + typecheck + build + test + security + secrets |
 
 ### 5. Submitting a Pull Request
 Once your changes are complete and all checks pass:
