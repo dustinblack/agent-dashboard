@@ -65,10 +65,10 @@ class DashboardScreen(Screen):
 
     def on_screen_resume(self) -> None:
         """Called when the screen regains focus (e.g. after
-        returning from a tmux attach). Rebuilds the list
-        to fix any rendering issues.
+        returning from a tmux attach). Refreshes data and
+        rebuilds the list.
         """
-        self._rebuild_list()
+        self.run_worker(self._refresh_data())
 
     async def on_mount(self) -> None:
         """Called when the screen is mounted. Loads initial
@@ -119,73 +119,73 @@ class DashboardScreen(Screen):
         except Exception as e:
             self.query_one("#loading-msg", Static).update(f"  Error: {e}")
             return
-        self._rebuild_list()
+        await self._rebuild_list()
 
-    def _rebuild_list(self) -> None:
+    async def _rebuild_list(self) -> None:
         """Rebuilds the agent list from current data.
 
-        Guarded against concurrent calls from telemetry
-        updates to prevent DuplicateIds errors.
+        Uses await on remove() to ensure widgets are fully
+        removed before mounting new ones, preventing
+        DuplicateIds errors.
         """
         if self._rebuilding:
             return
         self._rebuilding = True
         try:
-            self._do_rebuild_list()
+            container = self.query_one("#agent-list", VerticalScroll)
+            # Await removal of each child to ensure
+            # widget IDs are freed before remounting.
+            for child in list(container.children):
+                await child.remove()
+
+            if not self.agents:
+                await container.mount(
+                    Static(
+                        "  No active agents. " "Press [bold]s[/bold] to spawn.",
+                        markup=True,
+                    )
+                )
+                self._update_detail(None)
+                return
+
+            # Sort hosts: online first, then alphabetical
+            sorted_hosts = sorted(
+                self.hosts,
+                key=lambda h: (
+                    0 if h.get("status") == "online" else 1,
+                    h.get("name", ""),
+                ),
+            )
+
+            card_index = 0
+            for host in sorted_hosts:
+                host_agents = [
+                    a for a in self.agents if a.get("host_id") == host.get("id")
+                ]
+                if not host_agents:
+                    continue
+
+                await container.mount(HostHeader(host))
+                for agent in host_agents:
+                    card = AgentCard(
+                        agent,
+                        id=f"agent-{card_index}",
+                        classes="agent-card",
+                    )
+                    if card_index == self._selected_index:
+                        card.add_class("selected")
+                    await container.mount(card)
+                    card_index += 1
+
+            # Update detail pane
+            if self.agents and self._selected_index < len(self.agents):
+                self._update_detail(self.agents[self._selected_index])
+            else:
+                self._selected_index = 0
+                if self.agents:
+                    self._update_detail(self.agents[0])
         finally:
             self._rebuilding = False
-
-    def _do_rebuild_list(self) -> None:
-        """Internal list rebuild implementation."""
-        container = self.query_one("#agent-list", VerticalScroll)
-        # Remove all existing children by querying them
-        for child in list(container.children):
-            child.remove()
-
-        if not self.agents:
-            container.mount(
-                Static(
-                    "  No active agents. Press [bold]s[/bold] to spawn.",
-                    markup=True,
-                )
-            )
-            self._update_detail(None)
-            return
-
-        # Sort hosts: online first, then alphabetical
-        sorted_hosts = sorted(
-            self.hosts,
-            key=lambda h: (
-                0 if h.get("status") == "online" else 1,
-                h.get("name", ""),
-            ),
-        )
-
-        card_index = 0
-        for host in sorted_hosts:
-            host_agents = [a for a in self.agents if a.get("host_id") == host.get("id")]
-            if not host_agents:
-                continue
-
-            container.mount(HostHeader(host))
-            for agent in host_agents:
-                card = AgentCard(
-                    agent,
-                    id=f"agent-{card_index}",
-                    classes="agent-card",
-                )
-                if card_index == self._selected_index:
-                    card.add_class("selected")
-                container.mount(card)
-                card_index += 1
-
-        # Update detail pane
-        if self.agents and self._selected_index < len(self.agents):
-            self._update_detail(self.agents[self._selected_index])
-        else:
-            self._selected_index = 0
-            if self.agents:
-                self._update_detail(self.agents[0])
 
     def _update_detail(self, agent: Optional[Dict]) -> None:
         """Updates the detail pane with the selected agent."""
@@ -302,10 +302,34 @@ class DashboardScreen(Screen):
                 break
 
     def _on_agent_status(self, agent_id: str, status: str) -> None:
-        """Handles agent status changes."""
+        """Handles agent status changes.
+
+        Removes the agent from the data and removes its
+        card widget directly rather than rebuilding the
+        entire list.
+        """
         if status in ("stopped", "closed"):
+            # Find the card index before removing
+            idx = None
+            for i, a in enumerate(self.agents):
+                if a.get("agent_id") == agent_id:
+                    idx = i
+                    break
             self.agents = [a for a in self.agents if a.get("agent_id") != agent_id]
-            self._rebuild_list()
+            # Remove the specific card widget
+            if idx is not None:
+                try:
+                    card = self.query_one(f"#agent-{idx}", AgentCard)
+                    card.remove()
+                except Exception:
+                    pass
+            # Update selection
+            if self._selected_index >= len(self.agents):
+                self._selected_index = max(0, len(self.agents) - 1)
+            if self.agents:
+                self._update_detail(self.agents[self._selected_index])
+            else:
+                self._update_detail(None)
 
     def _on_host_telemetry(self, host_id: int, telemetry: Dict) -> None:
         """Handles host telemetry updates."""
