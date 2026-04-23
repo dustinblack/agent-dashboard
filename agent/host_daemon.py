@@ -147,7 +147,9 @@ class HostDaemon:
 
         @self.sio.on("request_projects", namespace="/terminal")
         async def on_request_projects(data):
-            await self.report_projects()
+            # Force a rescan rather than reporting cached
+            # data, so the user gets an up-to-date list.
+            await self.scan_and_report_projects()
 
         @self.sio.on("terminal_resize", namespace="/terminal")
         async def on_terminal_resize(data):
@@ -329,6 +331,40 @@ class HostDaemon:
 
         print(f"Available tools: {tools}")
         return tools
+
+    async def scan_and_report_projects(self):
+        """Rescans PROJECTS_ROOT and reports the updated
+        project list to the Hub. Used for force-refresh
+        requests from the UI.
+        """
+        loop = asyncio.get_running_loop()
+
+        def _scan():
+            projects = []
+            if os.path.exists(self.projects_root):
+                try:
+                    for root, dirs, _files in os.walk(self.projects_root):
+                        rel_path = os.path.relpath(root, self.projects_root)
+                        depth = 0 if rel_path == "." else len(rel_path.split(os.sep))
+                        if depth > self.projects_depth:
+                            dirs[:] = []
+                            continue
+                        if ".git" in dirs:
+                            if rel_path != ".":
+                                projects.append(rel_path)
+                            dirs[:] = [d for d in dirs if d != ".git"]
+                    projects.sort()
+                except Exception as e:
+                    print(
+                        f"Error scanning projects root {self.projects_root}: {e}"
+                    )
+            return projects
+
+        new_projects = await loop.run_in_executor(None, _scan)
+        async with self.projects_lock:
+            self.cached_projects = new_projects
+        print(f"Force rescan: found {len(new_projects)} projects.")
+        await self.report_projects()
 
     async def report_projects(self):
         """Instantly reports cached projects and available
