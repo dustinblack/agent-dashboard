@@ -292,19 +292,51 @@ class HostDaemon:
                 namespace="/terminal",
             )
 
-    def get_git_info(self, path: str):
-        """Extracts git branch and project name from a directory.
+    @staticmethod
+    def _remote_to_web_url(remote_url: str) -> str | None:
+        """Converts a git remote URL to an HTTPS web URL.
 
-        The project name is derived from the remote origin URL when
-        available, falling back to the git repository's root directory
-        name (e.g. a repo at /git/agent-dashboard yields
-        "agent-dashboard").
+        Handles SSH and HTTPS formats:
+        - git@github.com:user/repo.git → https://github.com/user/repo
+        - https://github.com/user/repo.git → https://github.com/user/repo
+        - git@gitlab.internal:group/repo.git → https://gitlab.internal/group/repo
+
+        Returns None if the URL format is not recognized.
+        """
+        if not remote_url:
+            return None
+        url = remote_url.strip()
+        # SSH format: git@host:path.git
+        if url.startswith("git@"):
+            url = url[4:]  # Remove git@
+            url = url.replace(":", "/", 1)  # host:path → host/path
+            url = "https://" + url
+        # Ensure https://
+        if not url.startswith("http"):
+            return None
+        # Remove .git suffix
+        if url.endswith(".git"):
+            url = url[:-4]
+        return url
+
+    def get_git_info(self, path: str):
+        """Extracts git branch, project name, and remote web
+        URL from a directory.
+
+        The project name is derived from the remote origin URL
+        when available, falling back to the git repository's
+        root directory name. The web URL is the HTTPS version
+        of the remote origin for linking in the UI.
+
+        Returns:
+            A (branch, project, remote_url) tuple.
         """
         if not path or not os.path.exists(path):
-            return None, None
+            return None, None, None
 
         branch = None
         project = None
+        remote_url = None
 
         try:
             branch = (
@@ -330,6 +362,7 @@ class HostDaemon:
                 .strip()
             )
             project = origin.rsplit("/", maxsplit=1)[-1].replace(".git", "")
+            remote_url = self._remote_to_web_url(origin)
         except Exception:
             # No remote configured — use the repo root directory name
             try:
@@ -346,7 +379,7 @@ class HostDaemon:
             except Exception:
                 pass
 
-        return branch, project
+        return branch, project, remote_url
 
     def _detect_mcp_servers(self, project_dir, tool):
         """Detects MCP servers configured for the given tool and project.
@@ -520,13 +553,14 @@ class HostDaemon:
             f"mode: {session_mode} in {full_path}"
         )
 
-        branch, project = self.get_git_info(full_path)
+        branch, project, remote_url = self.get_git_info(full_path)
         mcp_servers = self._detect_mcp_servers(original_project_dir, tool)
         telemetry = {
             "project_dir": original_project_dir,
             "task_description": task,
             "git_branch": branch,
             "git_project": project,
+            "git_remote_url": remote_url,
             "model": "detecting...",
             "tokens": 0,
             "input_tokens": 0,
@@ -1337,7 +1371,7 @@ class HostDaemon:
                         continue
                     # Try to read the cwd of the child process
                     cwd = os.readlink(f"/proc/{pid}/cwd")
-                    branch, project = self.get_git_info(cwd)
+                    branch, project, remote_url = self.get_git_info(cwd)
 
                     tel = info["telemetry"]
                     changed = False
@@ -1346,6 +1380,9 @@ class HostDaemon:
                         changed = True
                     if project and tel.get("git_project") != project:
                         tel["git_project"] = project
+                        changed = True
+                    if remote_url and tel.get("git_remote_url") != remote_url:
+                        tel["git_remote_url"] = remote_url
                         changed = True
 
                     # Read PROMPT_COMMAND sidecar file for

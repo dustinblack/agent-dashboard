@@ -33,6 +33,7 @@ export interface Agent {
     task_description?: string;
     git_branch?: string;
     git_project?: string;
+    git_remote_url?: string;
     model?: string;
     tokens?: number;
     context_tokens?: number;
