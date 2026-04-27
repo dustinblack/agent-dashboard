@@ -30,6 +30,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
     tool: string;
   } | null>(null);
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+  const socketRef = useRef<ReturnType<typeof io> | null>(null);
 
   // Fetch version info on mount
   const appVersion = import.meta.env.VITE_APP_VERSION || 'dev';
@@ -119,14 +120,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
   };
 
   const requestProjects = () => {
-    const baseURL =
-      import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
-    const socket = io(`${baseURL}/terminal`, {
-      path: '/socket.io',
-    });
-    socket.emit('request_projects', {});
-    console.log('Manual project refresh requested.');
-    setTimeout(() => socket.disconnect(), 1000);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('request_projects', {});
+    }
   };
 
   useEffect(() => {
@@ -136,6 +132,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
     const socket = io(`${baseURL}/terminal`, {
       path: '/socket.io',
     });
+    socketRef.current = socket;
 
     socket.on('connect', () => {
       socket.emit('request_projects', {});

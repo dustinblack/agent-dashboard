@@ -110,7 +110,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
               </label>
               <button
                 onClick={onRefresh}
-                className="text-[10px] text-accent font-bold uppercase tracking-tighter transition-colors flex items-center gap-1"
+                className="text-[10px] text-accent font-bold uppercase tracking-tighter transition-colors flex items-center gap-1 cursor-pointer hover:text-accent-hover hover:underline"
               >
                 <RefreshCw size={10} className="animate-spin-slow" /> Force
                 Refresh

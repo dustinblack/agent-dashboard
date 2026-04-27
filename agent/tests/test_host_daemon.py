@@ -314,7 +314,7 @@ class TestGetGitInfo:
                     b"main\n",
                     b"git@github.com:user/my-repo.git\n",
                 ]
-                branch, project = daemon.get_git_info("/tmp/repo")  # nosec B108
+                branch, project, _url = daemon.get_git_info("/tmp/repo")  # nosec B108
         assert branch == "main"
         assert project == "my-repo"
 
@@ -327,13 +327,13 @@ class TestGetGitInfo:
                     subprocess.CalledProcessError(1, "git"),
                     b"/home/user/my-project\n",
                 ]
-                branch, project = daemon.get_git_info("/tmp/repo")  # nosec B108
+                branch, project, _url = daemon.get_git_info("/tmp/repo")  # nosec B108
         assert branch == "feature-branch"
         assert project == "my-project"
 
     def test_nonexistent_path(self, daemon):
         """Returns None, None for paths that don't exist."""
-        branch, project = daemon.get_git_info("/nonexistent/path/xyz")
+        branch, project, _url = daemon.get_git_info("/nonexistent/path/xyz")
         assert branch is None
         assert project is None
 
@@ -342,13 +342,13 @@ class TestGetGitInfo:
         with patch("subprocess.check_output") as mock_co:
             mock_co.side_effect = subprocess.CalledProcessError(128, "git")
             with patch("os.path.exists", return_value=True):
-                branch, project = daemon.get_git_info("/tmp/nogit")  # nosec B108
+                branch, project, _url = daemon.get_git_info("/tmp/nogit")  # nosec B108
         assert branch is None
         assert project is None
 
     def test_empty_path(self, daemon):
         """Returns None, None for empty string path."""
-        branch, project = daemon.get_git_info("")
+        branch, project, _url = daemon.get_git_info("")
         assert branch is None
         assert project is None
 
