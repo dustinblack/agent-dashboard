@@ -84,9 +84,20 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
             >
               {agent.tool_name || 'gemini'}
             </span>
-            <h3 className="font-bold text-sm text-slate-50 truncate">
-              {tel.git_project || 'Agent'}
-            </h3>
+            {tel.git_remote_url ? (
+              <a
+                href={tel.git_remote_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-sm text-slate-50 truncate hover:underline"
+              >
+                {tel.git_project || 'Agent'}
+              </a>
+            ) : (
+              <h3 className="font-bold text-sm text-slate-50 truncate">
+                {tel.git_project || 'Agent'}
+              </h3>
+            )}
           </div>
           <div className="flex items-center gap-3 mt-0.5 ml-0.5">
             {tel.git_branch && (

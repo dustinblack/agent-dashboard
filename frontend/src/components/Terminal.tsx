@@ -490,6 +490,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
   const hostName = agentDetail?.host_name;
   const gitProject = agentDetail?.telemetry?.git_project;
   const gitBranch = agentDetail?.telemetry?.git_branch;
+  const gitRemoteUrl = agentDetail?.telemetry?.git_remote_url;
   const worktreePath = agentDetail?.telemetry?.worktree_path;
 
   // Update browser window title with host / project / branch
@@ -538,7 +539,18 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
             {gitProject && (
               <>
                 <span className="text-slate-600">/</span>
-                <span className="text-white font-semibold">{gitProject}</span>
+                {gitRemoteUrl ? (
+                  <a
+                    href={gitRemoteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-white font-semibold hover:underline"
+                  >
+                    {gitProject}
+                  </a>
+                ) : (
+                  <span className="text-white font-semibold">{gitProject}</span>
+                )}
               </>
             )}
             {gitBranch && (
@@ -547,7 +559,18 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
                   size={12}
                   className="text-emerald-400 shrink-0 ml-1"
                 />
-                <span className="text-emerald-300">{gitBranch}</span>
+                {gitRemoteUrl ? (
+                  <a
+                    href={`${gitRemoteUrl}/tree/${gitBranch}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-emerald-300 hover:underline"
+                  >
+                    {gitBranch}
+                  </a>
+                ) : (
+                  <span className="text-emerald-300">{gitBranch}</span>
+                )}
               </>
             )}
             {worktreePath && (
