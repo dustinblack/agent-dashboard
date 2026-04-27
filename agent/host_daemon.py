@@ -279,16 +279,74 @@ class HostDaemon:
 
             await asyncio.sleep(60)
 
+    def _detect_available_tools(self) -> list:
+        """Detects which agent CLI tools are installed and
+        configured on this host.
+
+        Checks for binary availability and basic auth
+        configuration. Bash is always available.
+
+        Returns:
+            List of tool name strings (e.g. ["gemini",
+            "claude", "bash"]).
+        """
+        tools = ["bash"]  # Always available
+
+        # Check Gemini CLI
+        try:
+            subprocess.run(
+                ["gemini", "--version"],
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+            # Binary exists — check for API key
+            if os.getenv("GEMINI_API_KEY"):
+                tools.append("gemini")
+            else:
+                print("Gemini CLI found but GEMINI_API_KEY not set — not advertising.")
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # Check Claude Code
+        try:
+            subprocess.run(
+                ["claude", "--version"],
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+            # Binary exists — check for auth (API key or
+            # Vertex AI credentials)
+            has_api_key = bool(os.getenv("ANTHROPIC_API_KEY"))
+            has_vertex = bool(os.getenv("CLAUDE_CODE_USE_VERTEX"))
+            if has_api_key or has_vertex:
+                tools.append("claude")
+            else:
+                print("Claude CLI found but no auth configured — not advertising.")
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        print(f"Available tools: {tools}")
+        return tools
+
     async def report_projects(self):
-        """Instantly reports cached projects to the Hub."""
+        """Instantly reports cached projects and available
+        tools to the Hub.
+        """
         async with self.projects_lock:
             projects = list(self.cached_projects)
 
-        print(f"Reporting {len(projects)} available projects to Hub.")
+        tools = self._detect_available_tools()
+        print(f"Reporting {len(projects)} projects, {len(tools)} tools to Hub.")
         if self.sio.connected:
             await self.sio.emit(
                 "host_telemetry",
-                {"projects_root": self.projects_root, "available_projects": projects},
+                {
+                    "projects_root": self.projects_root,
+                    "available_projects": projects,
+                    "available_tools": tools,
+                },
                 namespace="/terminal",
             )
 
