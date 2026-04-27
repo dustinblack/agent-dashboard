@@ -355,9 +355,7 @@ class HostDaemon:
                             dirs[:] = [d for d in dirs if d != ".git"]
                     projects.sort()
                 except Exception as e:
-                    print(
-                        f"Error scanning projects root {self.projects_root}: {e}"
-                    )
+                    print(f"Error scanning projects root {self.projects_root}: {e}")
             return projects
 
         new_projects = await loop.run_in_executor(None, _scan)
