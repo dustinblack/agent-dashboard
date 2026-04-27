@@ -1,5 +1,12 @@
 # TUI Frontend
 
+> [!WARNING]
+> **Experimental.** The TUI frontend is functional but still
+> under active development. You may encounter rough edges in
+> navigation, rendering, or session attachment. Feedback and
+> bug reports are welcome via
+> [GitHub Issues](https://github.com/dustinblack/agent-dashboard/issues).
+
 The TUI (Terminal User Interface) provides a keyboard-driven
 alternative to the web dashboard. It connects to the same
 backend and supports spawning, monitoring, attaching to, and
@@ -139,3 +146,30 @@ the REST API and Socket.IO protocol.
   `httpx`, `aiohttp`
 
 All dependencies are pre-installed in the backend container.
+
+## Known Limitations
+
+This is an experimental feature. Known issues include:
+
+- **Stale sessions** — Agents that are no longer running on
+  the daemon (e.g. after a daemon restart) may still appear
+  in the list. The terminal client will attempt auto-reconnect
+  by spawning a replacement, but this may not always succeed.
+- **Non-tmux attach** — Without tmux, pressing `a` exits the
+  TUI and runs the terminal client in the foreground. You must
+  relaunch the TUI after disconnecting.
+- **Large history replay** — Sessions with very large history
+  buffers (1000 chunks) may take several seconds to load when
+  attaching.
+- **Spawn screen** — The spawn flow is functional but the UI
+  may feel basic compared to the web modal. Improvements are
+  planned.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| `ModuleNotFoundError: aiohttp` | `pip install aiohttp` — needed for async Socket.IO transport |
+| `Session is stale` on attach | The agent may have been restarted. Try pressing `r` to refresh the list, then attach to the new session. |
+| Display corruption after tmux switch | Press `r` to refresh the dashboard |
+| `Connection failed` on launch | Check that the backend URL is correct (`--url` flag or `DASHBOARD_URL` env var) |
