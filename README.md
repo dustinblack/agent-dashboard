@@ -141,6 +141,17 @@ A container runtime with compose support on the hub server:
 | Debian / Ubuntu | `sudo apt install podman podman-compose` or install [Docker Engine](https://docs.docker.com/engine/install/) |
 | macOS | `brew install podman podman-compose` or install [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
 
+> [!NOTE]
+> **macOS (Podman):** Podman on macOS runs containers inside
+> a Linux VM. Initialize and start it before running any
+> container commands:
+> ```bash
+> podman machine init
+> podman machine start
+> ```
+> You only need to run `init` once. After reboots, just run
+> `podman machine start`.
+
 ### 1. Start the Hub
 
 ```bash
@@ -221,6 +232,24 @@ podman run -d --name host-daemon --network=host --privileged \
   -v $HOME/.gemini/:/root/.gemini \
   localhost/agent-dashboard-daemon:latest
 ```
+
+> [!TIP]
+> **Missing config directories:** The volume mounts above
+> expect `~/.claude/` and `~/.gemini/` to exist on the host.
+> If you haven't used one of these tools locally, create the
+> directory first:
+> ```bash
+> mkdir -p ~/.claude ~/.gemini
+> ```
+
+> [!TIP]
+> **Reconfiguring the daemon:** To change environment
+> variables or volume mounts, stop and remove the existing
+> container, then re-run with the new parameters:
+> ```bash
+> podman stop host-daemon && podman rm host-daemon
+> # Re-run the podman run command with updated settings
+> ```
 
 > See the [Host Daemon Reference](docs/host-daemon.md) for the
 > full list of environment variables, volume mounts, and

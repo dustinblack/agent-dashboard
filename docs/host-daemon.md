@@ -38,6 +38,23 @@ podman run -d --name host-daemon --network=host \
 > development sessions). This also implicitly disables SELinux
 > label confinement.
 
+> [!TIP]
+> **Missing config directories:** Volume mounts for
+> `~/.claude/` and `~/.gemini/` will fail if the directories
+> don't exist on the host. If you haven't used one of these
+> tools locally, create them first: `mkdir -p ~/.claude
+> ~/.gemini`
+
+> [!TIP]
+> **Reconfiguring the daemon:** Environment variables and
+> volume mounts are fixed at container creation time. To
+> change them, stop and remove the existing container, then
+> re-run with the new parameters:
+> ```bash
+> podman stop host-daemon && podman rm host-daemon
+> # Re-run the podman run command with updated settings
+> ```
+
 ## Environment Variables
 
 | Variable | Description | Default |
