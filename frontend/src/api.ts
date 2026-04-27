@@ -16,6 +16,7 @@ export interface Host {
   projects?: {
     projects_root: string;
     available_projects: string[];
+    available_tools?: string[];
   };
 }
 
