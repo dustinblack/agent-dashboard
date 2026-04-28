@@ -58,6 +58,9 @@ This project is inspired by the following blog post:
 - **Commit Strategy**: Do not amend commits unless explicitly asked. Always create new commits.
 - **Documentation**: Always add documentation for new features and keep existing documentation updated with changes. Documentation must be user-friendly for both beginner users and developers alike. Never remove existing code documentation unless the code itself is removed.
 
+## Agent Tool Awareness
+- This project integrates with Claude Code, Gemini CLI, and their OpenTelemetry telemetry. Proactively flag when you know of new model releases, CLI features, telemetry schema changes, or pricing updates that affect the dashboard's integration points. Suggest filing an issue if the change isn't part of the current task.
+
 ## Critical Mandates
 - **User Approval**: Agents MUST request and receive explicit approval from the user before starting any new phase of the implementation plan.
 - **Persistence**: Ensure the SQLite database is persisted via host mounts in the Podman configuration.

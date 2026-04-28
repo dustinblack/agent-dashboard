@@ -13,6 +13,11 @@ export const CONTEXT_TIERS = [
  * Known context window sizes keyed by partial model name.
  * Used for matching against normalized model identifiers.
  *
+ * MAINTAINER NOTE: Add entries here when new models are
+ * released. Check provider documentation for context
+ * window sizes. The isModelRecognized() function flags
+ * unrecognized models in the UI.
+ *
  * Key ordering is critical: `.includes()` matching stops
  * at the first hit, so more-specific keys must precede
  * less-specific ones within each model family.
@@ -187,6 +192,11 @@ export const getProgressColor = (pct: number): string => {
  * Used for cost estimation when the tool does not report
  * cost directly (e.g. Gemini). Claude Code reports its own
  * cost via OTLP so these are only used as fallback.
+ *
+ * MAINTAINER NOTE: Update when providers change pricing or
+ * release new models. Check official pricing pages:
+ * - Anthropic: https://docs.anthropic.com/en/docs/about-claude/pricing
+ * - Google: https://ai.google.dev/pricing
  *
  * Last verified: 2026-04-15
  */
