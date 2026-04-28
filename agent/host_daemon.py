@@ -32,6 +32,11 @@ from aiohttp import web
 # flag; the status only transitions to waiting_permission
 # after the agent has been idle (no output) for
 # PERMISSION_IDLE_SECONDS.
+#
+# MAINTAINER NOTE: Update these patterns when Claude Code
+# or Gemini CLI change their permission prompt text or
+# format. Test with actual CLI output to avoid false
+# positives.
 PERMISSION_PATTERNS = [
     re.compile(p, re.IGNORECASE)
     for p in [
@@ -1273,7 +1278,11 @@ class HostDaemon:
                                 changed = True
 
                             # Token tracking from tool-specific
-                            # usage counters.
+                            # usage counters. These are OTLP
+                            # cumulative Sum metrics — use max()
+                            # not +=. Update metric names here
+                            # if CLIs change their telemetry
+                            # schema.
                             # Claude: claude_code.token.usage
                             # Gemini: gemini_cli.token.usage
                             # Note: Gemini also emits
