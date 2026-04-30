@@ -702,35 +702,22 @@ class HostDaemon:
             env["OTEL_EXPORTER_OTLP_ENDPOINT"] = f"http://127.0.0.1:{self.otlp_port}"
             env["OTEL_RESOURCE_ATTRIBUTES"] = f"service.name={agent_id}"
 
-            # Tool-specific OTel enablement
-            env["CLAUDE_CODE_ENABLE_TELEMETRY"] = "1"
-            env["OTEL_METRICS_EXPORTER"] = "otlp"
-            env["OTEL_LOGS_EXPORTER"] = "otlp"
-            env["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/json"
-            env["GEMINI_CLI_TELEMETRY_ENABLED"] = "true"
-            env["GEMINI_TELEMETRY_ENABLED"] = "true"
-            # Gemini SDK appends /v1/{traces,logs,metrics} to
-            # this base URL — do NOT include a path suffix.
-            env["GEMINI_TELEMETRY_OTLP_ENDPOINT"] = f"http://127.0.0.1:{self.otlp_port}"
-            env["GEMINI_TELEMETRY_OTLP_PROTOCOL"] = "http"
-            env["GEMINI_TELEMETRY_USE_COLLECTOR"] = "true"
-            env["GEMINI_TELEMETRY_TARGET"] = "local"
+            # Inject profile-specific environment variables.
+            # Values can use {otlp_port} and {agent_id}
+            # placeholders for templating.
+            if profile:
+                for key, value in profile.env.items():
+                    env[key] = str(value).format(
+                        otlp_port=self.otlp_port,
+                        agent_id=agent_id,
+                    )
 
-            # Inject PROMPT_COMMAND for bash sessions to
-            # write structured telemetry (cwd, exit code,
-            # last command) to a sidecar file after each
-            # command.  The daemon reads this periodically
-            # in update_agents_git_info().
-            if tool == "bash":
-                sidecar = f"/tmp/.agent-telemetry-{agent_id}"  # nosec B108
+            # Inject sidecar PROMPT_COMMAND if the profile
+            # defines one (e.g. bash telemetry collection).
+            if profile and profile.sidecar and profile.sidecar.prompt_command:
+                sidecar_path = profile.sidecar.file_pattern.format(agent_id=agent_id)
                 env["PROMPT_COMMAND"] = (
-                    'printf \'{"cwd":"%s",'
-                    '"exit_code":%d,'
-                    '"last_cmd":"%s"}\\n\' '
-                    '"$PWD" "$?" '
-                    '"$(HISTTIMEFORMAT= history 1'
-                    " | sed 's/^[ ]*[0-9]*[ ]*//')\" "
-                    f"> {sidecar}"
+                    f"{profile.sidecar.prompt_command} > {sidecar_path}"
                 )
 
             try:
