@@ -133,6 +133,22 @@ class HostDaemon:
         self.projects_depth = int(os.getenv("PROJECTS_DEPTH", "6"))
         # Load agent profiles from YAML/JSON configs
         self.profiles = load_profiles()
+        # Build OTLP metric lookup tables from profiles
+        # for fast matching in handle_otlp().
+        self._token_metrics: set = set()
+        self._cost_metrics: set = set()
+        self._activity_metrics: set = set()
+        self._runtime_metrics: dict = {}
+        self._excluded_metrics: set = set()
+        for prof in self.profiles.values():
+            tel = prof.telemetry
+            self._token_metrics.update(tel.token_metrics)
+            if tel.cost_metric:
+                self._cost_metrics.add(tel.cost_metric)
+            self._activity_metrics.update(tel.activity_metrics)
+            if tel.runtime_metric and tel.runtime_metric.name:
+                self._runtime_metrics[tel.runtime_metric.name] = tel.runtime_metric.unit
+            self._excluded_metrics.update(tel.excluded_metrics)
         self.sio = socketio.AsyncClient()
         self.agents: Dict[str, Dict] = (
             {}
@@ -1249,37 +1265,22 @@ class HostDaemon:
                                 changed = True
 
                             # Token tracking from tool-specific
-                            # usage counters. These are OTLP
-                            # cumulative Sum metrics — use max()
-                            # not +=. Update metric names here
-                            # if CLIs change their telemetry
-                            # schema.
-                            # Claude: claude_code.token.usage
-                            # Gemini: gemini_cli.token.usage
-                            # Note: Gemini also emits
-                            # gen_ai.client.token.usage with
-                            # identical values — intentionally
-                            # excluded to avoid double-counting.
+                            # Token, cost, activity, and runtime
+                            # metrics are matched against the
+                            # lookup tables built from agent
+                            # profiles at startup. Metric names
+                            # are defined in the profile YAML
+                            # files under agent/profiles/.
                             #
-                            # These are OTLP cumulative Sum
-                            # metrics — each report contains the
-                            # total since process start, NOT a
-                            # delta.  Use max() to take the
-                            # latest value without double-counting.
-                            token_metrics = (
-                                "claude_code.token.usage",
-                                "gemini_cli.token.usage",
-                            )
-                            if name in token_metrics:
+                            # Token metrics are OTLP cumulative
+                            # Sum counters — use max() not +=.
+                            if (
+                                name in self._token_metrics
+                                and name not in self._excluded_metrics
+                            ):
                                 value = dp.get("asInt") or dp.get("asDouble") or 0
                                 if value:
                                     int_value = int(value)
-                                    # Split by token type for
-                                    # granular tracking.
-                                    # Claude: input, output,
-                                    #   cacheRead, cacheCreation
-                                    # Gemini: input, output,
-                                    #   thought, cache, tool
                                     token_type = dp_attrs.get("type", "")
                                     if token_type == "input":
                                         tel["input_tokens"] = max(
@@ -1296,17 +1297,11 @@ class HostDaemon:
                                             tel.get("cache_read_tokens", 0),
                                             int_value,
                                         )
-                                    elif token_type in (
-                                        "cacheCreation",
-                                        "cache",
-                                    ):
+                                    elif token_type in ("cacheCreation", "cache"):
                                         tel["cache_creation_tokens"] = max(
                                             tel.get("cache_creation_tokens", 0),
                                             int_value,
                                         )
-                                    # Recompute total from the
-                                    # per-type counters to stay
-                                    # consistent.
                                     tel["tokens"] = (
                                         tel.get("input_tokens", 0)
                                         + tel.get("output_tokens", 0)
@@ -1315,11 +1310,8 @@ class HostDaemon:
                                     )
                                     changed = True
 
-                            # Cost tracking from Claude Code's
-                            # cost.usage metric (USD).
-                            # Cumulative Sum — use max() to
-                            # avoid double-counting.
-                            if name == "claude_code.cost.usage":
+                            # Cost metrics (cumulative Sum, USD)
+                            if name in self._cost_metrics:
                                 value = dp.get("asDouble") or dp.get("asInt") or 0
                                 if value:
                                     tel["cost_usd"] = max(
@@ -1328,16 +1320,8 @@ class HostDaemon:
                                     )
                                     changed = True
 
-                            # Activity from tool call metrics.
-                            # Gemini: gemini_cli.tool.call.count
-                            # Claude: claude_code.tool.execution
-                            tool_metrics = (
-                                "gemini_cli.tool.call.count",
-                                "gemini_cli.tool.call.latency",
-                                "claude_code.tool.execution",
-                                "claude_code.tool",
-                            )
-                            if name in tool_metrics:
+                            # Activity metrics (tool/function name)
+                            if name in self._activity_metrics:
                                 fn = dp_attrs.get("function_name") or dp_attrs.get(
                                     "tool_name"
                                 )
@@ -1345,19 +1329,15 @@ class HostDaemon:
                                     tel["current_activity"] = fn
                                     changed = True
 
-                            # Run time from CLI-reported metrics.
-                            # Claude: active_time.total (seconds)
-                            # Gemini: agent.duration (ms, end-of
-                            #   session only)
-                            if name == ("claude_code.active_time.total"):
+                            # Runtime duration metrics
+                            if name in self._runtime_metrics:
                                 value = dp.get("asInt") or dp.get("asDouble") or 0
                                 if value:
-                                    tel["run_time_seconds"] = int(value)
-                                    changed = True
-                            elif name == ("gemini_cli.agent.duration"):
-                                value = dp.get("asInt") or dp.get("asDouble") or 0
-                                if value:
-                                    tel["run_time_seconds"] = int(value / 1000)
+                                    unit = self._runtime_metrics[name]
+                                    if unit == "milliseconds":
+                                        tel["run_time_seconds"] = int(value / 1000)
+                                    else:
+                                        tel["run_time_seconds"] = int(value)
                                     changed = True
 
                 if changed:
