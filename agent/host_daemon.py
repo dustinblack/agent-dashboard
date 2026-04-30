@@ -861,12 +861,16 @@ class HostDaemon:
                 os.close(fd)
             except OSError:
                 pass
-            # Clean up PROMPT_COMMAND sidecar file
-            sidecar = f"/tmp/.agent-telemetry-{agent_id}"  # nosec B108
-            try:
-                os.unlink(sidecar)
-            except OSError:
-                pass
+            # Clean up sidecar telemetry file if the
+            # profile defines one
+            tool_name = self.agents[agent_id].get("tool")
+            profile = self.profiles.get(tool_name)
+            if profile and profile.sidecar:
+                sidecar = profile.sidecar.file_pattern.format(agent_id=agent_id)
+                try:
+                    os.unlink(sidecar)
+                except OSError:
+                    pass
             # Clean up git worktree if one was created
             wt_path = self.agents[agent_id].get("worktree_path")
             wt_branch = self.agents[agent_id].get("worktree_branch")
@@ -1425,35 +1429,27 @@ class HostDaemon:
                         tel["git_remote_url"] = remote_url
                         changed = True
 
-                    # Read PROMPT_COMMAND sidecar file for
-                    # bash sessions to get richer telemetry
-                    # (cwd, exit code, last command).
-                    if info.get("tool") == "bash":
-                        sidecar = f"/tmp/.agent-telemetry-{agent_id}"  # nosec B108
+                    # Read sidecar telemetry file if the
+                    # profile defines one (e.g. bash uses
+                    # PROMPT_COMMAND to write cwd, exit code,
+                    # and last command to a JSON file).
+                    tool_name = info.get("tool")
+                    profile = self.profiles.get(tool_name)
+                    if profile and profile.sidecar:
+                        sidecar = profile.sidecar.file_pattern.format(agent_id=agent_id)
                         try:
                             with open(sidecar, "r", encoding="utf-8") as f:
-                                bash_tel = json.loads(f.read().strip())
-                            bash_cwd = bash_tel.get("cwd")
-                            exit_code = bash_tel.get("exit_code")
-                            last_cmd = bash_tel.get("last_cmd", "")
-                            # Show cwd as the activity display
-                            if bash_cwd and tel.get("current_activity") != bash_cwd:
-                                tel["current_activity"] = bash_cwd
-                                changed = True
-                            # Track last exit code for error
-                            # indication on the card
-                            if exit_code is not None:
-                                if tel.get("last_exit_code") != exit_code:
-                                    tel["last_exit_code"] = exit_code
+                                sc_data = json.loads(f.read().strip())
+                            # Map sidecar fields to telemetry
+                            # using the profile's field mapping
+                            for tel_key, sc_key in profile.sidecar.fields.items():
+                                val = sc_data.get(sc_key)
+                                if val is not None and tel.get(tel_key) != val:
+                                    tel[tel_key] = val
                                     changed = True
-                            # Track last command text
-                            if last_cmd and tel.get("last_cmd") != last_cmd:
-                                tel["last_cmd"] = last_cmd
-                                changed = True
                         except (FileNotFoundError, json.JSONDecodeError):
-                            # Sidecar not yet written or
-                            # partially written — fall back
-                            # to /proc cwd
+                            # Sidecar not yet written —
+                            # fall back to /proc cwd
                             if cwd and tel.get("current_activity") != cwd:
                                 tel["current_activity"] = cwd
                                 changed = True
