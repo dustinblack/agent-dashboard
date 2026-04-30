@@ -1,0 +1,22 @@
+# Bash shell agent profile
+name: bash
+display_name: Bash
+binary: bash
+always_available: true
+
+commands:
+  new: ["bash"]
+  resume: ["bash"]
+
+# Bash uses a PROMPT_COMMAND sidecar to collect telemetry
+# (cwd, exit code, last command) since it doesn't emit OTLP.
+sidecar:
+  prompt_command: >-
+    printf '{"cwd":"%s","exit_code":%d,"last_cmd":"%s"}\n'
+    "$PWD" "$?"
+    "$(HISTTIMEFORMAT= history 1 | sed 's/^[ ]*[0-9]*[ ]*//')"
+  file_pattern: "/tmp/.agent-telemetry-{agent_id}"
+  fields:
+    current_activity: cwd
+    last_exit_code: exit_code
+    last_cmd: last_cmd
