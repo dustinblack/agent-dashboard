@@ -82,7 +82,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
             <span
               className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase border ${getToolColors(agent.tool_name).badge}`}
             >
-              {agent.tool_name || 'gemini'}
+              {agent.tool_name || 'agent'}
             </span>
             {tel.git_remote_url ? (
               <a
@@ -131,7 +131,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
         <StatusIndicator status={tel.agent_status} />
       </div>
 
-      {agent.tool_name !== 'bash' && (
+      {tel.model && (
         <div className="my-2 border-t border-slate-700/50 pt-2">
           <div className="flex items-center gap-1">
             <p className="text-[11px] text-slate-300 font-mono truncate">
@@ -205,7 +205,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
           agentId={agent.agent_id}
           description={tel.task_description || ''}
         />
-        {agent.tool_name === 'bash' ? (
+        {tel.last_cmd !== undefined || tel.last_exit_code !== undefined ? (
           <>
             {tel.current_activity && (
               <p
