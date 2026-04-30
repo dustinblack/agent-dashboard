@@ -95,8 +95,10 @@ RUN pip3 install --no-cache-dir black flake8 pylint
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copy the daemon script
+# Copy the daemon script and agent profiles
 COPY host_daemon.py .
+COPY profiles.py .
+COPY profiles/ profiles/
 
 # Use the daemon as the entrypoint
 ENTRYPOINT ["python3", "host_daemon.py"]
