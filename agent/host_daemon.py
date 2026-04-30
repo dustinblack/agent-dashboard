@@ -483,48 +483,44 @@ class HostDaemon:
         return branch, project, remote_url
 
     def _detect_mcp_servers(self, project_dir, tool):
-        """Detects MCP servers configured for the given tool and project.
+        """Detects MCP servers configured for the given tool.
 
-        For Claude, reads .mcp.json in the project directory and
-        ~/.claude.json for global MCP server configuration.
-        For Gemini, reads ~/.gemini/settings.json.
+        Uses the agent profile's MCP config to find server
+        definitions in project-level and user-level config
+        files. Deduplicates server names across files.
 
         Args:
             project_dir: The project directory path.
-            tool: The agent tool name ('claude', 'gemini', etc.).
+            tool: The agent tool name.
 
         Returns:
             A list of MCP server name strings.
         """
+        profile = self.profiles.get(tool)
+        if not profile or not profile.mcp:
+            return []
+
         servers = []
         try:
-            if tool == "claude":
-                # Project-level .mcp.json
-                if project_dir:
-                    mcp_path = os.path.join(project_dir, ".mcp.json")
-                    if os.path.isfile(mcp_path):
-                        with open(mcp_path, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-                        mcp_servers = data.get("mcpServers", {})
-                        servers.extend(mcp_servers.keys())
+            # Project-level config file
+            if profile.mcp.project_file and project_dir:
+                mcp_path = os.path.join(project_dir, profile.mcp.project_file)
+                if os.path.isfile(mcp_path):
+                    with open(mcp_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    mcp_servers = data.get("mcpServers", {})
+                    servers.extend(mcp_servers.keys())
 
-                # User-level ~/.claude.json
-                home_claude = os.path.expanduser("~/.claude.json")
-                if os.path.isfile(home_claude):
-                    with open(home_claude, "r", encoding="utf-8") as f:
+            # User-level config files
+            for user_file in profile.mcp.user_files:
+                path = os.path.expanduser(user_file)
+                if os.path.isfile(path):
+                    with open(path, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     mcp_servers = data.get("mcpServers", {})
                     for name in mcp_servers.keys():
                         if name not in servers:
                             servers.append(name)
-
-            elif tool == "gemini":
-                settings_path = os.path.expanduser("~/.gemini/settings.json")
-                if os.path.isfile(settings_path):
-                    with open(settings_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    mcp_servers = data.get("mcpServers", {})
-                    servers.extend(mcp_servers.keys())
         except Exception as e:
             print(f"MCP detection error for {tool}: {e}")
 
