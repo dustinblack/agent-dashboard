@@ -152,29 +152,93 @@ export const isModelRecognized = (model?: string): boolean => {
   return false;
 };
 
+/** Tailwind class sets for each color keyword. */
+export interface ToolColorSet {
+  badge: string;
+  border: string;
+  button: string;
+  buttonHover: string;
+  solid: string;
+}
+
 /**
- * Returns Tailwind color classes for agent tool type badges.
- * Gemini = blue, Claude = purple, Bash = slate.
+ * Maps profile color keywords to Tailwind class sets.
+ * All class names are fully spelled out (no interpolation)
+ * so Tailwind's content scanner can find them.
+ */
+export const TOOL_COLOR_MAP: Record<string, ToolColorSet> = {
+  purple: {
+    badge: 'bg-purple-500/20 text-purple-400 border-purple-500/20',
+    border: 'hover:border-purple-500/50',
+    button: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    buttonHover: 'hover:bg-purple-500/40',
+    solid: 'bg-purple-500',
+  },
+  blue: {
+    badge: 'bg-blue-500/20 text-blue-400 border-blue-500/20',
+    border: 'hover:border-blue-500/50',
+    button: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    buttonHover: 'hover:bg-blue-500/40',
+    solid: 'bg-blue-500',
+  },
+  slate: {
+    badge: 'bg-slate-500/20 text-slate-300 border-slate-500/20',
+    border: 'hover:border-slate-500/50',
+    button: 'bg-slate-700 text-slate-300 border-slate-600',
+    buttonHover: 'hover:bg-slate-600',
+    solid: 'bg-slate-500',
+  },
+  green: {
+    badge: 'bg-green-500/20 text-green-400 border-green-500/20',
+    border: 'hover:border-green-500/50',
+    button: 'bg-green-500/20 text-green-400 border-green-500/30',
+    buttonHover: 'hover:bg-green-500/40',
+    solid: 'bg-green-500',
+  },
+  red: {
+    badge: 'bg-red-500/20 text-red-400 border-red-500/20',
+    border: 'hover:border-red-500/50',
+    button: 'bg-red-500/20 text-red-400 border-red-500/30',
+    buttonHover: 'hover:bg-red-500/40',
+    solid: 'bg-red-500',
+  },
+  amber: {
+    badge: 'bg-amber-500/20 text-amber-400 border-amber-500/20',
+    border: 'hover:border-amber-500/50',
+    button: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    buttonHover: 'hover:bg-amber-500/40',
+    solid: 'bg-amber-500',
+  },
+  cyan: {
+    badge: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/20',
+    border: 'hover:border-cyan-500/50',
+    button: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+    buttonHover: 'hover:bg-cyan-500/40',
+    solid: 'bg-cyan-500',
+  },
+};
+
+/**
+ * Returns Tailwind color classes for a profile color
+ * keyword. Falls back to slate for unknown keywords.
+ */
+export const getToolColorsByKeyword = (color?: string): ToolColorSet => {
+  return TOOL_COLOR_MAP[color || 'slate'] || TOOL_COLOR_MAP['slate'];
+};
+
+/**
+ * Returns Tailwind color classes for agent tool type
+ * badges. Infers color from tool name when no color
+ * keyword is available (e.g. from agent records that
+ * only store tool_name as a string).
  */
 export const getToolColors = (toolName?: string) => {
   const t = (toolName || '').toLowerCase();
-  if (t.includes('claude')) {
-    return {
-      badge: 'bg-purple-500/20 text-purple-400 border-purple-500/20',
-      border: 'hover:border-purple-500/50',
-    };
-  }
+  if (t.includes('claude')) return getToolColorsByKeyword('purple');
   if (t.includes('bash') || t.includes('shell')) {
-    return {
-      badge: 'bg-slate-500/20 text-slate-300 border-slate-500/20',
-      border: 'hover:border-slate-500/50',
-    };
+    return getToolColorsByKeyword('slate');
   }
-  // Default: gemini / blue
-  return {
-    badge: 'bg-blue-500/20 text-blue-400 border-blue-500/20',
-    border: 'hover:border-blue-500/50',
-  };
+  return getToolColorsByKeyword('blue');
 };
 
 /**
