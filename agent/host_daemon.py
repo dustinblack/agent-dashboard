@@ -25,6 +25,8 @@ from typing import Dict, Optional
 import socketio
 from aiohttp import web
 
+from agent.profiles import load_profiles
+
 # Terminal patterns that indicate the agent is waiting for
 # user input.  These are matched against stripped terminal
 # output (ANSI escape sequences removed) to avoid false
@@ -129,6 +131,8 @@ class HostDaemon:
         # below PROJECTS_ROOT. Default of 6 covers most GitLab
         # org hierarchies without being unlimited.
         self.projects_depth = int(os.getenv("PROJECTS_DEPTH", "6"))
+        # Load agent profiles from YAML/JSON configs
+        self.profiles = load_profiles()
         self.sio = socketio.AsyncClient()
         self.agents: Dict[str, Dict] = (
             {}
@@ -673,33 +677,17 @@ class HostDaemon:
             "worktree_path": worktree_path,
         }
 
-        # Build command based on session_mode.
-        # For resume mode, wrap in a shell fallback so that if
-        # no previous session exists (e.g. claude --continue
-        # errors with "no conversation found"), the agent
-        # automatically starts a fresh session instead of
-        # exiting.
-        if session_mode == "resume":
-            cmd_map = {
-                "gemini": [
-                    "bash",
-                    "-c",
-                    "gemini --resume latest || gemini",
-                ],
-                "claude": [
-                    "bash",
-                    "-c",
-                    "claude --continue || claude",
-                ],
-                "bash": ["bash"],
-            }
+        # Build command from the agent profile. Resume mode
+        # uses a fallback command if defined, otherwise
+        # falls back to the new-session command.
+        profile = self.profiles.get(tool)
+        if profile:
+            if session_mode == "resume" and profile.commands.resume:
+                cmd = profile.commands.resume
+            else:
+                cmd = profile.commands.new or [tool]
         else:
-            cmd_map = {
-                "gemini": ["gemini"],
-                "claude": ["claude"],
-                "bash": ["bash"],
-            }
-        cmd = cmd_map.get(tool, [tool])
+            cmd = [tool]
 
         pid, fd = pty.fork()
         if pid == 0:  # Child process
