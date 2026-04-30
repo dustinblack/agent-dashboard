@@ -1,7 +1,9 @@
 import React from 'react';
 import { Server, Wifi, WifiOff, PlusCircle, Trash2 } from 'lucide-react';
 import type { Host, Agent } from '../../api';
+import { normalizeToolInfo } from '../../api';
 import AgentSessionCard from './AgentSessionCard';
+import { getToolColorsByKeyword } from './utils';
 
 /** Props for the HostCard component. */
 interface HostCardProps {
@@ -28,11 +30,9 @@ const HostCard: React.FC<HostCardProps> = ({
   onDeleteHost,
 }) => {
   const isOnline = host.status === 'online';
-  const availableTools = host.projects?.available_tools || [
-    'gemini',
-    'claude',
-    'bash',
-  ];
+  const availableTools = (host.projects?.available_tools || []).map(
+    normalizeToolInfo,
+  );
 
   return (
     <div
@@ -66,45 +66,23 @@ const HostCard: React.FC<HostCardProps> = ({
 
         {/* Row 2: Spawn + Delete buttons */}
         <div className="flex items-center gap-2 mt-2">
-          {availableTools.includes('gemini') && (
-            <button
-              onClick={() => onSpawnClick(host.id, 'gemini')}
-              disabled={!isOnline}
-              className={`text-xs px-3 py-1.5 rounded-md border transition-colors flex items-center gap-1.5 ${
-                isOnline
-                  ? 'bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 border-blue-500/30 cursor-pointer'
-                  : 'bg-slate-700/50 text-slate-500 border-slate-700 cursor-not-allowed'
-              }`}
-            >
-              <PlusCircle size={14} /> Spawn Gemini
-            </button>
-          )}
-          {availableTools.includes('claude') && (
-            <button
-              onClick={() => onSpawnClick(host.id, 'claude')}
-              disabled={!isOnline}
-              className={`text-xs px-3 py-1.5 rounded-md border transition-colors flex items-center gap-1.5 ${
-                isOnline
-                  ? 'bg-purple-500/20 hover:bg-purple-500/40 text-purple-400 border-purple-500/30 cursor-pointer'
-                  : 'bg-slate-700/50 text-slate-500 border-slate-700 cursor-not-allowed'
-              }`}
-            >
-              <PlusCircle size={14} /> Spawn Claude
-            </button>
-          )}
-          {availableTools.includes('bash') && (
-            <button
-              onClick={() => onSpawnClick(host.id, 'bash')}
-              disabled={!isOnline}
-              className={`text-xs px-3 py-1.5 rounded-md border transition-colors flex items-center gap-1.5 ${
-                isOnline
-                  ? 'bg-slate-700 hover:bg-slate-600 text-slate-300 border-slate-600 cursor-pointer'
-                  : 'bg-slate-700/50 text-slate-500 border-slate-700 cursor-not-allowed'
-              }`}
-            >
-              <PlusCircle size={14} /> Spawn Bash
-            </button>
-          )}
+          {availableTools.map((tool) => {
+            const colors = getToolColorsByKeyword(tool.color);
+            return (
+              <button
+                key={tool.name}
+                onClick={() => onSpawnClick(host.id, tool.name)}
+                disabled={!isOnline}
+                className={`text-xs px-3 py-1.5 rounded-md border transition-colors flex items-center gap-1.5 ${
+                  isOnline
+                    ? `${colors.button} ${colors.buttonHover} cursor-pointer`
+                    : 'bg-slate-700/50 text-slate-500 border-slate-700 cursor-not-allowed'
+                }`}
+              >
+                <PlusCircle size={14} /> Spawn {tool.display_name}
+              </button>
+            );
+          })}
           <button
             onClick={() => onDeleteHost(host.id)}
             className="text-xs px-3 py-1.5 rounded-md border transition-colors flex items-center gap-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-400 border-red-500/30 cursor-pointer ml-auto"
