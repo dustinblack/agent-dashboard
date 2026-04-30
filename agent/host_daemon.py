@@ -308,52 +308,53 @@ class HostDaemon:
 
     def _detect_available_tools(self) -> list:
         """Detects which agent CLI tools are installed and
-        configured on this host.
+        configured on this host using agent profiles.
 
-        Checks for binary availability and basic auth
-        configuration. Bash is always available.
+        For each profile, checks if the binary is present
+        and if the required auth env vars are set. Profiles
+        with always_available=true (e.g. bash) are included
+        unconditionally.
 
         Returns:
-            List of tool name strings (e.g. ["gemini",
-            "claude", "bash"]).
+            List of tool name strings.
         """
-        tools = ["bash"]  # Always available
-
-        # Check Gemini CLI
-        try:
-            subprocess.run(
-                ["gemini", "--version"],
-                capture_output=True,
-                timeout=5,
-                check=False,
-            )
-            # Binary exists — check for API key
-            if os.getenv("GEMINI_API_KEY"):
-                tools.append("gemini")
+        tools = []
+        for name, profile in self.profiles.items():
+            if profile.always_available:
+                tools.append(name)
+                continue
+            # Check if binary exists
+            try:
+                subprocess.run(
+                    [profile.binary, "--version"],
+                    capture_output=True,
+                    timeout=5,
+                    check=False,
+                )
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+            # Check auth requirements
+            if not profile.auth.env_vars:
+                tools.append(name)
+                continue
+            if profile.auth.require == "all":
+                if all(os.getenv(v) for v in profile.auth.env_vars):
+                    tools.append(name)
+                else:
+                    print(
+                        f"{profile.display_name} CLI found "
+                        f"but auth not configured — "
+                        f"not advertising."
+                    )
             else:
-                print("Gemini CLI found but GEMINI_API_KEY not set — not advertising.")
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
-        # Check Claude Code
-        try:
-            subprocess.run(
-                ["claude", "--version"],
-                capture_output=True,
-                timeout=5,
-                check=False,
-            )
-            # Binary exists — check for auth (API key or
-            # Vertex AI credentials)
-            has_api_key = bool(os.getenv("ANTHROPIC_API_KEY"))
-            has_vertex = bool(os.getenv("CLAUDE_CODE_USE_VERTEX"))
-            if has_api_key or has_vertex:
-                tools.append("claude")
-            else:
-                print("Claude CLI found but no auth configured — not advertising.")
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
+                if any(os.getenv(v) for v in profile.auth.env_vars):
+                    tools.append(name)
+                else:
+                    print(
+                        f"{profile.display_name} CLI found "
+                        f"but auth not configured — "
+                        f"not advertising."
+                    )
         print(f"Available tools: {tools}")
         return tools
 
