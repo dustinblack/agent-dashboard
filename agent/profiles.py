@@ -83,6 +83,7 @@ class AgentProfile:
 
     name: str = ""
     display_name: str = ""
+    color: str = ""
     binary: str = ""
     always_available: bool = False
     commands: CommandConfig = field(default_factory=CommandConfig)
@@ -92,6 +93,14 @@ class AgentProfile:
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     sidecar: Optional[SidecarConfig] = None
     permission_patterns: List[str] = field(default_factory=list)
+
+    @property
+    def supports_resume(self) -> bool:
+        """Whether the tool supports resuming a previous
+        session. True when the resume command is defined
+        and differs from the new-session command.
+        """
+        return bool(self.commands.resume) and self.commands.resume != self.commands.new
 
 
 def _parse_profile(data: dict) -> AgentProfile:
@@ -107,6 +116,7 @@ def _parse_profile(data: dict) -> AgentProfile:
     profile = AgentProfile(
         name=data.get("name", ""),
         display_name=data.get("display_name", ""),
+        color=data.get("color", ""),
         binary=data.get("binary", ""),
         always_available=data.get("always_available", False),
         permission_patterns=data.get("permission_patterns", []),

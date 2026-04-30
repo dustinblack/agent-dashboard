@@ -1,6 +1,7 @@
 # Claude Code agent profile
 name: claude
 display_name: Claude
+color: purple
 binary: claude
 
 commands:

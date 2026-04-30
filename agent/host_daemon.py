@@ -294,6 +294,24 @@ class HostDaemon:
 
             await asyncio.sleep(60)
 
+    def _make_tool_info(self, profile) -> dict:
+        """Builds a tool metadata dict from a profile for
+        the available_tools payload sent to the frontend.
+
+        Args:
+            profile: AgentProfile instance.
+
+        Returns:
+            Dict with name, display_name, color, and
+            supports_resume fields.
+        """
+        return {
+            "name": profile.name,
+            "display_name": profile.display_name,
+            "color": profile.color or "slate",
+            "supports_resume": profile.supports_resume,
+        }
+
     def _detect_available_tools(self) -> list:
         """Detects which agent CLI tools are installed and
         configured on this host using agent profiles.
@@ -304,12 +322,13 @@ class HostDaemon:
         unconditionally.
 
         Returns:
-            List of tool name strings.
+            List of tool info dicts with name,
+            display_name, color, and supports_resume.
         """
         tools = []
-        for name, profile in self.profiles.items():
+        for profile in self.profiles.values():
             if profile.always_available:
-                tools.append(name)
+                tools.append(self._make_tool_info(profile))
                 continue
             # Check if binary exists
             try:
@@ -323,11 +342,11 @@ class HostDaemon:
                 continue
             # Check auth requirements
             if not profile.auth.env_vars:
-                tools.append(name)
+                tools.append(self._make_tool_info(profile))
                 continue
             if profile.auth.require == "all":
                 if all(os.getenv(v) for v in profile.auth.env_vars):
-                    tools.append(name)
+                    tools.append(self._make_tool_info(profile))
                 else:
                     print(
                         f"{profile.display_name} CLI found "
@@ -336,7 +355,7 @@ class HostDaemon:
                     )
             else:
                 if any(os.getenv(v) for v in profile.auth.env_vars):
-                    tools.append(name)
+                    tools.append(self._make_tool_info(profile))
                 else:
                     print(
                         f"{profile.display_name} CLI found "

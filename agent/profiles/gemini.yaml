@@ -1,6 +1,7 @@
 # Gemini CLI agent profile
 name: gemini
 display_name: Gemini
+color: blue
 binary: gemini
 
 commands:

@@ -1,6 +1,7 @@
 # Bash shell agent profile
 name: bash
 display_name: Bash
+color: slate
 binary: bash
 always_available: true
 
