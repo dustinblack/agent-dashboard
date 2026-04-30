@@ -57,6 +57,10 @@ session cost.
   any number of development machines. Spawn and manage Gemini,
   Claude, and Bash sessions across all hosts from a single
   dashboard.
+- **Extensible agent profiles** — Agent tools are defined by
+  YAML/JSON [profile configs](docs/agent-profiles.md) rather
+  than hardcoded logic. Add support for new AI agents by
+  dropping a profile file into the `agent/profiles/` directory.
 - **Remote PTY terminals** — Full `xterm-256color` terminal
   emulation via pseudo-terminals, not a log viewer or chat
   interface. Supports cursor movement, line-erase sequences,
