@@ -17,6 +17,7 @@ import signal
 import struct
 import subprocess
 import sys
+import tempfile
 import termios
 import time
 from collections import deque
@@ -715,7 +716,9 @@ class HostDaemon:
             # Inject sidecar PROMPT_COMMAND if the profile
             # defines one (e.g. bash telemetry collection).
             if profile and profile.sidecar and profile.sidecar.prompt_command:
-                sidecar_path = profile.sidecar.file_pattern.format(agent_id=agent_id)
+                sidecar_path = profile.sidecar.file_pattern.format(
+                    agent_id=agent_id, tmpdir=tempfile.gettempdir()
+                )
                 env["PROMPT_COMMAND"] = (
                     f"{profile.sidecar.prompt_command} > {sidecar_path}"
                 )
@@ -866,7 +869,9 @@ class HostDaemon:
             tool_name = self.agents[agent_id].get("tool")
             profile = self.profiles.get(tool_name)
             if profile and profile.sidecar:
-                sidecar = profile.sidecar.file_pattern.format(agent_id=agent_id)
+                sidecar = profile.sidecar.file_pattern.format(
+                    agent_id=agent_id, tmpdir=tempfile.gettempdir()
+                )
                 try:
                     os.unlink(sidecar)
                 except OSError:
@@ -1436,7 +1441,9 @@ class HostDaemon:
                     tool_name = info.get("tool")
                     profile = self.profiles.get(tool_name)
                     if profile and profile.sidecar:
-                        sidecar = profile.sidecar.file_pattern.format(agent_id=agent_id)
+                        sidecar = profile.sidecar.file_pattern.format(
+                            agent_id=agent_id, tmpdir=tempfile.gettempdir()
+                        )
                         try:
                             with open(sidecar, "r", encoding="utf-8") as f:
                                 sc_data = json.loads(f.read().strip())

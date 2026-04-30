@@ -67,7 +67,7 @@ class SidecarConfig:
     """
 
     prompt_command: Optional[str] = None
-    file_pattern: str = "/tmp/.agent-telemetry-{agent_id}"
+    file_pattern: str = "{tmpdir}/.agent-telemetry-{agent_id}"
     fields: Dict[str, str] = field(default_factory=dict)
 
 
@@ -160,7 +160,7 @@ def _parse_profile(data: dict) -> AgentProfile:
             prompt_command=sc.get("prompt_command"),
             file_pattern=sc.get(
                 "file_pattern",
-                "/tmp/.agent-telemetry-{agent_id}",
+                "{tmpdir}/.agent-telemetry-{agent_id}",
             ),
             fields=sc.get("fields", {}),
         )

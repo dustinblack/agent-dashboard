@@ -15,7 +15,7 @@ sidecar:
     printf '{"cwd":"%s","exit_code":%d,"last_cmd":"%s"}\n'
     "$PWD" "$?"
     "$(HISTTIMEFORMAT= history 1 | sed 's/^[ ]*[0-9]*[ ]*//')"
-  file_pattern: "/tmp/.agent-telemetry-{agent_id}"
+  file_pattern: "{tmpdir}/.agent-telemetry-{agent_id}"
   fields:
     current_activity: cwd
     last_exit_code: exit_code
