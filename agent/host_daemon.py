@@ -27,42 +27,22 @@ from aiohttp import web
 
 from agent.profiles import load_profiles
 
-# Terminal patterns that indicate the agent is waiting for
-# user input.  These are matched against stripped terminal
-# output (ANSI escape sequences removed) to avoid false
-# matches on escape codes.  A match sets a "candidate"
-# flag; the status only transitions to waiting_permission
-# after the agent has been idle (no output) for
-# PERMISSION_IDLE_SECONDS.
-#
-# MAINTAINER NOTE: Update these patterns when Claude Code
-# or Gemini CLI change their permission prompt text or
-# format. Test with actual CLI output to avoid false
-# positives.
-PERMISSION_PATTERNS = [
-    re.compile(p, re.IGNORECASE)
-    for p in [
-        # Generic yes/no prompts (anchored to common
-        # bracket/paren formats)
-        r"\[Y/n\]",
-        r"\[y/N\]",
-        r"\(yes/no\)",
-        r"\(y/n\)",
-        # Claude Code permission prompts
-        r"Do you want to proceed",
-        # Gemini CLI permission prompts
-        r"Allow .+ to run",
-        r"Do you want to allow",
-        # General input prompts (anchored with ?)
-        r"press enter to continue",
-        r"Continue\?",
-        r"Proceed\?",
-        # Claude Code plan mode interactive menus
-        r"\u276f\s+\d+\.",  # ❯ 1. (selection cursor)
-        r"\u2610",  # ☐ (unchecked checkbox)
-        r"Skip interview and plan",  # plan mode menu option
-    ]
+# Default permission patterns — generic prompts that
+# apply to all agent tools. Tool-specific patterns are
+# loaded from agent profiles and merged at daemon startup.
+_DEFAULT_PERMISSION_PATTERNS = [
+    r"\[Y/n\]",
+    r"\[y/N\]",
+    r"\(yes/no\)",
+    r"\(y/n\)",
+    r"press enter to continue",
+    r"Continue\?",
+    r"Proceed\?",
 ]
+
+# Compiled patterns — populated by HostDaemon.__init__
+# after merging profile-specific patterns.
+PERMISSION_PATTERNS = []
 
 # Seconds of idle output after a pattern match before
 # the status transitions to waiting_permission.
@@ -149,6 +129,13 @@ class HostDaemon:
             if tel.runtime_metric and tel.runtime_metric.name:
                 self._runtime_metrics[tel.runtime_metric.name] = tel.runtime_metric.unit
             self._excluded_metrics.update(tel.excluded_metrics)
+        # Merge permission patterns from profiles into
+        # the default generic patterns.
+        global PERMISSION_PATTERNS  # pylint: disable=global-statement
+        all_patterns = list(_DEFAULT_PERMISSION_PATTERNS)
+        for prof in self.profiles.values():
+            all_patterns.extend(prof.permission_patterns)
+        PERMISSION_PATTERNS = [re.compile(p, re.IGNORECASE) for p in all_patterns]
         self.sio = socketio.AsyncClient()
         self.agents: Dict[str, Dict] = (
             {}
