@@ -508,6 +508,40 @@ class TestAgentProfiles:
         assert "gemini_cli.agent.duration" in daemon._runtime_metrics
         assert "gen_ai.client.token.usage" in daemon._excluded_metrics
 
+    def test_supports_resume_property(self):
+        """supports_resume is True when resume differs from
+        new, False when they are the same."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+        # Claude and Gemini have distinct resume commands
+        assert profiles["claude"].supports_resume is True
+        assert profiles["gemini"].supports_resume is True
+        # Bash has resume == new == ["bash"]
+        assert profiles["bash"].supports_resume is False
+
+    def test_color_field_loaded(self):
+        """Color field is loaded from profile YAML files."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+        assert profiles["claude"].color == "purple"
+        assert profiles["gemini"].color == "blue"
+        assert profiles["bash"].color == "slate"
+
+    def test_make_tool_info(self, daemon):
+        """_make_tool_info builds correct metadata dict."""
+        info = daemon._make_tool_info(daemon.profiles["claude"])
+        assert info["name"] == "claude"
+        assert info["display_name"] == "Claude"
+        assert info["color"] == "purple"
+        assert info["supports_resume"] is True
+
+        bash_info = daemon._make_tool_info(daemon.profiles["bash"])
+        assert bash_info["name"] == "bash"
+        assert bash_info["color"] == "slate"
+        assert bash_info["supports_resume"] is False
+
     def test_unknown_profile_returns_empty(self):
         """Loading from empty directory returns no profiles."""
         import tempfile

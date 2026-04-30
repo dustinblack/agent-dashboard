@@ -27,6 +27,7 @@ file in `agent/profiles/`. The daemon loads all `.yaml`,
 ```yaml
 name: myagent
 display_name: My Agent
+color: green
 binary: myagent-cli
 
 commands:
@@ -42,6 +43,11 @@ name: myagent
 
 # Display name shown in logs and UI
 display_name: My Agent
+
+# UI theme color for spawn buttons and badges.
+# Supported keywords: purple, blue, slate, green,
+# red, amber, cyan. Defaults to slate if omitted.
+color: green
 
 # Binary to check for availability
 binary: myagent-cli
@@ -102,8 +108,8 @@ sidecar:
   # Shell command injected as PROMPT_COMMAND
   prompt_command: >-
     printf '{"cwd":"%s"}\n' "$PWD"
-  # File path pattern ({agent_id} is replaced at runtime)
-  file_pattern: "/tmp/.agent-telemetry-{agent_id}"
+  # File path pattern ({tmpdir} and {agent_id} replaced at runtime)
+  file_pattern: "{tmpdir}/.agent-telemetry-{agent_id}"
   # Map sidecar JSON keys to telemetry field names
   fields:
     current_activity: cwd
@@ -117,11 +123,14 @@ permission_patterns:
 
 ## How Profiles Are Used
 
-| Feature | Profile Field | Daemon Method |
-|---------|--------------|---------------|
+| Feature | Profile Field | Used By |
+|---------|--------------|---------|
 | Spawn commands | `commands.new`, `commands.resume` | `spawn_agent()` |
 | Environment vars | `env` | `spawn_agent()` (child process) |
 | Tool detection | `binary`, `auth`, `always_available` | `_detect_available_tools()` |
+| Spawn button label | `display_name` | HostCard, SpawnModal, Terminal header |
+| Spawn button color | `color` | HostCard buttons, Terminal badge |
+| Resume mode toggle | `commands.resume` vs `commands.new` | SpawnModal (derived) |
 | MCP detection | `mcp.project_file`, `mcp.user_files` | `_detect_mcp_servers()` |
 | Token tracking | `telemetry.token_metrics` | `handle_otlp()` |
 | Cost tracking | `telemetry.cost_metric` | `handle_otlp()` |
@@ -129,6 +138,96 @@ permission_patterns:
 | Runtime tracking | `telemetry.runtime_metric` | `handle_otlp()` |
 | Permission prompts | `permission_patterns` | Terminal output matching |
 | Sidecar telemetry | `sidecar.*` | `update_agents_git_info()` |
+| Companion buttons | `name`, `display_name` | Terminal companion bar |
+
+## Resume Mode
+
+The SpawnModal shows a "Resume Session" toggle when a tool
+supports resuming previous sessions. This is **derived
+automatically** from the `commands` configuration — no
+separate flag is needed:
+
+- **Supports resume**: `commands.resume` is defined AND
+  differs from `commands.new` (e.g. Claude, Gemini).
+- **No resume**: `commands.resume` is empty, undefined, or
+  identical to `commands.new` (e.g. Bash where both are
+  `["bash"]`).
+
+## Adding a New Agent Tool
+
+To add support for a completely new agent tool (e.g.
+Aider, Codex, Cursor), follow these steps:
+
+### 1. Create the Profile
+
+Create a YAML file in `agent/profiles/`:
+
+```yaml
+# agent/profiles/aider.yaml
+name: aider
+display_name: Aider
+color: green
+binary: aider
+
+commands:
+  new: ["aider"]
+  resume: ["aider"]
+
+auth:
+  env_vars:
+    - OPENAI_API_KEY
+  require: any
+```
+
+### 2. Install the Binary in the Container
+
+Update `agent/Containerfile` to install the tool. The
+method depends on the tool's distribution:
+
+```dockerfile
+# Example: pip-distributed tool
+RUN pip3 install --no-cache-dir aider-chat
+
+# Example: npm-distributed tool
+RUN npm install -g @some-org/some-agent
+
+# Example: standalone binary
+RUN curl -sSL https://example.com/agent \
+    -o /usr/local/bin/agent \
+    && chmod +x /usr/local/bin/agent
+```
+
+### 3. Mount Credentials (if needed)
+
+If the tool needs config files or credentials from the
+host, add volume mounts to your container run command or
+compose file. Document the required mounts in
+`agent/README.md`.
+
+### 4. Set Auth Environment Variables
+
+If the profile has `auth.env_vars`, pass the required
+environment variables to the container:
+
+```bash
+-e OPENAI_API_KEY="sk-..."   # podman run
+Environment=OPENAI_API_KEY=sk-...   # systemd quadlet
+```
+
+### 5. Rebuild and Deploy
+
+```bash
+cd agent/
+podman build -t agent-dashboard-daemon -f Containerfile .
+```
+
+Restart the daemon. The new tool will automatically:
+- Appear as a spawn button with the configured color
+- Show in the TUI tool selector
+- Be available as a companion in terminal views
+- Have its resume toggle derived from the commands config
+
+No frontend or backend code changes are required.
 
 ## Notes
 
@@ -139,3 +238,6 @@ permission_patterns:
   are always active. Profile patterns are merged in addition.
 - Profile changes require a daemon restart to take effect.
 - The daemon logs which profiles were loaded at startup.
+- Supported color keywords: `purple`, `blue`, `slate`,
+  `green`, `red`, `amber`, `cyan`. Unknown keywords fall
+  back to `slate`.
