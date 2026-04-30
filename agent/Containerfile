@@ -95,10 +95,12 @@ RUN pip3 install --no-cache-dir black flake8 pylint
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copy the daemon script and agent profiles
-COPY host_daemon.py .
-COPY profiles.py .
-COPY profiles/ profiles/
+# Copy the daemon as a Python package so imports
+# (e.g. from agent.profiles) work correctly.
+COPY __init__.py agent/
+COPY host_daemon.py agent/
+COPY profiles.py agent/
+COPY profiles/ agent/profiles/
 
-# Use the daemon as the entrypoint
-ENTRYPOINT ["python3", "host_daemon.py"]
+# Run as a module to preserve package import paths
+ENTRYPOINT ["python3", "-m", "agent.host_daemon"]
