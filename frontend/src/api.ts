@@ -128,6 +128,7 @@ export const updateTaskDescription = async (
 
 export interface AgentDetail extends Agent {
   host_name: string;
+  available_tools?: (string | ToolInfo)[];
 }
 
 export const getAgentDetails = async (

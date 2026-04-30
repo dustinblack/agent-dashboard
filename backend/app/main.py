@@ -165,9 +165,10 @@ class AgentSchema(AgentBase):
 
 
 class AgentDetailSchema(AgentSchema):
-    """Extended agent schema that includes the host name."""
+    """Extended agent schema with host name and tools."""
 
     host_name: str
+    available_tools: Optional[list] = None
 
 
 class SpawnRequest(BaseModel):
@@ -320,6 +321,11 @@ def get_agent_details(
 
     host = db.query(models.Host).filter(models.Host.id == db_agent.host_id).first()
     host_name = host.name if host else "unknown"
+    available_tools = (
+        host.last_projects_json.get("available_tools")
+        if host and host.last_projects_json
+        else None
+    )
 
     return AgentDetailSchema(
         id=db_agent.id,
@@ -332,6 +338,7 @@ def get_agent_details(
         started_at=db_agent.started_at,
         ended_at=db_agent.ended_at,
         host_name=host_name,
+        available_tools=available_tools,
     )
 
 
