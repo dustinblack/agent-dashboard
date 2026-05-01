@@ -41,10 +41,6 @@ _DEFAULT_PERMISSION_PATTERNS = [
     r"Proceed\?",
 ]
 
-# Compiled patterns — populated by HostDaemon.__init__
-# after merging profile-specific patterns.
-PERMISSION_PATTERNS = []
-
 # Seconds of idle output after a pattern match before
 # the status transitions to waiting_permission.
 PERMISSION_IDLE_SECONDS = 2
@@ -132,11 +128,10 @@ class HostDaemon:
             self._excluded_metrics.update(tel.excluded_metrics)
         # Merge permission patterns from profiles into
         # the default generic patterns.
-        global PERMISSION_PATTERNS  # pylint: disable=global-statement
         all_patterns = list(_DEFAULT_PERMISSION_PATTERNS)
         for prof in self.profiles.values():
             all_patterns.extend(prof.permission_patterns)
-        PERMISSION_PATTERNS = [re.compile(p, re.IGNORECASE) for p in all_patterns]
+        self.permission_patterns = [re.compile(p, re.IGNORECASE) for p in all_patterns]
         self.sio = socketio.AsyncClient()
         self.agents: Dict[str, Dict] = (
             {}
@@ -258,33 +253,38 @@ class HostDaemon:
                 except OSError:
                     pass
 
+    def _scan_projects(self) -> list:
+        """Scans PROJECTS_ROOT for git repositories.
+
+        Synchronous method intended to be called from an
+        executor to avoid blocking the event loop.
+
+        Returns:
+            Sorted list of project relative paths.
+        """
+        projects = []
+        if os.path.exists(self.projects_root):
+            try:
+                for root, dirs, _files in os.walk(self.projects_root):
+                    rel_path = os.path.relpath(root, self.projects_root)
+                    depth = 0 if rel_path == "." else len(rel_path.split(os.sep))
+                    if depth > self.projects_depth:
+                        dirs[:] = []
+                        continue
+                    if ".git" in dirs:
+                        if rel_path != ".":
+                            projects.append(rel_path)
+                        dirs[:] = [d for d in dirs if d != ".git"]
+                projects.sort()
+            except Exception as e:
+                print(f"Error scanning projects root {self.projects_root}: {e}")
+        return projects
+
     async def update_projects_cache(self):
         """Continuously updates the project cache in the background every 60 seconds."""
         loop = asyncio.get_running_loop()
         while self.running:
-
-            def _scan():
-                projects = []
-                if os.path.exists(self.projects_root):
-                    try:
-                        for root, dirs, _files in os.walk(self.projects_root):
-                            rel_path = os.path.relpath(root, self.projects_root)
-                            depth = (
-                                0 if rel_path == "." else len(rel_path.split(os.sep))
-                            )
-                            if depth > self.projects_depth:
-                                dirs[:] = []
-                                continue
-                            if ".git" in dirs:
-                                if rel_path != ".":
-                                    projects.append(rel_path)
-                                dirs[:] = [d for d in dirs if d != ".git"]
-                        projects.sort()
-                    except Exception as e:
-                        print(f"Error scanning projects root {self.projects_root}: {e}")
-                return projects
-
-            new_projects = await loop.run_in_executor(None, _scan)
+            new_projects = await loop.run_in_executor(None, self._scan_projects)
             async with self.projects_lock:
                 self.cached_projects = new_projects
 
@@ -371,27 +371,7 @@ class HostDaemon:
         requests from the UI.
         """
         loop = asyncio.get_running_loop()
-
-        def _scan():
-            projects = []
-            if os.path.exists(self.projects_root):
-                try:
-                    for root, dirs, _files in os.walk(self.projects_root):
-                        rel_path = os.path.relpath(root, self.projects_root)
-                        depth = 0 if rel_path == "." else len(rel_path.split(os.sep))
-                        if depth > self.projects_depth:
-                            dirs[:] = []
-                            continue
-                        if ".git" in dirs:
-                            if rel_path != ".":
-                                projects.append(rel_path)
-                            dirs[:] = [d for d in dirs if d != ".git"]
-                    projects.sort()
-                except Exception as e:
-                    print(f"Error scanning projects root {self.projects_root}: {e}")
-            return projects
-
-        new_projects = await loop.run_in_executor(None, _scan)
+        new_projects = await loop.run_in_executor(None, self._scan_projects)
         async with self.projects_lock:
             self.cached_projects = new_projects
         print(f"Force rescan: found {len(new_projects)} projects.")
@@ -724,12 +704,15 @@ class HostDaemon:
 
             # Inject profile-specific environment variables.
             # Values can use {otlp_port} and {agent_id}
-            # placeholders for templating.
+            # placeholders. Uses .replace() instead of
+            # .format() to avoid KeyError if a value
+            # contains literal curly braces.
             if profile:
                 for key, value in profile.env.items():
-                    env[key] = str(value).format(
-                        otlp_port=self.otlp_port,
-                        agent_id=agent_id,
+                    env[key] = (
+                        str(value)
+                        .replace("{otlp_port}", str(self.otlp_port))
+                        .replace("{agent_id}", agent_id)
                     )
 
             # Inject sidecar PROMPT_COMMAND if the profile
@@ -854,7 +837,7 @@ class HostDaemon:
                         # has been idle for PERMISSION_IDLE_SECONDS.
                         stripped = _ANSI_ESCAPE.sub("", decoded_data)
                         now = time.monotonic()
-                        if any(p.search(stripped) for p in PERMISSION_PATTERNS):
+                        if any(p.search(stripped) for p in self.permission_patterns):
                             info["permission_candidate"] = now
                         # New output clears permission_waiting
                         # since the agent is actively producing

@@ -100,6 +100,7 @@ const HostCard: React.FC<HostCardProps> = ({
             <AgentSessionCard
               key={agent.id}
               agent={agent}
+              availableTools={availableTools}
               onAttach={onAttach}
               onStop={onStop}
             />

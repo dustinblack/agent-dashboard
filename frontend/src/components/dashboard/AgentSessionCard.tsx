@@ -11,10 +11,11 @@ import {
   GitFork,
   TriangleAlert,
 } from 'lucide-react';
-import type { Agent } from '../../api';
+import type { Agent, ToolInfo } from '../../api';
 import {
   getContextWindow,
   getToolColors,
+  getToolColorsByKeyword,
   getProgressColor,
   formatDuration,
   estimateCost,
@@ -28,6 +29,8 @@ import EditableTaskDescription from './EditableTaskDescription';
 /** Props for the AgentSessionCard component. */
 interface AgentSessionCardProps {
   agent: Agent;
+  /** Tool metadata from the host's available_tools list. */
+  availableTools?: ToolInfo[];
   onAttach: (agentId: string) => void;
   onStop: (agentId: string) => void;
 }
@@ -39,10 +42,17 @@ interface AgentSessionCardProps {
  */
 const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
   agent,
+  availableTools,
   onAttach,
   onStop,
 }) => {
   const tel = agent.telemetry || {};
+  // Prefer profile color from available_tools metadata,
+  // falling back to name-based inference.
+  const toolInfo = availableTools?.find((t) => t.name === agent.tool_name);
+  const toolColors = toolInfo?.color
+    ? getToolColorsByKeyword(toolInfo.color)
+    : getToolColors(agent.tool_name);
   // Use context_tokens (per-call input tokens) for the
   // progress bar — reflects current context window usage
   // after compression. Do NOT fall back to cumulative
@@ -74,13 +84,13 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
 
   return (
     <div
-      className={`bg-slate-800 rounded-2xl p-4 border border-slate-700 ${getToolColors(agent.tool_name).border} transition-all shadow-lg flex flex-col h-full group`}
+      className={`bg-slate-800 rounded-2xl p-4 border border-slate-700 ${toolColors.border} transition-all shadow-lg flex flex-col h-full group`}
     >
       <div className="flex justify-between items-start mb-2">
         <div className="overflow-hidden">
           <div className="flex gap-2 items-center">
             <span
-              className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase border ${getToolColors(agent.tool_name).badge}`}
+              className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase border ${toolColors.badge}`}
             >
               {agent.tool_name || 'agent'}
             </span>

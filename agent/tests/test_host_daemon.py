@@ -489,12 +489,10 @@ class TestAgentProfiles:
 
     def test_profile_permission_patterns_merged(self, daemon):
         """Permission patterns from profiles are merged
-        into the global PERMISSION_PATTERNS."""
-        from agent.host_daemon import PERMISSION_PATTERNS
-
-        assert len(PERMISSION_PATTERNS) > 0
+        into the instance permission_patterns list."""
+        assert len(daemon.permission_patterns) > 0
         # Should include generic defaults
-        patterns_str = [p.pattern for p in PERMISSION_PATTERNS]
+        patterns_str = [p.pattern for p in daemon.permission_patterns]
         assert any("Y/n" in p for p in patterns_str)
         # Should include Claude-specific
         assert any("proceed" in p.lower() for p in patterns_str)
