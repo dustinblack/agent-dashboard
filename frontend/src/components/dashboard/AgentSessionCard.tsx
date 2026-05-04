@@ -152,52 +152,44 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
               </span>
             )}
           </div>
-          {ctxTokens > 0 && (
-            <div className="mt-1.5">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">
-                  Context
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  {ctxTokens.toLocaleString()} /{' '}
-                  {contextMax >= 1000000
-                    ? `${(contextMax / 1000000).toFixed(1).replace('.0', '')}M`
-                    : `${(contextMax / 1000).toFixed(0)}k`}
-                </span>
-              </div>
-              <div className="w-full h-2.5 bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ${getProgressColor(tokenPct)}`}
-                  style={{
-                    width: `${Math.max(tokenPct, 1)}%`,
-                  }}
-                />
-              </div>
-            </div>
-          )}
-          {/* Cost + token breakdown — hidden until data arrives */}
-          {!!(tel.input_tokens || tel.output_tokens || displayCost) && (
-            <div className="flex justify-between items-center mt-2 pt-1.5 border-t border-slate-700/30">
-              <span
-                className="text-[10px] text-slate-400 font-mono"
-                title={costSource}
-              >
-                {formatCost(displayCost)}
+          <div className="mt-1.5">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">
+                Context
               </span>
-              {!!(tel.input_tokens || tel.output_tokens) && (
-                <span className="text-[10px] text-slate-400 font-mono">
-                  {tel.input_tokens
-                    ? formatTokenCount(tel.input_tokens) + ' in'
-                    : ''}
-                  {tel.input_tokens && tel.output_tokens ? ' / ' : ''}
-                  {tel.output_tokens
-                    ? formatTokenCount(tel.output_tokens) + ' out'
-                    : ''}
-                </span>
-              )}
+              <span className="text-[10px] text-slate-400 font-mono">
+                {ctxTokens ? ctxTokens.toLocaleString() : '—'} /{' '}
+                {contextMax >= 1000000
+                  ? `${(contextMax / 1000000).toFixed(1).replace('.0', '')}M`
+                  : `${(contextMax / 1000).toFixed(0)}k`}
+              </span>
             </div>
-          )}
-          {/* Cache token breakdown */}
+            <div className="w-full h-2.5 bg-slate-700 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${getProgressColor(tokenPct)}`}
+                style={{
+                  width: `${Math.max(tokenPct, 1)}%`,
+                }}
+              />
+            </div>
+          </div>
+          <div className="flex justify-between items-center mt-2 pt-1.5 border-t border-slate-700/30">
+            <span
+              className="text-[10px] text-slate-400 font-mono"
+              title={costSource}
+            >
+              {formatCost(displayCost)}
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {tel.input_tokens
+                ? formatTokenCount(tel.input_tokens) + ' in'
+                : ''}
+              {tel.input_tokens && tel.output_tokens ? ' / ' : ''}
+              {tel.output_tokens
+                ? formatTokenCount(tel.output_tokens) + ' out'
+                : ''}
+            </span>
+          </div>
           {!!(tel.cache_read_tokens || tel.cache_creation_tokens) && (
             <p className="text-[9px] text-slate-500 font-mono text-right mt-0.5">
               {tel.cache_read_tokens
