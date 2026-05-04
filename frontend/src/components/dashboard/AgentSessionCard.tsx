@@ -141,7 +141,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
         <StatusIndicator status={tel.agent_status} />
       </div>
 
-      {tel.model && (
+      {tel.model && tel.model !== 'detecting...' && (
         <div className="my-2 border-t border-slate-700/50 pt-2">
           <div className="flex items-center gap-1">
             <p className="text-[11px] text-slate-300 font-mono truncate">
