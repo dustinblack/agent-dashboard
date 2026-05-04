@@ -63,7 +63,6 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
   const tokenPct = ctxTokens
     ? Math.min((ctxTokens / contextMax) * 100, 100)
     : 0;
-  const totalTokens = tel.tokens || 0;
   // Use OTLP-reported cost (Claude) or estimate from
   // pricing tables (Gemini / other).
   const displayCost =
@@ -174,7 +173,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
               />
             </div>
           </div>
-          {/* Total tokens + cost row */}
+          {/* Cost + token breakdown row */}
           <div className="flex justify-between items-center mt-2 pt-1.5 border-t border-slate-700/30">
             <span
               className="text-[10px] text-slate-400 font-mono"
@@ -182,24 +181,30 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
             >
               {formatCost(displayCost)}
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">
-              {totalTokens
-                ? `${formatTokenCount(totalTokens)} tokens`
-                : '0 tokens'}
-            </span>
+            {(tel.input_tokens || tel.output_tokens) && (
+              <span className="text-[10px] text-slate-400 font-mono">
+                {tel.input_tokens
+                  ? formatTokenCount(tel.input_tokens) + ' in'
+                  : ''}
+                {tel.input_tokens && tel.output_tokens ? ' / ' : ''}
+                {tel.output_tokens
+                  ? formatTokenCount(tel.output_tokens) + ' out'
+                  : ''}
+              </span>
+            )}
           </div>
-          {/* Input/output breakdown */}
-          {tel.input_tokens || tel.output_tokens ? (
+          {/* Cache token breakdown */}
+          {(tel.cache_read_tokens || tel.cache_creation_tokens) && (
             <p className="text-[9px] text-slate-500 font-mono text-right mt-0.5">
-              {tel.input_tokens
-                ? formatTokenCount(tel.input_tokens) + ' in'
+              {tel.cache_read_tokens
+                ? formatTokenCount(tel.cache_read_tokens) + ' cache read'
                 : ''}
-              {tel.input_tokens && tel.output_tokens ? ' / ' : ''}
-              {tel.output_tokens
-                ? formatTokenCount(tel.output_tokens) + ' out'
+              {tel.cache_read_tokens && tel.cache_creation_tokens ? ' / ' : ''}
+              {tel.cache_creation_tokens
+                ? formatTokenCount(tel.cache_creation_tokens) + ' cache write'
                 : ''}
             </p>
-          ) : null}
+          )}
         </div>
       )}
 
