@@ -176,7 +176,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
             </div>
           )}
           {/* Cost + token breakdown — hidden until data arrives */}
-          {(tel.input_tokens || tel.output_tokens || displayCost) && (
+          {!!(tel.input_tokens || tel.output_tokens || displayCost) && (
             <div className="flex justify-between items-center mt-2 pt-1.5 border-t border-slate-700/30">
               <span
                 className="text-[10px] text-slate-400 font-mono"
@@ -184,7 +184,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
               >
                 {formatCost(displayCost)}
               </span>
-              {(tel.input_tokens || tel.output_tokens) && (
+              {!!(tel.input_tokens || tel.output_tokens) && (
                 <span className="text-[10px] text-slate-400 font-mono">
                   {tel.input_tokens
                     ? formatTokenCount(tel.input_tokens) + ' in'
@@ -198,7 +198,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
             </div>
           )}
           {/* Cache token breakdown */}
-          {(tel.cache_read_tokens || tel.cache_creation_tokens) && (
+          {!!(tel.cache_read_tokens || tel.cache_creation_tokens) && (
             <p className="text-[9px] text-slate-500 font-mono text-right mt-0.5">
               {tel.cache_read_tokens
                 ? formatTokenCount(tel.cache_read_tokens) + ' cache read'
