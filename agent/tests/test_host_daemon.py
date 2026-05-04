@@ -534,11 +534,13 @@ class TestAgentProfiles:
         assert info["display_name"] == "Claude"
         assert info["color"] == "purple"
         assert info["supports_resume"] is True
+        assert info["has_model"] is True
 
         bash_info = daemon._make_tool_info(daemon.profiles["bash"])
         assert bash_info["name"] == "bash"
         assert bash_info["color"] == "slate"
         assert bash_info["supports_resume"] is False
+        assert bash_info["has_model"] is False
 
     def test_unknown_profile_returns_empty(self):
         """Loading from empty directory returns no profiles."""

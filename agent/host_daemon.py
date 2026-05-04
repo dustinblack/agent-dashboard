@@ -302,14 +302,15 @@ class HostDaemon:
             profile: AgentProfile instance.
 
         Returns:
-            Dict with name, display_name, color, and
-            supports_resume fields.
+            Dict with name, display_name, color,
+            supports_resume, and has_model fields.
         """
         return {
             "name": profile.name,
             "display_name": profile.display_name,
             "color": profile.color or "slate",
             "supports_resume": profile.supports_resume,
+            "has_model": bool(profile.telemetry.token_metrics),
         }
 
     def _detect_available_tools(self) -> list:

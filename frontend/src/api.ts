@@ -14,6 +14,7 @@ export interface ToolInfo {
   display_name: string;
   color?: string;
   supports_resume?: boolean;
+  has_model?: boolean;
 }
 
 /**
