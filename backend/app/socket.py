@@ -4,6 +4,8 @@ Manages real-time communication between the frontend UI, the
 backend hub, and remote host daemons over the /terminal namespace.
 """
 
+from datetime import datetime, timezone
+
 import socketio
 
 from . import database, models
@@ -46,12 +48,44 @@ async def connect(sid, environ, auth):
         host.status = "online"
         db.commit()
 
+        # Close any stale agents from a previous daemon
+        # session. When a daemon restarts, its in-memory
+        # agent state is gone — any agents still marked
+        # "active" in the DB are unrecoverable.
+        stale_agents = (
+            db.query(models.Agent)
+            .filter(
+                models.Agent.host_id == host.id,
+                models.Agent.status == "active",
+            )
+            .all()
+        )
+        if stale_agents:
+            now = datetime.now(timezone.utc)
+            for agent in stale_agents:
+                agent.status = "closed"
+                agent.ended_at = now
+            db.commit()
+            print(f"Closed {len(stale_agents)} stale agent(s)" f" for host {host.name}")
+
         # Join a room specific to this host's ID so we can send spawn commands to it
         room_name = f"host_{host.id}"
         await sio.enter_room(sid, room_name, namespace="/terminal")
         print(
             f"Host Daemon connected: {host.name} (SID: {sid}) joined room: {room_name}"
         )
+
+        # Notify UI about closed stale agents after
+        # joining the room so the emit goes through.
+        for agent in stale_agents:
+            await sio.emit(
+                "agent_status_update",
+                {
+                    "agent_id": agent.agent_id,
+                    "status": "closed",
+                },
+                namespace="/terminal",
+            )
 
     finally:
         db.close()
@@ -70,12 +104,42 @@ async def disconnect(sid):
                 host = db.query(models.Host).filter(models.Host.id == host_id).first()
                 if host:
                     host.status = "offline"
+
+                    # Close all active agents — the daemon
+                    # process is gone so they can't be
+                    # recovered from this session.
+                    active_agents = (
+                        db.query(models.Agent)
+                        .filter(
+                            models.Agent.host_id == host_id,
+                            models.Agent.status == "active",
+                        )
+                        .all()
+                    )
+                    if active_agents:
+                        now = datetime.now(timezone.utc)
+                        for agent in active_agents:
+                            agent.status = "closed"
+                            agent.ended_at = now
+
                     db.commit()
                     print(
                         f"Host Daemon {host.name}"
                         f" (ID: {host_id}) disconnected"
-                        f" and marked offline."
+                        f" — marked offline, closed"
+                        f" {len(active_agents)} agent(s)."
                     )
+
+                    # Notify UI so agent cards disappear
+                    for agent in active_agents:
+                        await sio.emit(
+                            "agent_status_update",
+                            {
+                                "agent_id": agent.agent_id,
+                                "status": "closed",
+                            },
+                            namespace="/terminal",
+                        )
             finally:
                 db.close()
 
@@ -225,8 +289,6 @@ async def handle_agent_exit(sid, data):
             )
             if db_agent:
                 db_agent.status = "closed"
-                from datetime import datetime, timezone
-
                 db_agent.ended_at = datetime.now(timezone.utc)
                 db.commit()
                 print(f"Agent {agent_id} exited and marked as closed in DB.")
