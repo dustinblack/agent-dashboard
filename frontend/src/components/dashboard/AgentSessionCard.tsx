@@ -11,10 +11,11 @@ import {
   GitFork,
   TriangleAlert,
 } from 'lucide-react';
-import type { Agent } from '../../api';
+import type { Agent, ToolInfo } from '../../api';
 import {
   getContextWindow,
   getToolColors,
+  getToolColorsByKeyword,
   getProgressColor,
   formatDuration,
   estimateCost,
@@ -28,6 +29,8 @@ import EditableTaskDescription from './EditableTaskDescription';
 /** Props for the AgentSessionCard component. */
 interface AgentSessionCardProps {
   agent: Agent;
+  /** Tool metadata from the host's available_tools list. */
+  availableTools?: ToolInfo[];
   onAttach: (agentId: string) => void;
   onStop: (agentId: string) => void;
 }
@@ -39,10 +42,17 @@ interface AgentSessionCardProps {
  */
 const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
   agent,
+  availableTools,
   onAttach,
   onStop,
 }) => {
   const tel = agent.telemetry || {};
+  // Prefer profile color from available_tools metadata,
+  // falling back to name-based inference.
+  const toolInfo = availableTools?.find((t) => t.name === agent.tool_name);
+  const toolColors = toolInfo?.color
+    ? getToolColorsByKeyword(toolInfo.color)
+    : getToolColors(agent.tool_name);
   // Use context_tokens (per-call input tokens) for the
   // progress bar — reflects current context window usage
   // after compression. Do NOT fall back to cumulative
@@ -53,7 +63,6 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
   const tokenPct = ctxTokens
     ? Math.min((ctxTokens / contextMax) * 100, 100)
     : 0;
-  const totalTokens = tel.tokens || 0;
   // Use OTLP-reported cost (Claude) or estimate from
   // pricing tables (Gemini / other).
   const displayCost =
@@ -74,15 +83,15 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
 
   return (
     <div
-      className={`bg-slate-800 rounded-2xl p-4 border border-slate-700 ${getToolColors(agent.tool_name).border} transition-all shadow-lg flex flex-col h-full group`}
+      className={`bg-slate-800 rounded-2xl p-4 border border-slate-700 ${toolColors.border} transition-all shadow-lg flex flex-col h-full group`}
     >
       <div className="flex justify-between items-start mb-2">
         <div className="overflow-hidden">
           <div className="flex gap-2 items-center">
             <span
-              className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase border ${getToolColors(agent.tool_name).badge}`}
+              className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase border ${toolColors.badge}`}
             >
-              {agent.tool_name || 'gemini'}
+              {agent.tool_name || 'agent'}
             </span>
             {tel.git_remote_url ? (
               <a
@@ -131,11 +140,11 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
         <StatusIndicator status={tel.agent_status} />
       </div>
 
-      {agent.tool_name !== 'bash' && (
+      {(toolInfo?.has_model ?? (tel.model && tel.model !== 'detecting...')) && (
         <div className="my-2 border-t border-slate-700/50 pt-2">
           <div className="flex items-center gap-1">
             <p className="text-[11px] text-slate-300 font-mono truncate">
-              {tel.model || '...'}
+              {tel.model && tel.model !== 'detecting...' ? tel.model : '...'}
             </p>
             {tel.model && !isModelRecognized(tel.model) && (
               <span title="Unrecognized model — context window and pricing may be inaccurate">
@@ -149,7 +158,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
                 Context
               </span>
               <span className="text-[10px] text-slate-400 font-mono">
-                {ctxTokens ? ctxTokens.toLocaleString() : '0'} /{' '}
+                {ctxTokens ? ctxTokens.toLocaleString() : '—'} /{' '}
                 {contextMax >= 1000000
                   ? `${(contextMax / 1000000).toFixed(1).replace('.0', '')}M`
                   : `${(contextMax / 1000).toFixed(0)}k`}
@@ -164,7 +173,6 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
               />
             </div>
           </div>
-          {/* Total tokens + cost row */}
           <div className="flex justify-between items-center mt-2 pt-1.5 border-t border-slate-700/30">
             <span
               className="text-[10px] text-slate-400 font-mono"
@@ -173,14 +181,6 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
               {formatCost(displayCost)}
             </span>
             <span className="text-[10px] text-slate-400 font-mono">
-              {totalTokens
-                ? `${formatTokenCount(totalTokens)} tokens`
-                : '0 tokens'}
-            </span>
-          </div>
-          {/* Input/output breakdown */}
-          {tel.input_tokens || tel.output_tokens ? (
-            <p className="text-[9px] text-slate-500 font-mono text-right mt-0.5">
               {tel.input_tokens
                 ? formatTokenCount(tel.input_tokens) + ' in'
                 : ''}
@@ -188,8 +188,19 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
               {tel.output_tokens
                 ? formatTokenCount(tel.output_tokens) + ' out'
                 : ''}
+            </span>
+          </div>
+          {!!(tel.cache_read_tokens || tel.cache_creation_tokens) && (
+            <p className="text-[9px] text-slate-500 font-mono text-right mt-0.5">
+              {tel.cache_read_tokens
+                ? formatTokenCount(tel.cache_read_tokens) + ' cache read'
+                : ''}
+              {tel.cache_read_tokens && tel.cache_creation_tokens ? ' / ' : ''}
+              {tel.cache_creation_tokens
+                ? formatTokenCount(tel.cache_creation_tokens) + ' cache write'
+                : ''}
             </p>
-          ) : null}
+          )}
         </div>
       )}
 
@@ -205,7 +216,7 @@ const AgentSessionCard: React.FC<AgentSessionCardProps> = ({
           agentId={agent.agent_id}
           description={tel.task_description || ''}
         />
-        {agent.tool_name === 'bash' ? (
+        {tel.last_cmd !== undefined || tel.last_exit_code !== undefined ? (
           <>
             {tel.current_activity && (
               <p

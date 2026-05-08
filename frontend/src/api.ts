@@ -8,6 +8,30 @@ const api = axios.create({
   withCredentials: true, // Required for session cookies from OIDC
 });
 
+/** Tool metadata reported by the daemon from profiles. */
+export interface ToolInfo {
+  name: string;
+  display_name: string;
+  color?: string;
+  supports_resume?: boolean;
+  has_model?: boolean;
+}
+
+/**
+ * Normalizes a tool entry from available_tools into a
+ * ToolInfo object. Handles both enriched dicts (new
+ * daemons) and bare name strings (older daemons).
+ */
+export function normalizeToolInfo(tool: string | ToolInfo): ToolInfo {
+  if (typeof tool === 'string') {
+    return {
+      name: tool,
+      display_name: tool.charAt(0).toUpperCase() + tool.slice(1),
+    };
+  }
+  return tool;
+}
+
 export interface Host {
   id: number;
   name: string;
@@ -16,7 +40,7 @@ export interface Host {
   projects?: {
     projects_root: string;
     available_projects: string[];
-    available_tools?: string[];
+    available_tools?: (string | ToolInfo)[];
   };
 }
 
@@ -105,6 +129,7 @@ export const updateTaskDescription = async (
 
 export interface AgentDetail extends Agent {
   host_name: string;
+  available_tools?: (string | ToolInfo)[];
 }
 
 export const getAgentDetails = async (

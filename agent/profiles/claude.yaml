@@ -1,0 +1,43 @@
+# Claude Code agent profile
+name: claude
+display_name: Claude
+color: purple
+binary: claude
+
+commands:
+  new: ["claude"]
+  resume: ["bash", "-c", "claude --continue || claude"]
+
+env:
+  CLAUDE_CODE_ENABLE_TELEMETRY: "1"
+  OTEL_METRICS_EXPORTER: "otlp"
+  OTEL_LOGS_EXPORTER: "otlp"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "http/json"
+
+auth:
+  env_vars:
+    - ANTHROPIC_API_KEY
+    - CLAUDE_CODE_USE_VERTEX
+  require: any
+
+mcp:
+  project_file: .mcp.json
+  user_files:
+    - ~/.claude.json
+
+telemetry:
+  token_metrics:
+    - claude_code.token.usage
+  cost_metric: claude_code.cost.usage
+  activity_metrics:
+    - claude_code.tool.execution
+    - claude_code.tool
+  runtime_metric:
+    name: claude_code.active_time.total
+    unit: seconds
+
+permission_patterns:
+  - "Do you want to proceed"
+  - "\\u276f\\s+\\d+\\."
+  - "\\u2610"
+  - "Skip interview and plan"

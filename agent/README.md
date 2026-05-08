@@ -6,6 +6,15 @@ The Host Daemon runs on remote development machines and manages AI agent session
 - Python 3.9+
 - A running instance of the central Dashboard Backend (Hub).
 
+## Agent Profiles
+
+The daemon uses YAML/JSON profile files to define how each
+agent tool is spawned, detected, and monitored. Bundled
+profiles for Claude, Gemini, and Bash are in `agent/profiles/`.
+Custom profiles can be added by dropping a YAML file into the
+same directory. See [Agent Profiles](../docs/agent-profiles.md)
+for the full schema and examples.
+
 ## Included Tools
 
 The container image bundles the following tools so spawned agents have everything they need:

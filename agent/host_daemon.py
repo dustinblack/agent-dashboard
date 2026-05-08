@@ -17,6 +17,7 @@ import signal
 import struct
 import subprocess
 import sys
+import tempfile
 import termios
 import time
 from collections import deque
@@ -25,41 +26,19 @@ from typing import Dict, Optional
 import socketio
 from aiohttp import web
 
-# Terminal patterns that indicate the agent is waiting for
-# user input.  These are matched against stripped terminal
-# output (ANSI escape sequences removed) to avoid false
-# matches on escape codes.  A match sets a "candidate"
-# flag; the status only transitions to waiting_permission
-# after the agent has been idle (no output) for
-# PERMISSION_IDLE_SECONDS.
-#
-# MAINTAINER NOTE: Update these patterns when Claude Code
-# or Gemini CLI change their permission prompt text or
-# format. Test with actual CLI output to avoid false
-# positives.
-PERMISSION_PATTERNS = [
-    re.compile(p, re.IGNORECASE)
-    for p in [
-        # Generic yes/no prompts (anchored to common
-        # bracket/paren formats)
-        r"\[Y/n\]",
-        r"\[y/N\]",
-        r"\(yes/no\)",
-        r"\(y/n\)",
-        # Claude Code permission prompts
-        r"Do you want to proceed",
-        # Gemini CLI permission prompts
-        r"Allow .+ to run",
-        r"Do you want to allow",
-        # General input prompts (anchored with ?)
-        r"press enter to continue",
-        r"Continue\?",
-        r"Proceed\?",
-        # Claude Code plan mode interactive menus
-        r"\u276f\s+\d+\.",  # ❯ 1. (selection cursor)
-        r"\u2610",  # ☐ (unchecked checkbox)
-        r"Skip interview and plan",  # plan mode menu option
-    ]
+from agent.profiles import load_profiles
+
+# Default permission patterns — generic prompts that
+# apply to all agent tools. Tool-specific patterns are
+# loaded from agent profiles and merged at daemon startup.
+_DEFAULT_PERMISSION_PATTERNS = [
+    r"\[Y/n\]",
+    r"\[y/N\]",
+    r"\(yes/no\)",
+    r"\(y/n\)",
+    r"press enter to continue",
+    r"Continue\?",
+    r"Proceed\?",
 ]
 
 # Seconds of idle output after a pattern match before
@@ -129,6 +108,30 @@ class HostDaemon:
         # below PROJECTS_ROOT. Default of 6 covers most GitLab
         # org hierarchies without being unlimited.
         self.projects_depth = int(os.getenv("PROJECTS_DEPTH", "6"))
+        # Load agent profiles from YAML/JSON configs
+        self.profiles = load_profiles()
+        # Build OTLP metric lookup tables from profiles
+        # for fast matching in handle_otlp().
+        self._token_metrics: set = set()
+        self._cost_metrics: set = set()
+        self._activity_metrics: set = set()
+        self._runtime_metrics: dict = {}
+        self._excluded_metrics: set = set()
+        for prof in self.profiles.values():
+            tel = prof.telemetry
+            self._token_metrics.update(tel.token_metrics)
+            if tel.cost_metric:
+                self._cost_metrics.add(tel.cost_metric)
+            self._activity_metrics.update(tel.activity_metrics)
+            if tel.runtime_metric and tel.runtime_metric.name:
+                self._runtime_metrics[tel.runtime_metric.name] = tel.runtime_metric.unit
+            self._excluded_metrics.update(tel.excluded_metrics)
+        # Merge permission patterns from profiles into
+        # the default generic patterns.
+        all_patterns = list(_DEFAULT_PERMISSION_PATTERNS)
+        for prof in self.profiles.values():
+            all_patterns.extend(prof.permission_patterns)
+        self.permission_patterns = [re.compile(p, re.IGNORECASE) for p in all_patterns]
         self.sio = socketio.AsyncClient()
         self.agents: Dict[str, Dict] = (
             {}
@@ -250,33 +253,38 @@ class HostDaemon:
                 except OSError:
                     pass
 
+    def _scan_projects(self) -> list:
+        """Scans PROJECTS_ROOT for git repositories.
+
+        Synchronous method intended to be called from an
+        executor to avoid blocking the event loop.
+
+        Returns:
+            Sorted list of project relative paths.
+        """
+        projects = []
+        if os.path.exists(self.projects_root):
+            try:
+                for root, dirs, _files in os.walk(self.projects_root):
+                    rel_path = os.path.relpath(root, self.projects_root)
+                    depth = 0 if rel_path == "." else len(rel_path.split(os.sep))
+                    if depth > self.projects_depth:
+                        dirs[:] = []
+                        continue
+                    if ".git" in dirs:
+                        if rel_path != ".":
+                            projects.append(rel_path)
+                        dirs[:] = [d for d in dirs if d != ".git"]
+                projects.sort()
+            except Exception as e:
+                print(f"Error scanning projects root {self.projects_root}: {e}")
+        return projects
+
     async def update_projects_cache(self):
         """Continuously updates the project cache in the background every 60 seconds."""
         loop = asyncio.get_running_loop()
         while self.running:
-
-            def _scan():
-                projects = []
-                if os.path.exists(self.projects_root):
-                    try:
-                        for root, dirs, _files in os.walk(self.projects_root):
-                            rel_path = os.path.relpath(root, self.projects_root)
-                            depth = (
-                                0 if rel_path == "." else len(rel_path.split(os.sep))
-                            )
-                            if depth > self.projects_depth:
-                                dirs[:] = []
-                                continue
-                            if ".git" in dirs:
-                                if rel_path != ".":
-                                    projects.append(rel_path)
-                                dirs[:] = [d for d in dirs if d != ".git"]
-                        projects.sort()
-                    except Exception as e:
-                        print(f"Error scanning projects root {self.projects_root}: {e}")
-                return projects
-
-            new_projects = await loop.run_in_executor(None, _scan)
+            new_projects = await loop.run_in_executor(None, self._scan_projects)
             async with self.projects_lock:
                 self.cached_projects = new_projects
 
@@ -286,54 +294,75 @@ class HostDaemon:
 
             await asyncio.sleep(60)
 
-    def _detect_available_tools(self) -> list:
-        """Detects which agent CLI tools are installed and
-        configured on this host.
+    def _make_tool_info(self, profile) -> dict:
+        """Builds a tool metadata dict from a profile for
+        the available_tools payload sent to the frontend.
 
-        Checks for binary availability and basic auth
-        configuration. Bash is always available.
+        Args:
+            profile: AgentProfile instance.
 
         Returns:
-            List of tool name strings (e.g. ["gemini",
-            "claude", "bash"]).
+            Dict with name, display_name, color,
+            supports_resume, and has_model fields.
         """
-        tools = ["bash"]  # Always available
+        return {
+            "name": profile.name,
+            "display_name": profile.display_name,
+            "color": profile.color or "slate",
+            "supports_resume": profile.supports_resume,
+            "has_model": bool(profile.telemetry.token_metrics),
+        }
 
-        # Check Gemini CLI
-        try:
-            subprocess.run(
-                ["gemini", "--version"],
-                capture_output=True,
-                timeout=5,
-                check=False,
-            )
-            # Binary exists — check for API key
-            if os.getenv("GEMINI_API_KEY"):
-                tools.append("gemini")
+    def _detect_available_tools(self) -> list:
+        """Detects which agent CLI tools are installed and
+        configured on this host using agent profiles.
+
+        For each profile, checks if the binary is present
+        and if the required auth env vars are set. Profiles
+        with always_available=true (e.g. bash) are included
+        unconditionally.
+
+        Returns:
+            List of tool info dicts with name,
+            display_name, color, and supports_resume.
+        """
+        tools = []
+        for profile in self.profiles.values():
+            if profile.always_available:
+                tools.append(self._make_tool_info(profile))
+                continue
+            # Check if binary exists
+            try:
+                subprocess.run(
+                    [profile.binary, "--version"],
+                    capture_output=True,
+                    timeout=5,
+                    check=False,
+                )
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+            # Check auth requirements
+            if not profile.auth.env_vars:
+                tools.append(self._make_tool_info(profile))
+                continue
+            if profile.auth.require == "all":
+                if all(os.getenv(v) for v in profile.auth.env_vars):
+                    tools.append(self._make_tool_info(profile))
+                else:
+                    print(
+                        f"{profile.display_name} CLI found "
+                        f"but auth not configured — "
+                        f"not advertising."
+                    )
             else:
-                print("Gemini CLI found but GEMINI_API_KEY not set — not advertising.")
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
-        # Check Claude Code
-        try:
-            subprocess.run(
-                ["claude", "--version"],
-                capture_output=True,
-                timeout=5,
-                check=False,
-            )
-            # Binary exists — check for auth (API key or
-            # Vertex AI credentials)
-            has_api_key = bool(os.getenv("ANTHROPIC_API_KEY"))
-            has_vertex = bool(os.getenv("CLAUDE_CODE_USE_VERTEX"))
-            if has_api_key or has_vertex:
-                tools.append("claude")
-            else:
-                print("Claude CLI found but no auth configured — not advertising.")
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
+                if any(os.getenv(v) for v in profile.auth.env_vars):
+                    tools.append(self._make_tool_info(profile))
+                else:
+                    print(
+                        f"{profile.display_name} CLI found "
+                        f"but auth not configured — "
+                        f"not advertising."
+                    )
         print(f"Available tools: {tools}")
         return tools
 
@@ -343,27 +372,7 @@ class HostDaemon:
         requests from the UI.
         """
         loop = asyncio.get_running_loop()
-
-        def _scan():
-            projects = []
-            if os.path.exists(self.projects_root):
-                try:
-                    for root, dirs, _files in os.walk(self.projects_root):
-                        rel_path = os.path.relpath(root, self.projects_root)
-                        depth = 0 if rel_path == "." else len(rel_path.split(os.sep))
-                        if depth > self.projects_depth:
-                            dirs[:] = []
-                            continue
-                        if ".git" in dirs:
-                            if rel_path != ".":
-                                projects.append(rel_path)
-                            dirs[:] = [d for d in dirs if d != ".git"]
-                    projects.sort()
-                except Exception as e:
-                    print(f"Error scanning projects root {self.projects_root}: {e}")
-            return projects
-
-        new_projects = await loop.run_in_executor(None, _scan)
+        new_projects = await loop.run_in_executor(None, self._scan_projects)
         async with self.projects_lock:
             self.cached_projects = new_projects
         print(f"Force rescan: found {len(new_projects)} projects.")
@@ -479,48 +488,44 @@ class HostDaemon:
         return branch, project, remote_url
 
     def _detect_mcp_servers(self, project_dir, tool):
-        """Detects MCP servers configured for the given tool and project.
+        """Detects MCP servers configured for the given tool.
 
-        For Claude, reads .mcp.json in the project directory and
-        ~/.claude.json for global MCP server configuration.
-        For Gemini, reads ~/.gemini/settings.json.
+        Uses the agent profile's MCP config to find server
+        definitions in project-level and user-level config
+        files. Deduplicates server names across files.
 
         Args:
             project_dir: The project directory path.
-            tool: The agent tool name ('claude', 'gemini', etc.).
+            tool: The agent tool name.
 
         Returns:
             A list of MCP server name strings.
         """
+        profile = self.profiles.get(tool)
+        if not profile or not profile.mcp:
+            return []
+
         servers = []
         try:
-            if tool == "claude":
-                # Project-level .mcp.json
-                if project_dir:
-                    mcp_path = os.path.join(project_dir, ".mcp.json")
-                    if os.path.isfile(mcp_path):
-                        with open(mcp_path, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-                        mcp_servers = data.get("mcpServers", {})
-                        servers.extend(mcp_servers.keys())
+            # Project-level config file
+            if profile.mcp.project_file and project_dir:
+                mcp_path = os.path.join(project_dir, profile.mcp.project_file)
+                if os.path.isfile(mcp_path):
+                    with open(mcp_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    mcp_servers = data.get("mcpServers", {})
+                    servers.extend(mcp_servers.keys())
 
-                # User-level ~/.claude.json
-                home_claude = os.path.expanduser("~/.claude.json")
-                if os.path.isfile(home_claude):
-                    with open(home_claude, "r", encoding="utf-8") as f:
+            # User-level config files
+            for user_file in profile.mcp.user_files:
+                path = os.path.expanduser(user_file)
+                if os.path.isfile(path):
+                    with open(path, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     mcp_servers = data.get("mcpServers", {})
                     for name in mcp_servers.keys():
                         if name not in servers:
                             servers.append(name)
-
-            elif tool == "gemini":
-                settings_path = os.path.expanduser("~/.gemini/settings.json")
-                if os.path.isfile(settings_path):
-                    with open(settings_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    mcp_servers = data.get("mcpServers", {})
-                    servers.extend(mcp_servers.keys())
         except Exception as e:
             print(f"MCP detection error for {tool}: {e}")
 
@@ -673,33 +678,17 @@ class HostDaemon:
             "worktree_path": worktree_path,
         }
 
-        # Build command based on session_mode.
-        # For resume mode, wrap in a shell fallback so that if
-        # no previous session exists (e.g. claude --continue
-        # errors with "no conversation found"), the agent
-        # automatically starts a fresh session instead of
-        # exiting.
-        if session_mode == "resume":
-            cmd_map = {
-                "gemini": [
-                    "bash",
-                    "-c",
-                    "gemini --resume latest || gemini",
-                ],
-                "claude": [
-                    "bash",
-                    "-c",
-                    "claude --continue || claude",
-                ],
-                "bash": ["bash"],
-            }
+        # Build command from the agent profile. Resume mode
+        # uses a fallback command if defined, otherwise
+        # falls back to the new-session command.
+        profile = self.profiles.get(tool)
+        if profile:
+            if session_mode == "resume" and profile.commands.resume:
+                cmd = profile.commands.resume
+            else:
+                cmd = profile.commands.new or [tool]
         else:
-            cmd_map = {
-                "gemini": ["gemini"],
-                "claude": ["claude"],
-                "bash": ["bash"],
-            }
-        cmd = cmd_map.get(tool, [tool])
+            cmd = [tool]
 
         pid, fd = pty.fork()
         if pid == 0:  # Child process
@@ -714,35 +703,27 @@ class HostDaemon:
             env["OTEL_EXPORTER_OTLP_ENDPOINT"] = f"http://127.0.0.1:{self.otlp_port}"
             env["OTEL_RESOURCE_ATTRIBUTES"] = f"service.name={agent_id}"
 
-            # Tool-specific OTel enablement
-            env["CLAUDE_CODE_ENABLE_TELEMETRY"] = "1"
-            env["OTEL_METRICS_EXPORTER"] = "otlp"
-            env["OTEL_LOGS_EXPORTER"] = "otlp"
-            env["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/json"
-            env["GEMINI_CLI_TELEMETRY_ENABLED"] = "true"
-            env["GEMINI_TELEMETRY_ENABLED"] = "true"
-            # Gemini SDK appends /v1/{traces,logs,metrics} to
-            # this base URL — do NOT include a path suffix.
-            env["GEMINI_TELEMETRY_OTLP_ENDPOINT"] = f"http://127.0.0.1:{self.otlp_port}"
-            env["GEMINI_TELEMETRY_OTLP_PROTOCOL"] = "http"
-            env["GEMINI_TELEMETRY_USE_COLLECTOR"] = "true"
-            env["GEMINI_TELEMETRY_TARGET"] = "local"
+            # Inject profile-specific environment variables.
+            # Values can use {otlp_port} and {agent_id}
+            # placeholders. Uses .replace() instead of
+            # .format() to avoid KeyError if a value
+            # contains literal curly braces.
+            if profile:
+                for key, value in profile.env.items():
+                    env[key] = (
+                        str(value)
+                        .replace("{otlp_port}", str(self.otlp_port))
+                        .replace("{agent_id}", agent_id)
+                    )
 
-            # Inject PROMPT_COMMAND for bash sessions to
-            # write structured telemetry (cwd, exit code,
-            # last command) to a sidecar file after each
-            # command.  The daemon reads this periodically
-            # in update_agents_git_info().
-            if tool == "bash":
-                sidecar = f"/tmp/.agent-telemetry-{agent_id}"  # nosec B108
+            # Inject sidecar PROMPT_COMMAND if the profile
+            # defines one (e.g. bash telemetry collection).
+            if profile and profile.sidecar and profile.sidecar.prompt_command:
+                sidecar_path = profile.sidecar.file_pattern.format(
+                    agent_id=agent_id, tmpdir=tempfile.gettempdir()
+                )
                 env["PROMPT_COMMAND"] = (
-                    'printf \'{"cwd":"%s",'
-                    '"exit_code":%d,'
-                    '"last_cmd":"%s"}\\n\' '
-                    '"$PWD" "$?" '
-                    '"$(HISTTIMEFORMAT= history 1'
-                    " | sed 's/^[ ]*[0-9]*[ ]*//')\" "
-                    f"> {sidecar}"
+                    f"{profile.sidecar.prompt_command} > {sidecar_path}"
                 )
 
             try:
@@ -857,7 +838,7 @@ class HostDaemon:
                         # has been idle for PERMISSION_IDLE_SECONDS.
                         stripped = _ANSI_ESCAPE.sub("", decoded_data)
                         now = time.monotonic()
-                        if any(p.search(stripped) for p in PERMISSION_PATTERNS):
+                        if any(p.search(stripped) for p in self.permission_patterns):
                             info["permission_candidate"] = now
                         # New output clears permission_waiting
                         # since the agent is actively producing
@@ -886,12 +867,18 @@ class HostDaemon:
                 os.close(fd)
             except OSError:
                 pass
-            # Clean up PROMPT_COMMAND sidecar file
-            sidecar = f"/tmp/.agent-telemetry-{agent_id}"  # nosec B108
-            try:
-                os.unlink(sidecar)
-            except OSError:
-                pass
+            # Clean up sidecar telemetry file if the
+            # profile defines one
+            tool_name = self.agents[agent_id].get("tool")
+            profile = self.profiles.get(tool_name)
+            if profile and profile.sidecar:
+                sidecar = profile.sidecar.file_pattern.format(
+                    agent_id=agent_id, tmpdir=tempfile.gettempdir()
+                )
+                try:
+                    os.unlink(sidecar)
+                except OSError:
+                    pass
             # Clean up git worktree if one was created
             wt_path = self.agents[agent_id].get("worktree_path")
             wt_branch = self.agents[agent_id].get("worktree_branch")
@@ -1278,37 +1265,22 @@ class HostDaemon:
                                 changed = True
 
                             # Token tracking from tool-specific
-                            # usage counters. These are OTLP
-                            # cumulative Sum metrics — use max()
-                            # not +=. Update metric names here
-                            # if CLIs change their telemetry
-                            # schema.
-                            # Claude: claude_code.token.usage
-                            # Gemini: gemini_cli.token.usage
-                            # Note: Gemini also emits
-                            # gen_ai.client.token.usage with
-                            # identical values — intentionally
-                            # excluded to avoid double-counting.
+                            # Token, cost, activity, and runtime
+                            # metrics are matched against the
+                            # lookup tables built from agent
+                            # profiles at startup. Metric names
+                            # are defined in the profile YAML
+                            # files under agent/profiles/.
                             #
-                            # These are OTLP cumulative Sum
-                            # metrics — each report contains the
-                            # total since process start, NOT a
-                            # delta.  Use max() to take the
-                            # latest value without double-counting.
-                            token_metrics = (
-                                "claude_code.token.usage",
-                                "gemini_cli.token.usage",
-                            )
-                            if name in token_metrics:
+                            # Token metrics are OTLP cumulative
+                            # Sum counters — use max() not +=.
+                            if (
+                                name in self._token_metrics
+                                and name not in self._excluded_metrics
+                            ):
                                 value = dp.get("asInt") or dp.get("asDouble") or 0
                                 if value:
                                     int_value = int(value)
-                                    # Split by token type for
-                                    # granular tracking.
-                                    # Claude: input, output,
-                                    #   cacheRead, cacheCreation
-                                    # Gemini: input, output,
-                                    #   thought, cache, tool
                                     token_type = dp_attrs.get("type", "")
                                     if token_type == "input":
                                         tel["input_tokens"] = max(
@@ -1325,17 +1297,11 @@ class HostDaemon:
                                             tel.get("cache_read_tokens", 0),
                                             int_value,
                                         )
-                                    elif token_type in (
-                                        "cacheCreation",
-                                        "cache",
-                                    ):
+                                    elif token_type in ("cacheCreation", "cache"):
                                         tel["cache_creation_tokens"] = max(
                                             tel.get("cache_creation_tokens", 0),
                                             int_value,
                                         )
-                                    # Recompute total from the
-                                    # per-type counters to stay
-                                    # consistent.
                                     tel["tokens"] = (
                                         tel.get("input_tokens", 0)
                                         + tel.get("output_tokens", 0)
@@ -1344,11 +1310,8 @@ class HostDaemon:
                                     )
                                     changed = True
 
-                            # Cost tracking from Claude Code's
-                            # cost.usage metric (USD).
-                            # Cumulative Sum — use max() to
-                            # avoid double-counting.
-                            if name == "claude_code.cost.usage":
+                            # Cost metrics (cumulative Sum, USD)
+                            if name in self._cost_metrics:
                                 value = dp.get("asDouble") or dp.get("asInt") or 0
                                 if value:
                                     tel["cost_usd"] = max(
@@ -1357,16 +1320,8 @@ class HostDaemon:
                                     )
                                     changed = True
 
-                            # Activity from tool call metrics.
-                            # Gemini: gemini_cli.tool.call.count
-                            # Claude: claude_code.tool.execution
-                            tool_metrics = (
-                                "gemini_cli.tool.call.count",
-                                "gemini_cli.tool.call.latency",
-                                "claude_code.tool.execution",
-                                "claude_code.tool",
-                            )
-                            if name in tool_metrics:
+                            # Activity metrics (tool/function name)
+                            if name in self._activity_metrics:
                                 fn = dp_attrs.get("function_name") or dp_attrs.get(
                                     "tool_name"
                                 )
@@ -1374,19 +1329,15 @@ class HostDaemon:
                                     tel["current_activity"] = fn
                                     changed = True
 
-                            # Run time from CLI-reported metrics.
-                            # Claude: active_time.total (seconds)
-                            # Gemini: agent.duration (ms, end-of
-                            #   session only)
-                            if name == ("claude_code.active_time.total"):
+                            # Runtime duration metrics
+                            if name in self._runtime_metrics:
                                 value = dp.get("asInt") or dp.get("asDouble") or 0
                                 if value:
-                                    tel["run_time_seconds"] = int(value)
-                                    changed = True
-                            elif name == ("gemini_cli.agent.duration"):
-                                value = dp.get("asInt") or dp.get("asDouble") or 0
-                                if value:
-                                    tel["run_time_seconds"] = int(value / 1000)
+                                    unit = self._runtime_metrics[name]
+                                    if unit == "milliseconds":
+                                        tel["run_time_seconds"] = int(value / 1000)
+                                    else:
+                                        tel["run_time_seconds"] = int(value)
                                     changed = True
 
                 if changed:
@@ -1486,35 +1437,29 @@ class HostDaemon:
                         tel["git_remote_url"] = remote_url
                         changed = True
 
-                    # Read PROMPT_COMMAND sidecar file for
-                    # bash sessions to get richer telemetry
-                    # (cwd, exit code, last command).
-                    if info.get("tool") == "bash":
-                        sidecar = f"/tmp/.agent-telemetry-{agent_id}"  # nosec B108
+                    # Read sidecar telemetry file if the
+                    # profile defines one (e.g. bash uses
+                    # PROMPT_COMMAND to write cwd, exit code,
+                    # and last command to a JSON file).
+                    tool_name = info.get("tool")
+                    profile = self.profiles.get(tool_name)
+                    if profile and profile.sidecar:
+                        sidecar = profile.sidecar.file_pattern.format(
+                            agent_id=agent_id, tmpdir=tempfile.gettempdir()
+                        )
                         try:
                             with open(sidecar, "r", encoding="utf-8") as f:
-                                bash_tel = json.loads(f.read().strip())
-                            bash_cwd = bash_tel.get("cwd")
-                            exit_code = bash_tel.get("exit_code")
-                            last_cmd = bash_tel.get("last_cmd", "")
-                            # Show cwd as the activity display
-                            if bash_cwd and tel.get("current_activity") != bash_cwd:
-                                tel["current_activity"] = bash_cwd
-                                changed = True
-                            # Track last exit code for error
-                            # indication on the card
-                            if exit_code is not None:
-                                if tel.get("last_exit_code") != exit_code:
-                                    tel["last_exit_code"] = exit_code
+                                sc_data = json.loads(f.read().strip())
+                            # Map sidecar fields to telemetry
+                            # using the profile's field mapping
+                            for tel_key, sc_key in profile.sidecar.fields.items():
+                                val = sc_data.get(sc_key)
+                                if val is not None and tel.get(tel_key) != val:
+                                    tel[tel_key] = val
                                     changed = True
-                            # Track last command text
-                            if last_cmd and tel.get("last_cmd") != last_cmd:
-                                tel["last_cmd"] = last_cmd
-                                changed = True
                         except (FileNotFoundError, json.JSONDecodeError):
-                            # Sidecar not yet written or
-                            # partially written — fall back
-                            # to /proc cwd
+                            # Sidecar not yet written —
+                            # fall back to /proc cwd
                             if cwd and tel.get("current_activity") != cwd:
                                 tel["current_activity"] = cwd
                                 changed = True

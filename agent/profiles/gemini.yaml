@@ -1,0 +1,47 @@
+# Gemini CLI agent profile
+name: gemini
+display_name: Gemini
+color: blue
+binary: gemini
+
+commands:
+  new: ["gemini"]
+  resume: ["bash", "-c", "gemini --resume latest || gemini"]
+
+# Gemini uses its own telemetry implementation and does
+# NOT honor OTEL_RESOURCE_ATTRIBUTES. The daemon's
+# _resolve_agent_id() falls back to tool-type matching.
+env:
+  GEMINI_CLI_TELEMETRY_ENABLED: "true"
+  GEMINI_TELEMETRY_ENABLED: "true"
+  GEMINI_TELEMETRY_OTLP_ENDPOINT: "http://127.0.0.1:{otlp_port}"
+  GEMINI_TELEMETRY_OTLP_PROTOCOL: "http"
+  GEMINI_TELEMETRY_USE_COLLECTOR: "true"
+  GEMINI_TELEMETRY_TARGET: "local"
+
+auth:
+  env_vars:
+    - GEMINI_API_KEY
+  require: any
+
+mcp:
+  user_files:
+    - ~/.gemini/settings.json
+
+telemetry:
+  token_metrics:
+    - gemini_cli.token.usage
+  activity_metrics:
+    - gemini_cli.tool.call.count
+    - gemini_cli.tool.call.latency
+  runtime_metric:
+    name: gemini_cli.agent.duration
+    unit: milliseconds
+  # Gemini also emits gen_ai.client.token.usage with
+  # identical values — excluded to avoid double-counting.
+  excluded_metrics:
+    - gen_ai.client.token.usage
+
+permission_patterns:
+  - "Allow .+ to run"
+  - "Do you want to allow"

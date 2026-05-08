@@ -13,6 +13,10 @@ import type { Agent, Host } from '../../api';
 export interface SpawnModalProps {
   host: Host;
   tool: string;
+  /** Human-readable tool name from the profile. */
+  displayName?: string;
+  /** Whether the tool supports resuming sessions. */
+  supportsResume?: boolean;
   /** Active agents on this host, used to compute the
    *  smart default for the worktree isolation toggle. */
   activeAgents?: Agent[];
@@ -35,6 +39,8 @@ export interface SpawnModalProps {
 const SpawnModal: React.FC<SpawnModalProps> = ({
   host,
   tool,
+  displayName,
+  supportsResume: supportsResumeProp,
   activeAgents = [],
   onClose,
   onSpawn,
@@ -48,7 +54,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
   const [task, setTask] = useState('');
   const [resumeSession, setResumeSession] = useState(true);
   const [useWorktree, setUseWorktree] = useState(false);
-  const showResume = tool === 'claude' || tool === 'gemini';
+  const showResume = supportsResumeProp ?? false;
 
   // Auto-select first project when list arrives
   useEffect(() => {
@@ -83,7 +89,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
         <div className="flex justify-between items-center p-6 border-b border-slate-700 bg-slate-800/50">
           <h3 className="text-xl font-bold text-slate-50 flex items-center gap-2">
             <PlusCircle size={24} className="text-accent" />
-            Spawn {tool.toUpperCase()}
+            Spawn {displayName || tool.toUpperCase()}
           </h3>
           <button
             onClick={onClose}

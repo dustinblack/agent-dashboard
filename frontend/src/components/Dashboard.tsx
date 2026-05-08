@@ -8,6 +8,7 @@ import {
   getVersion,
 } from '../api';
 import type { Host, Agent, VersionInfo } from '../api';
+import { normalizeToolInfo } from '../api';
 import { Cpu, Activity } from 'lucide-react';
 import { io } from 'socket.io-client';
 import LogoSvg from './LogoSvg';
@@ -308,27 +309,36 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
         </div>
       </section>
 
-      {activeSpawn && (
-        <SpawnModal
-          host={hosts.find((h) => h.id === activeSpawn.hostId)!}
-          tool={activeSpawn.tool}
-          activeAgents={activeAgents.filter(
-            (a) => a.host_id === activeSpawn.hostId,
-          )}
-          onClose={() => setActiveSpawn(null)}
-          onSpawn={(dir, task, sessionMode, useWorktree) =>
-            handleSpawn(
-              activeSpawn.hostId,
-              activeSpawn.tool,
-              dir,
-              task,
-              sessionMode,
-              useWorktree,
-            )
-          }
-          onRefresh={requestProjects}
-        />
-      )}
+      {activeSpawn &&
+        (() => {
+          const spawnHost = hosts.find((h) => h.id === activeSpawn.hostId);
+          const toolInfo = spawnHost?.projects?.available_tools
+            ?.map(normalizeToolInfo)
+            .find((t) => t.name === activeSpawn.tool);
+          return (
+            <SpawnModal
+              host={spawnHost!}
+              tool={activeSpawn.tool}
+              displayName={toolInfo?.display_name}
+              supportsResume={toolInfo?.supports_resume}
+              activeAgents={activeAgents.filter(
+                (a) => a.host_id === activeSpawn.hostId,
+              )}
+              onClose={() => setActiveSpawn(null)}
+              onSpawn={(dir, task, sessionMode, useWorktree) =>
+                handleSpawn(
+                  activeSpawn.hostId,
+                  activeSpawn.tool,
+                  dir,
+                  task,
+                  sessionMode,
+                  useWorktree,
+                )
+              }
+              onRefresh={requestProjects}
+            />
+          );
+        })()}
     </div>
   );
 };

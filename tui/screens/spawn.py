@@ -74,16 +74,13 @@ class SpawnScreen(Screen):
                 prompt="Select a host",
             )
 
-            # Tool selector
+            # Tool selector — populated dynamically when
+            # a host is selected based on its available_tools.
             yield Label("Tool", classes="field-label")
             yield Select(
-                [
-                    ("Claude", "claude"),
-                    ("Gemini", "gemini"),
-                    ("Bash", "bash"),
-                ],
+                [],
                 id="tool-select",
-                prompt="Select a tool",
+                prompt="Select host first",
             )
 
             # Project selector
@@ -138,9 +135,27 @@ class SpawnScreen(Screen):
                     break
             if host and host.get("projects"):
                 projects = host["projects"].get("available_projects", [])
+                raw_tools = host["projects"].get("available_tools", [])
             else:
                 projects = []
+                raw_tools = []
             self._projects = projects
+
+            # Update tool selector from host's profiles
+            tool_select = self.query_one("#tool-select", Select)
+            if raw_tools and isinstance(raw_tools[0], dict):
+                tool_options = [
+                    (t.get("display_name", t["name"]), t["name"]) for t in raw_tools
+                ]
+            elif raw_tools and isinstance(raw_tools[0], str):
+                tool_options = [(t.capitalize(), t) for t in raw_tools]
+            else:
+                tool_options = [
+                    ("Claude", "claude"),
+                    ("Gemini", "gemini"),
+                    ("Bash", "bash"),
+                ]
+            tool_select.set_options(tool_options)
 
             # Update project selector
             project_select = self.query_one("#project-select", Select)

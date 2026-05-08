@@ -12,8 +12,15 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
-import type { AgentDetail, Agent } from '../api';
-import { getAgentDetails, getCompanions, spawnAgent, stopAgent } from '../api';
+import type { AgentDetail, Agent, ToolInfo } from '../api';
+import {
+  getAgentDetails,
+  getCompanions,
+  spawnAgent,
+  stopAgent,
+  normalizeToolInfo,
+} from '../api';
+import { getToolColorsByKeyword } from './dashboard/utils';
 
 interface TerminalProps {
   agentId: string;
@@ -121,7 +128,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
           agentDetail.telemetry?.project_dir;
         const newAgent = await spawnAgent(
           agentDetail.host_id,
-          agentDetail.tool_name || 'gemini',
+          agentDetail.tool_name || 'bash',
           projectDir,
           agentDetail.telemetry?.task_description,
           'resume',
@@ -167,9 +174,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
   const handleOpenCompanion = useCallback(
     async (targetTool: string) => {
       // Check existing companions for matching tool
-      const existing = companions.find(
-        (c) => categorize(c.tool_name) === targetTool,
-      );
+      const existing = companions.find((c) => c.tool_name === targetTool);
       if (existing) {
         openTerminalWindow(existing.agent_id);
         return;
@@ -493,9 +498,27 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
   const gitRemoteUrl = agentDetail?.telemetry?.git_remote_url;
   const worktreePath = agentDetail?.telemetry?.worktree_path;
 
+  // Build tool info from available_tools on this host.
+  const allTools: ToolInfo[] = (agentDetail?.available_tools || []).map(
+    normalizeToolInfo,
+  );
+
+  // Prefer display_name from profile metadata over the
+  // hardcoded label map for the tool badge and title.
+  const profileInfo = allTools.find((t) => t.name === agentDetail?.tool_name);
+  const toolLabel = profileInfo?.display_name || TOOL_LABELS[category];
+  const toolBadgeColor = profileInfo?.color
+    ? getToolColorsByKeyword(profileInfo.color).solid
+    : TOOL_COLORS[category];
+
+  // Companion buttons: all other tools on this host.
+  const companionButtons = allTools
+    .filter((t) => t.name !== agentDetail?.tool_name)
+    .map((t) => ({ label: t.display_name, tool: t.name, color: t.color }));
+
   // Update browser window title with host / project / branch
   useEffect(() => {
-    const parts = [TOOL_LABELS[category]];
+    const parts = [toolLabel];
     if (hostName) parts.push(hostName);
     if (gitProject) parts.push(gitProject);
     if (gitBranch) parts.push(gitBranch);
@@ -504,16 +527,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     return () => {
       document.title = 'Agent Dashboard';
     };
-  }, [category, hostName, gitProject, gitBranch, worktreePath]);
-
-  // Build companion buttons based on current tool type
-  const companionButtons: { label: string; tool: ToolCategory }[] = [];
-  if (category === 'bash') {
-    companionButtons.push({ label: 'Gemini', tool: 'gemini' });
-    companionButtons.push({ label: 'Claude', tool: 'claude' });
-  } else if (category === 'gemini' || category === 'claude') {
-    companionButtons.push({ label: 'Bash', tool: 'bash' });
-  }
+  }, [toolLabel, hostName, gitProject, gitBranch, worktreePath]);
 
   return (
     <div className="flex-1 flex flex-col h-full w-full bg-black overflow-hidden">
@@ -523,9 +537,9 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         <div className="flex items-center gap-3 min-w-0">
           {/* Tool badge */}
           <span
-            className={`${TOOL_COLORS[category]} text-white text-[10px] font-bold uppercase px-2 py-0.5 rounded tracking-wider shrink-0`}
+            className={`${toolBadgeColor} text-white text-[10px] font-bold uppercase px-2 py-0.5 rounded tracking-wider shrink-0`}
           >
-            {TOOL_LABELS[category]}
+            {toolLabel}
           </span>
 
           {/* Host / project / branch */}
@@ -585,9 +599,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         {/* Right side: companion + close buttons */}
         <div className="flex items-center gap-2 shrink-0">
           {companionButtons.map((btn) => {
-            const existing = companions.find(
-              (c) => categorize(c.tool_name) === btn.tool,
-            );
+            const existing = companions.find((c) => c.tool_name === btn.tool);
             return (
               <button
                 key={btn.tool}

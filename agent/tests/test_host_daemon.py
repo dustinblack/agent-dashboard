@@ -422,3 +422,132 @@ class TestDetectMcpServers:
         with patch("os.path.isfile", return_value=False):
             servers = daemon._detect_mcp_servers("/proj", "claude")
         assert servers == []
+
+
+# ── G. Agent Profiles ───────────────────────────────────────
+
+
+class TestAgentProfiles:
+    """Tests for the agent profile loading system."""
+
+    def test_load_bundled_profiles(self):
+        """All three bundled profiles load successfully."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+        assert "claude" in profiles
+        assert "gemini" in profiles
+        assert "bash" in profiles
+
+    def test_claude_profile_fields(self):
+        """Claude profile has expected configuration."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+        claude = profiles["claude"]
+        assert claude.binary == "claude"
+        assert claude.display_name == "Claude"
+        assert claude.commands.new == ["claude"]
+        assert len(claude.commands.resume) > 0
+        assert len(claude.env) > 0
+        assert "ANTHROPIC_API_KEY" in claude.auth.env_vars
+        assert claude.auth.require == "any"
+        assert claude.mcp is not None
+        assert claude.mcp.project_file == ".mcp.json"
+        assert len(claude.telemetry.token_metrics) > 0
+        assert claude.telemetry.cost_metric is not None
+        assert len(claude.permission_patterns) > 0
+        assert not claude.always_available
+
+    def test_gemini_profile_fields(self):
+        """Gemini profile has expected configuration."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+        gemini = profiles["gemini"]
+        assert gemini.binary == "gemini"
+        assert "GEMINI_API_KEY" in gemini.auth.env_vars
+        assert gemini.mcp is not None
+        assert len(gemini.telemetry.token_metrics) > 0
+        assert gemini.telemetry.runtime_metric is not None
+        assert gemini.telemetry.runtime_metric.unit == "milliseconds"
+        assert len(gemini.telemetry.excluded_metrics) > 0
+        assert not gemini.always_available
+
+    def test_bash_profile_fields(self):
+        """Bash profile has sidecar config and always_available."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+        bash = profiles["bash"]
+        assert bash.binary == "bash"
+        assert bash.always_available is True
+        assert bash.sidecar is not None
+        assert bash.sidecar.prompt_command is not None
+        assert "agent_id" in bash.sidecar.file_pattern
+        assert "current_activity" in bash.sidecar.fields
+
+    def test_profile_permission_patterns_merged(self, daemon):
+        """Permission patterns from profiles are merged
+        into the instance permission_patterns list."""
+        assert len(daemon.permission_patterns) > 0
+        # Should include generic defaults
+        patterns_str = [p.pattern for p in daemon.permission_patterns]
+        assert any("Y/n" in p for p in patterns_str)
+        # Should include Claude-specific
+        assert any("proceed" in p.lower() for p in patterns_str)
+
+    def test_otlp_lookup_tables_built(self, daemon):
+        """OTLP metric lookup tables are populated from profiles."""
+        assert "claude_code.token.usage" in daemon._token_metrics
+        assert "gemini_cli.token.usage" in daemon._token_metrics
+        assert "claude_code.cost.usage" in daemon._cost_metrics
+        assert "claude_code.active_time.total" in daemon._runtime_metrics
+        assert "gemini_cli.agent.duration" in daemon._runtime_metrics
+        assert "gen_ai.client.token.usage" in daemon._excluded_metrics
+
+    def test_supports_resume_property(self):
+        """supports_resume is True when resume differs from
+        new, False when they are the same."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+        # Claude and Gemini have distinct resume commands
+        assert profiles["claude"].supports_resume is True
+        assert profiles["gemini"].supports_resume is True
+        # Bash has resume == new == ["bash"]
+        assert profiles["bash"].supports_resume is False
+
+    def test_color_field_loaded(self):
+        """Color field is loaded from profile YAML files."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+        assert profiles["claude"].color == "purple"
+        assert profiles["gemini"].color == "blue"
+        assert profiles["bash"].color == "slate"
+
+    def test_make_tool_info(self, daemon):
+        """_make_tool_info builds correct metadata dict."""
+        info = daemon._make_tool_info(daemon.profiles["claude"])
+        assert info["name"] == "claude"
+        assert info["display_name"] == "Claude"
+        assert info["color"] == "purple"
+        assert info["supports_resume"] is True
+        assert info["has_model"] is True
+
+        bash_info = daemon._make_tool_info(daemon.profiles["bash"])
+        assert bash_info["name"] == "bash"
+        assert bash_info["color"] == "slate"
+        assert bash_info["supports_resume"] is False
+        assert bash_info["has_model"] is False
+
+    def test_unknown_profile_returns_empty(self):
+        """Loading from empty directory returns no profiles."""
+        import tempfile
+
+        from agent.profiles import load_profiles
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profiles = load_profiles(tmpdir)
+        assert profiles == {}
