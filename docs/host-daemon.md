@@ -189,3 +189,19 @@ The daemon container bundles the following tools:
 | **Go** (`golang`) | Go builds and tests |
 | **Rust / Cargo** | Rust builds and tests |
 | **SSH client** | Remote repository access |
+
+## Systemd Restart Policy
+
+When running the daemon as a systemd service (e.g., via a
+Podman Quadlet), add a restart policy so the daemon
+recovers automatically from unexpected exits:
+
+```ini
+[Service]
+Restart=on-failure
+RestartSec=5
+```
+
+The daemon has built-in error recovery for background tasks,
+but defense-in-depth restart ensures availability even for
+unhandled edge cases.

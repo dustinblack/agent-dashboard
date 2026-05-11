@@ -188,16 +188,28 @@ class HostDaemon:
             use_worktree = data.get("use_worktree", False)
             cols = data.get("cols", 120)
             rows = data.get("rows", 40)
-            await self.spawn_agent(
-                agent_id,
-                tool,
-                project_dir,
-                task_description,
-                session_mode,
-                use_worktree,
-                cols,
-                rows,
-            )
+            try:
+                await self.spawn_agent(
+                    agent_id,
+                    tool,
+                    project_dir,
+                    task_description,
+                    session_mode,
+                    use_worktree,
+                    cols,
+                    rows,
+                )
+            except Exception as e:
+                print(f"Failed to spawn agent {agent_id}: {e}")
+                if self.sio.connected:
+                    await self.sio.emit(
+                        "agent_status_update",
+                        {
+                            "agent_id": agent_id,
+                            "status": "closed",
+                        },
+                        namespace="/terminal",
+                    )
 
         @self.sio.on("stop_agent", namespace="/terminal")
         async def on_stop_agent(data):
@@ -284,13 +296,16 @@ class HostDaemon:
         """Continuously updates the project cache in the background every 60 seconds."""
         loop = asyncio.get_running_loop()
         while self.running:
-            new_projects = await loop.run_in_executor(None, self._scan_projects)
-            async with self.projects_lock:
-                self.cached_projects = new_projects
+            try:
+                new_projects = await loop.run_in_executor(None, self._scan_projects)
+                async with self.projects_lock:
+                    self.cached_projects = new_projects
 
-            # Immediately report if connected
-            if self.sio.connected:
-                await self.report_projects()
+                # Immediately report if connected
+                if self.sio.connected:
+                    await self.report_projects()
+            except Exception as e:
+                print(f"Project cache update failed: {e}")
 
             await asyncio.sleep(60)
 
@@ -846,14 +861,17 @@ class HostDaemon:
                         if info.get("permission_waiting"):
                             info["permission_waiting"] = False
 
-                        await self.sio.emit(
-                            "terminal_output",
-                            {
-                                "sid": agent_id,
-                                "output": decoded_data,
-                            },
-                            namespace="/terminal",
-                        )
+                        try:
+                            await self.sio.emit(
+                                "terminal_output",
+                                {
+                                    "sid": agent_id,
+                                    "output": decoded_data,
+                                },
+                                namespace="/terminal",
+                            )
+                        except Exception:
+                            pass
                 except OSError:
                     self.close_agent(agent_id)
             await asyncio.sleep(0.01)
@@ -1378,38 +1396,41 @@ class HostDaemon:
         while self.running:
             now = time.monotonic()
             for agent_id, info in list(self.agents.items()):
-                tel = info["telemetry"]
-                old_status = tel.get("agent_status")
+                try:
+                    tel = info["telemetry"]
+                    old_status = tel.get("agent_status")
 
-                # Promote permission candidate to
-                # permission_waiting if the agent has been
-                # idle (no output) since the pattern match.
-                candidate_time = info.get("permission_candidate", 0)
-                if candidate_time > 0:
-                    idle_since = now - info.get("last_output_time", 0)
-                    if idle_since >= PERMISSION_IDLE_SECONDS:
-                        info["permission_waiting"] = True
+                    # Promote permission candidate to
+                    # permission_waiting if the agent has
+                    # been idle (no output) since the match.
+                    candidate_time = info.get("permission_candidate", 0)
+                    if candidate_time > 0:
+                        idle_since = now - info.get("last_output_time", 0)
+                        if idle_since >= PERMISSION_IDLE_SECONDS:
+                            info["permission_waiting"] = True
 
-                if info.get("permission_waiting"):
-                    new_status = "waiting_permission"
-                elif (now - info.get("last_otlp_time", 0)) < 15:
-                    new_status = "working"
-                elif (now - info.get("last_output_time", 0)) < 15:
-                    new_status = "working"
-                else:
-                    new_status = "idle"
+                    if info.get("permission_waiting"):
+                        new_status = "waiting_permission"
+                    elif (now - info.get("last_otlp_time", 0)) < 15:
+                        new_status = "working"
+                    elif (now - info.get("last_output_time", 0)) < 15:
+                        new_status = "working"
+                    else:
+                        new_status = "idle"
 
-                if new_status != old_status:
-                    tel["agent_status"] = new_status
-                    if self.sio.connected:
-                        await self.sio.emit(
-                            "agent_telemetry",
-                            {
-                                "agent_id": agent_id,
-                                "telemetry": tel,
-                            },
-                            namespace="/terminal",
-                        )
+                    if new_status != old_status:
+                        tel["agent_status"] = new_status
+                        if self.sio.connected:
+                            await self.sio.emit(
+                                "agent_telemetry",
+                                {
+                                    "agent_id": agent_id,
+                                    "telemetry": tel,
+                                },
+                                namespace="/terminal",
+                            )
+                except Exception:
+                    pass
             await asyncio.sleep(5)
 
     async def update_agents_git_info(self):
@@ -1474,6 +1495,28 @@ class HostDaemon:
                     pass  # Process might have died or no permission
             await asyncio.sleep(5)
 
+    async def _run_task(self, name, coro):
+        """Runs a background task with error recovery.
+
+        Catches exceptions and restarts the task instead of
+        letting failures propagate through asyncio.gather()
+        and crash the entire daemon.
+
+        Args:
+            name: Human-readable task name for logging.
+            coro: Async callable (unbound method) to run.
+        """
+        while self.running:
+            try:
+                await coro()
+                return
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                print(f"Background task '{name}' failed: {e}")
+                print(f"Restarting '{name}' in 5 seconds...")
+                await asyncio.sleep(5)
+
     async def run(self):
         """Connects to the hub and starts all background tasks."""
         try:
@@ -1482,12 +1525,23 @@ class HostDaemon:
                 namespaces=["/terminal"],
                 headers={"X-Host-Token": self.host_token},
             )
-            # Start background tasks
-            self.watcher_task = asyncio.create_task(self.watch_agents())
-            self.cache_task = asyncio.create_task(self.update_projects_cache())
+            # Start background tasks with error recovery.
+            # Each task is wrapped in _run_task so a failure
+            # in one doesn't crash the entire daemon. The
+            # OTLP server uses aiohttp's own error handling.
+            self.watcher_task = asyncio.create_task(
+                self._run_task("watcher", self.watch_agents)
+            )
+            self.cache_task = asyncio.create_task(
+                self._run_task("cache", self.update_projects_cache)
+            )
             self.otlp_task = asyncio.create_task(self.start_otlp_server())
-            self.git_task = asyncio.create_task(self.update_agents_git_info())
-            self.status_task = asyncio.create_task(self.update_agent_status())
+            self.git_task = asyncio.create_task(
+                self._run_task("git_info", self.update_agents_git_info)
+            )
+            self.status_task = asyncio.create_task(
+                self._run_task("status", self.update_agent_status)
+            )
 
             await asyncio.gather(
                 self.watcher_task,
