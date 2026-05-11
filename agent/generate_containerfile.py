@@ -83,8 +83,9 @@ def generate():
     profiles = load_profiles(os.path.join(script_dir, "profiles"))
     context = collect_provisioning(profiles)
 
-    env = Environment(
+    env = Environment(  # nosec B701 — Dockerfile, not HTML
         loader=FileSystemLoader(script_dir),
+        autoescape=False,
         keep_trailing_newline=True,
         lstrip_blocks=True,
         trim_blocks=True,
