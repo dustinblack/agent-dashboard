@@ -27,5 +27,8 @@ dist-ssr/
 coverage/
 htmlcov/
 
+# Generated files
+agent/Containerfile
+
 # Local Agent Configs
 .claude/settings.local.json
