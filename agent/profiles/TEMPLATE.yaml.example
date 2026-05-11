@@ -1,0 +1,191 @@
+# ─────────────────────────────────────────────────────
+# Agent Profile Template
+# ─────────────────────────────────────────────────────
+# Copy this file and rename it to create a new agent
+# profile. The daemon loads all .yaml/.yml/.json files
+# from this directory at startup.
+#
+# Only 'name' is required. All other fields are optional
+# and have sensible defaults. See the field reference at
+# docs/agent-profiles.md for full details.
+# ─────────────────────────────────────────────────────
+
+# ── Identity ──────────────────────────────────────────
+
+# Unique identifier used in spawn requests and internal
+# lookups. Must match the filename (e.g., "aider" for
+# aider.yaml).
+name: myagent
+
+# Human-readable name shown in UI buttons, badges, logs.
+display_name: My Agent
+
+# UI theme color for spawn buttons and terminal badges.
+# Supported: purple, blue, slate, green, red, amber, cyan
+# Default: slate
+color: green
+
+# CLI binary name. Used for availability detection via
+# '<binary> --version'. If the binary is not found or
+# auth requirements are not met, the tool won't appear
+# as a spawn option.
+binary: myagent-cli
+
+# If true, always listed as available — skip binary and
+# auth checks. Use for tools that are always present in
+# the container (e.g., bash).
+# Default: false
+always_available: false
+
+# ── Commands ──────────────────────────────────────────
+# How to start agent sessions. Both accept a list of
+# strings (command + arguments).
+
+commands:
+  # Command for new sessions.
+  new: ["myagent-cli"]
+
+  # Command for resuming a previous session. The UI shows
+  # a "Resume Session" toggle when this differs from 'new'.
+  # Use a bash fallback chain to gracefully handle cases
+  # where no session exists to resume:
+  resume: ["bash", "-c", "myagent-cli --resume || myagent-cli"]
+
+# ── Environment Variables ─────────────────────────────
+# Injected into the agent's process environment at spawn
+# time. Values support {otlp_port} and {agent_id}
+# placeholders, replaced at runtime.
+#
+# Note: The daemon always injects OTEL_EXPORTER_OTLP_ENDPOINT
+# and OTEL_RESOURCE_ATTRIBUTES regardless of this section.
+
+# env:
+#   MY_AGENT_TELEMETRY: "true"
+#   MY_AGENT_ENDPOINT: "http://127.0.0.1:{otlp_port}"
+
+# ── Authentication Detection ─────────────────────────
+# Controls when the spawn button appears. The daemon
+# checks if the required env vars are set on the host.
+
+auth:
+  # Environment variables to check.
+  env_vars:
+    - MY_AGENT_API_KEY
+  # "any" = at least one must be set (default).
+  # "all" = all must be set.
+  require: any
+
+# ── MCP Server Detection ─────────────────────────────
+# Where to look for MCP server configurations. The
+# daemon reads these files to display active MCP servers
+# on agent cards.
+
+# mcp:
+#   # Project-level config (relative to project directory)
+#   project_file: .mcp.json
+#   # User-level config files (~ is expanded)
+#   user_files:
+#     - ~/.myagent/mcp.json
+
+# ── OTLP Telemetry ───────────────────────────────────
+# Maps OTLP metric names to dashboard telemetry fields.
+# Only needed for tools that emit OpenTelemetry data.
+
+# telemetry:
+#   # Metric names for cumulative token usage counters.
+#   token_metrics:
+#     - myagent.token.usage
+#
+#   # Metric name for session cost in USD.
+#   cost_metric: myagent.cost.usage
+#
+#   # Metric names for tool/function activity. Sets the
+#   # 'current_activity' field on the agent card.
+#   activity_metrics:
+#     - myagent.tool.execution
+#
+#   # Runtime duration metric.
+#   runtime_metric:
+#     name: myagent.active_time
+#     unit: seconds  # or "milliseconds"
+#
+#   # Metrics to explicitly ignore (e.g., to avoid
+#   # double-counting when a tool emits duplicates).
+#   excluded_metrics:
+#     - gen_ai.client.token.usage
+
+# ── Sidecar Telemetry ────────────────────────────────
+# For tools WITHOUT OTLP support (e.g., bash). The daemon
+# injects a PROMPT_COMMAND that writes JSON telemetry to
+# a file, then reads it periodically.
+
+# sidecar:
+#   # Shell command injected as PROMPT_COMMAND.
+#   prompt_command: >-
+#     printf '{"cwd":"%s","exit_code":%d}\n' "$PWD" "$?"
+#   # File path template. {tmpdir} and {agent_id} are
+#   # replaced at runtime.
+#   file_pattern: "{tmpdir}/.agent-telemetry-{agent_id}"
+#   # Map JSON keys to telemetry field names.
+#   fields:
+#     current_activity: cwd
+#     last_exit_code: exit_code
+
+# ── Permission Patterns ──────────────────────────────
+# Regex patterns (case-insensitive) for detecting
+# permission prompts in terminal output. When matched,
+# the agent card shows a "waiting for permission" status.
+# These are merged with built-in defaults (Y/n, yes/no,
+# Continue?, Proceed?, etc.).
+
+# permission_patterns:
+#   - "Do you want to proceed"
+#   - "Allow .+ to run"
+
+# ── Provisioning ─────────────────────────────────────
+# Build-time metadata used by generate_containerfile.py
+# to produce the Containerfile, and as documentation for
+# manual container setup. This entire section is optional.
+
+provisioning:
+  # Packages to install in the container image.
+  install:
+    # npm global packages
+    # npm:
+    #   - "@example/my-agent-cli"
+
+    # pip packages
+    pip:
+      - "myagent-package"
+
+    # System packages (dnf/apt)
+    # system:
+    #   - "some-package"
+
+  # Config files to seed in the container image.
+  config_files:
+    # Create a directory
+    - path: "/root/.myagent"
+      mkdir: true
+    # Create a file with content
+    # - path: "/root/.myagent/config.json"
+    #   content: '{"key": "value"}'
+
+  # Post-install verification command. Run as a RUN step
+  # in the Containerfile to catch installation failures
+  # at build time.
+  verify: "myagent --version"
+
+  # Host directories to mount into the container. Add
+  # these to your podman run command or quadlet config.
+  mounts:
+    - host: "~/.myagent"
+      container: "/root/.myagent"
+      mode: rw                    # rw or ro
+
+  # Container-level env vars to pass through from the
+  # host (podman run -e / quadlet Environment=). These
+  # are distinct from the 'env' section above, which the
+  # daemon injects at agent spawn time.
+  passthrough_env:
+    - MY_AGENT_API_KEY
