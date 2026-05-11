@@ -45,3 +45,20 @@ telemetry:
 permission_patterns:
   - "Allow .+ to run"
   - "Do you want to allow"
+
+# Build-time provisioning metadata
+provisioning:
+  install:
+    npm:
+      - "@google/gemini-cli"
+  config_files:
+    - path: "/root/.gemini/settings.json"
+      content: >-
+        {"security":{"auth":{"selectedType":"gemini-api"}}}
+  verify: "gemini --version"
+  mounts:
+    - host: "~/.gemini"
+      container: "/root/.gemini"
+      mode: rw
+  passthrough_env:
+    - GEMINI_API_KEY

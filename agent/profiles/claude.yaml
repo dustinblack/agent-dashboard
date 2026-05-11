@@ -41,3 +41,25 @@ permission_patterns:
   - "\\u276f\\s+\\d+\\."
   - "\\u2610"
   - "Skip interview and plan"
+
+# Build-time provisioning metadata
+provisioning:
+  install:
+    npm:
+      - "@anthropic-ai/claude-code"
+  config_files:
+    - path: "/root/.claude"
+      mkdir: true
+  verify: "claude --version"
+  mounts:
+    - host: "~/.claude"
+      container: "/root/.claude"
+      mode: rw
+    - host: "~/.config/gcloud"
+      container: "/root/.config/gcloud"
+      mode: ro
+  passthrough_env:
+    - ANTHROPIC_API_KEY
+    - CLAUDE_CODE_USE_VERTEX
+    - CLOUD_ML_REGION
+    - ANTHROPIC_VERTEX_PROJECT_ID
