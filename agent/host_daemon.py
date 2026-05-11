@@ -339,7 +339,7 @@ class HostDaemon:
                     timeout=5,
                     check=False,
                 )
-            except (FileNotFoundError, subprocess.TimeoutExpired):
+            except (OSError, subprocess.TimeoutExpired):
                 continue
             # Check auth requirements
             if not profile.auth.env_vars:
