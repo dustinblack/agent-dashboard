@@ -90,6 +90,18 @@ Environment=GITLAB_TOKEN=glpat_your-token-here # systemd quadlet
 
 2. See the main project [README](../README.md) for full run commands with all required environment variables and volume mounts.
 
+### Systemd Restart Policy
+
+When running the daemon as a systemd service (e.g., via a
+Podman Quadlet), add a restart policy so the daemon
+recovers automatically from unexpected exits:
+
+```ini
+[Service]
+Restart=on-failure
+RestartSec=5
+```
+
 ## Telemetry
 
 The daemon runs a local OTLP HTTP receiver (default port 4318, configurable via `OTLP_PORT`) that captures telemetry (model names, token usage) from spawned agents. All three OTLP signals are supported:
