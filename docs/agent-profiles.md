@@ -119,6 +119,44 @@ sidecar:
 permission_patterns:
   - "Do you want to proceed"
   - "Allow .+ to run"
+
+# Build-time provisioning metadata (optional).
+# Used by generate_containerfile.py and as
+# documentation for manual container setup.
+provisioning:
+  # Packages to install in the container image
+  install:
+    npm:
+      - "@example/my-agent-cli"
+    # pip:
+    #   - "my-agent-package"
+    # system:
+    #   - "some-dnf-package"
+
+  # Config files to seed in the container image
+  config_files:
+    # Create a directory
+    - path: "/root/.myagent"
+      mkdir: true
+    # Create a file with specific content
+    - path: "/root/.myagent/config.json"
+      content: '{"key": "value"}'
+
+  # Command to verify the installation succeeded
+  verify: "myagent --version"
+
+  # Host directories to mount into the container
+  mounts:
+    - host: "~/.myagent"
+      container: "/root/.myagent"
+      mode: rw
+
+  # Container-level env vars to pass through from the
+  # host. Distinct from profile.env which the daemon
+  # injects at agent spawn time — these are set on the
+  # container itself (podman run -e / quadlet Environment=).
+  passthrough_env:
+    - MY_AGENT_API_KEY
 ```
 
 ## How Profiles Are Used
@@ -139,6 +177,11 @@ permission_patterns:
 | Permission prompts | `permission_patterns` | Terminal output matching |
 | Sidecar telemetry | `sidecar.*` | `update_agents_git_info()` |
 | Companion buttons | `name`, `display_name` | Terminal companion bar |
+| Container install | `provisioning.install.*` | `generate_containerfile.py` |
+| Config seeding | `provisioning.config_files` | `generate_containerfile.py` |
+| Install verification | `provisioning.verify` | `generate_containerfile.py` |
+| Volume mounts | `provisioning.mounts` | Documentation / setup scripts |
+| Container env vars | `provisioning.passthrough_env` | Documentation / setup scripts |
 
 ## Resume Mode
 
@@ -160,7 +203,8 @@ Aider, Codex, Cursor), follow these steps:
 
 ### 1. Create the Profile
 
-Create a YAML file in `agent/profiles/`:
+Create a YAML file in `agent/profiles/` with both runtime
+configuration and provisioning metadata:
 
 ```yaml
 # agent/profiles/aider.yaml
@@ -177,41 +221,58 @@ auth:
   env_vars:
     - OPENAI_API_KEY
   require: any
+
+provisioning:
+  install:
+    pip:
+      - "aider-chat"
+  verify: "aider --version"
+  mounts:
+    - host: "~/.aider"
+      container: "/root/.aider"
+      mode: rw
+  passthrough_env:
+    - OPENAI_API_KEY
 ```
 
-### 2. Install the Binary in the Container
+### 2. Regenerate the Containerfile
 
-Update `agent/Containerfile` to install the tool. The
-method depends on the tool's distribution:
+The Containerfile is generated from a Jinja2 template
+plus profile provisioning metadata. Regenerate it to
+include the new tool's packages:
 
-```dockerfile
-# Example: pip-distributed tool
-RUN pip3 install --no-cache-dir aider-chat
-
-# Example: npm-distributed tool
-RUN npm install -g @some-org/some-agent
-
-# Example: standalone binary
-RUN curl -sSL https://example.com/agent \
-    -o /usr/local/bin/agent \
-    && chmod +x /usr/local/bin/agent
+```bash
+cd agent/
+python3 generate_containerfile.py
 ```
+
+This reads all profiles and produces a Containerfile
+with the correct `npm install`, `pip install`, config
+seeding, and verification steps. If your tool needs
+custom installation beyond what the provisioning schema
+supports (e.g., a tarball download with arch detection),
+add those steps directly to `Containerfile.template`.
 
 ### 3. Mount Credentials (if needed)
 
-If the tool needs config files or credentials from the
-host, add volume mounts to your container run command or
-compose file. Document the required mounts in
-`agent/README.md`.
+The profile's `provisioning.mounts` documents what host
+directories need to be mounted. Add them to your
+container run command or quadlet:
+
+```bash
+-v ~/.aider:/root/.aider          # podman run
+Volume=%h/.aider:/root/.aider     # systemd quadlet
+```
 
 ### 4. Set Auth Environment Variables
 
-If the profile has `auth.env_vars`, pass the required
-environment variables to the container:
+The profile's `provisioning.passthrough_env` documents
+what environment variables the container needs. Pass them
+through:
 
 ```bash
--e OPENAI_API_KEY="sk-..."   # podman run
-Environment=OPENAI_API_KEY=sk-...   # systemd quadlet
+-e OPENAI_API_KEY="sk-..."               # podman run
+Environment=OPENAI_API_KEY=sk-...        # systemd quadlet
 ```
 
 ### 5. Rebuild and Deploy

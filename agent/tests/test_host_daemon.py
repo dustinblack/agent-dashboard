@@ -542,6 +542,31 @@ class TestAgentProfiles:
         assert bash_info["supports_resume"] is False
         assert bash_info["has_model"] is False
 
+    def test_provisioning_metadata_loaded(self):
+        """Provisioning metadata is loaded from profiles."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+
+        # Claude has provisioning with npm package
+        claude_prov = profiles["claude"].provisioning
+        assert claude_prov is not None
+        assert "@anthropic-ai/claude-code" in claude_prov.install.npm
+        assert claude_prov.verify == "claude --version"
+        assert len(claude_prov.mounts) >= 1
+        assert any(m.host == "~/.claude" for m in claude_prov.mounts)
+        assert "ANTHROPIC_API_KEY" in claude_prov.passthrough_env
+
+        # Gemini has provisioning with config seeding
+        gemini_prov = profiles["gemini"].provisioning
+        assert gemini_prov is not None
+        assert "@google/gemini-cli" in gemini_prov.install.npm
+        assert len(gemini_prov.config_files) >= 1
+        assert any("settings.json" in cf.path for cf in gemini_prov.config_files)
+
+        # Bash has no provisioning
+        assert profiles["bash"].provisioning is None
+
     def test_unknown_profile_returns_empty(self):
         """Loading from empty directory returns no profiles."""
         import tempfile

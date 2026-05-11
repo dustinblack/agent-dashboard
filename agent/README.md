@@ -85,6 +85,9 @@ Environment=GITLAB_TOKEN=glpat_your-token-here # systemd quadlet
 1. Build the container image:
    ```bash
    cd agent/
+   # Regenerate Containerfile from template + profiles
+   # (only needed after adding/modifying profiles)
+   python3 generate_containerfile.py
    podman build -t agent-dashboard-daemon -f Containerfile .
    ```
 
