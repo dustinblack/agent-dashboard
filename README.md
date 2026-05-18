@@ -59,8 +59,11 @@ session cost.
   dashboard.
 - **Extensible agent profiles** — Agent tools are defined by
   YAML/JSON [profile configs](docs/agent-profiles.md) rather
-  than hardcoded logic. Add support for new AI agents by
-  dropping a profile file into the `agent/profiles/` directory.
+  than hardcoded logic. Each profile declares runtime behavior
+  (commands, telemetry, permissions) and build-time provisioning
+  (packages, config seeding, mounts, env vars). Add a new agent
+  by copying the [profile template](agent/profiles/TEMPLATE.yaml.example),
+  then regenerating the Containerfile — no source code changes.
 - **Remote PTY terminals** — Full `xterm-256color` terminal
   emulation via pseudo-terminals, not a log viewer or chat
   interface. Supports cursor movement, line-erase sequences,
@@ -224,6 +227,9 @@ Build the daemon container on each host machine:
 
 ```bash
 cd agent/
+# Generate Containerfile from template + agent profiles
+# (only needed after adding or modifying profiles)
+python3 generate_containerfile.py
 podman build -t agent-dashboard-daemon -f Containerfile .
 ```
 
