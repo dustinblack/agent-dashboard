@@ -450,8 +450,7 @@ class TestAgentProfiles:
         assert claude.commands.new == ["claude"]
         assert len(claude.commands.resume) > 0
         assert len(claude.env) > 0
-        assert "ANTHROPIC_API_KEY" in claude.auth.env_vars
-        assert claude.auth.require == "any"
+        assert claude.auth.env_vars == []
         assert claude.mcp is not None
         assert claude.mcp.project_file == ".mcp.json"
         assert len(claude.telemetry.token_metrics) > 0
@@ -466,7 +465,7 @@ class TestAgentProfiles:
         profiles = load_profiles()
         gemini = profiles["gemini"]
         assert gemini.binary == "gemini"
-        assert "GEMINI_API_KEY" in gemini.auth.env_vars
+        assert gemini.auth.env_vars == []
         assert gemini.mcp is not None
         assert len(gemini.telemetry.token_metrics) > 0
         assert gemini.telemetry.runtime_metric is not None

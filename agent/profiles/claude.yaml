@@ -14,11 +14,11 @@ env:
   OTEL_LOGS_EXPORTER: "otlp"
   OTEL_EXPORTER_OTLP_PROTOCOL: "http/json"
 
-auth:
-  env_vars:
-    - ANTHROPIC_API_KEY
-    - CLAUDE_CODE_USE_VERTEX
-  require: any
+# No auth gate — Claude Code supports API key, OAuth,
+# and Vertex AI. The daemon can't detect all auth
+# methods (OAuth stores credentials in ~/.claude/),
+# so binary presence is sufficient. If the user isn't
+# authenticated, Claude will prompt at startup.
 
 mcp:
   project_file: .mcp.json
