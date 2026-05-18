@@ -450,8 +450,7 @@ class TestAgentProfiles:
         assert claude.commands.new == ["claude"]
         assert len(claude.commands.resume) > 0
         assert len(claude.env) > 0
-        assert "ANTHROPIC_API_KEY" in claude.auth.env_vars
-        assert claude.auth.require == "any"
+        assert claude.auth.env_vars == []
         assert claude.mcp is not None
         assert claude.mcp.project_file == ".mcp.json"
         assert len(claude.telemetry.token_metrics) > 0
@@ -466,7 +465,7 @@ class TestAgentProfiles:
         profiles = load_profiles()
         gemini = profiles["gemini"]
         assert gemini.binary == "gemini"
-        assert "GEMINI_API_KEY" in gemini.auth.env_vars
+        assert gemini.auth.env_vars == []
         assert gemini.mcp is not None
         assert len(gemini.telemetry.token_metrics) > 0
         assert gemini.telemetry.runtime_metric is not None
@@ -541,6 +540,31 @@ class TestAgentProfiles:
         assert bash_info["color"] == "slate"
         assert bash_info["supports_resume"] is False
         assert bash_info["has_model"] is False
+
+    def test_provisioning_metadata_loaded(self):
+        """Provisioning metadata is loaded from profiles."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+
+        # Claude has provisioning with npm package
+        claude_prov = profiles["claude"].provisioning
+        assert claude_prov is not None
+        assert "@anthropic-ai/claude-code" in claude_prov.install.npm
+        assert claude_prov.verify == "claude --version"
+        assert len(claude_prov.mounts) >= 1
+        assert any(m.host == "~/.claude" for m in claude_prov.mounts)
+        assert "ANTHROPIC_API_KEY" in claude_prov.passthrough_env
+
+        # Gemini has provisioning with config seeding
+        gemini_prov = profiles["gemini"].provisioning
+        assert gemini_prov is not None
+        assert "@google/gemini-cli" in gemini_prov.install.npm
+        assert len(gemini_prov.config_files) >= 1
+        assert any("settings.json" in cf.path for cf in gemini_prov.config_files)
+
+        # Bash has no provisioning
+        assert profiles["bash"].provisioning is None
 
     def test_unknown_profile_returns_empty(self):
         """Loading from empty directory returns no profiles."""

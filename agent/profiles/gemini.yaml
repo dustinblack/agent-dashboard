@@ -19,10 +19,11 @@ env:
   GEMINI_TELEMETRY_USE_COLLECTOR: "true"
   GEMINI_TELEMETRY_TARGET: "local"
 
-auth:
-  env_vars:
-    - GEMINI_API_KEY
-  require: any
+# No auth gate — Gemini CLI supports both API key
+# (GEMINI_API_KEY) and Google OAuth (gemini auth login).
+# The daemon can't detect OAuth credentials, so we let
+# the binary's presence be sufficient. If the user isn't
+# authenticated, Gemini itself will prompt.
 
 mcp:
   user_files:
@@ -45,3 +46,20 @@ telemetry:
 permission_patterns:
   - "Allow .+ to run"
   - "Do you want to allow"
+
+# Build-time provisioning metadata
+provisioning:
+  install:
+    npm:
+      - "@google/gemini-cli"
+  config_files:
+    - path: "/root/.gemini/settings.json"
+      content: >-
+        {"security":{"auth":{"selectedType":"gemini-api"}}}
+  verify: "gemini --version"
+  mounts:
+    - host: "~/.gemini"
+      container: "/root/.gemini"
+      mode: rw
+  passthrough_env:
+    - GEMINI_API_KEY

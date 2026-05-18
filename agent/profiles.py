@@ -72,6 +72,51 @@ class SidecarConfig:
 
 
 @dataclass
+class MountConfig:
+    """Volume mount for container run."""
+
+    host: str = ""
+    container: str = ""
+    mode: str = "rw"
+
+
+@dataclass
+class ConfigFileConfig:
+    """Config file to seed in the container image."""
+
+    path: str = ""
+    mkdir: bool = False
+    content: Optional[str] = None
+
+
+@dataclass
+class InstallConfig:
+    """Package installation by method."""
+
+    npm: List[str] = field(default_factory=list)
+    pip: List[str] = field(default_factory=list)
+    system: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ProvisioningConfig:
+    """Build-time provisioning metadata.
+
+    Describes how to install the agent tool in the
+    container image, what config files to seed, what
+    host directories to mount, and what env vars to
+    pass through. Used by the Containerfile generator
+    and as documentation for manual setup.
+    """
+
+    install: InstallConfig = field(default_factory=InstallConfig)
+    config_files: List[ConfigFileConfig] = field(default_factory=list)
+    verify: Optional[str] = None
+    mounts: List[MountConfig] = field(default_factory=list)
+    passthrough_env: List[str] = field(default_factory=list)
+
+
+@dataclass
 class AgentProfile:
     """Complete profile for an agent tool.
 
@@ -93,6 +138,7 @@ class AgentProfile:
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     sidecar: Optional[SidecarConfig] = None
     permission_patterns: List[str] = field(default_factory=list)
+    provisioning: Optional[ProvisioningConfig] = None
 
     @property
     def supports_resume(self) -> bool:
@@ -173,6 +219,36 @@ def _parse_profile(data: dict) -> AgentProfile:
                 "{tmpdir}/.agent-telemetry-{agent_id}",
             ),
             fields=sc.get("fields", {}),
+        )
+
+    # Provisioning
+    prov = data.get("provisioning")
+    if prov:
+        inst = prov.get("install", {})
+        profile.provisioning = ProvisioningConfig(
+            install=InstallConfig(
+                npm=inst.get("npm", []),
+                pip=inst.get("pip", []),
+                system=inst.get("system", []),
+            ),
+            config_files=[
+                ConfigFileConfig(
+                    path=cf.get("path", ""),
+                    mkdir=cf.get("mkdir", False),
+                    content=cf.get("content"),
+                )
+                for cf in prov.get("config_files", [])
+            ],
+            verify=prov.get("verify"),
+            mounts=[
+                MountConfig(
+                    host=m.get("host", ""),
+                    container=m.get("container", ""),
+                    mode=m.get("mode", "rw"),
+                )
+                for m in prov.get("mounts", [])
+            ],
+            passthrough_env=prov.get("passthrough_env", []),
         )
 
     return profile

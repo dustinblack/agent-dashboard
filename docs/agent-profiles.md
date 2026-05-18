@@ -35,90 +35,146 @@ commands:
   resume: ["myagent-cli", "--resume"]
 ```
 
-### Full Schema
+### Field Reference
+
+#### Top-Level Fields
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `name` | string | **yes** | — | Unique identifier used in spawn requests and internal lookups. Must match the filename (e.g., `claude` for `claude.yaml`). |
+| `display_name` | string | no | `""` | Human-readable name shown in UI buttons, badges, and logs. |
+| `color` | string | no | `"slate"` | UI theme color keyword for spawn buttons and badges. Supported: `purple`, `blue`, `slate`, `green`, `red`, `amber`, `cyan`. |
+| `binary` | string | no | `""` | CLI binary name. Used for availability detection via `<binary> --version`. |
+| `always_available` | bool | no | `false` | If true, skip binary and auth checks — always show as available (e.g., `bash`). |
+| `env` | map | no | `{}` | Environment variables injected at agent spawn time. Values support `{otlp_port}` and `{agent_id}` placeholders. |
+| `permission_patterns` | list | no | `[]` | Regex patterns (case-insensitive) for detecting permission prompts in terminal output. Merged with built-in defaults (`Y/n`, `yes/no`, `Continue?`, etc.). |
+
+#### `commands`
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `commands.new` | list | no | `[]` | Command and arguments for starting a new session. |
+| `commands.resume` | list | no | `[]` | Command and arguments for resuming a previous session. If identical to `new`, the UI won't show a resume toggle. Can use bash fallback chains: `["bash", "-c", "tool --resume || tool"]`. |
+
+#### `auth`
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `auth.env_vars` | list | no | `[]` | Environment variable names to check for authentication. If empty, the tool is available whenever the binary exists. |
+| `auth.require` | string | no | `"any"` | `"any"` = at least one env var must be set. `"all"` = all must be set. |
+
+#### `mcp`
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `mcp.project_file` | string | no | `null` | Project-level MCP config filename (relative to project dir, e.g., `.mcp.json`). |
+| `mcp.user_files` | list | no | `[]` | User-level MCP config file paths (`~` is expanded). |
+
+#### `telemetry`
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `telemetry.token_metrics` | list | no | `[]` | OTLP metric names for token usage tracking (cumulative counters). |
+| `telemetry.cost_metric` | string | no | `null` | OTLP metric name for cost tracking (USD). |
+| `telemetry.activity_metrics` | list | no | `[]` | OTLP metric names for tool/function activity (sets `current_activity`). |
+| `telemetry.runtime_metric.name` | string | no | `""` | OTLP metric name for runtime duration. |
+| `telemetry.runtime_metric.unit` | string | no | `"seconds"` | Unit of the runtime metric: `"seconds"` or `"milliseconds"`. |
+| `telemetry.excluded_metrics` | list | no | `[]` | OTLP metric names to explicitly ignore (avoid double-counting). |
+
+#### `sidecar`
+
+For tools without OTLP support (e.g., bash). The daemon
+injects a `PROMPT_COMMAND` that writes telemetry to a JSON
+file, which the daemon reads periodically.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `sidecar.prompt_command` | string | no | `null` | Shell command injected as `PROMPT_COMMAND`. Should output JSON to stdout. |
+| `sidecar.file_pattern` | string | no | `"{tmpdir}/.agent-telemetry-{agent_id}"` | Path template for the sidecar JSON file. `{tmpdir}` and `{agent_id}` are replaced at runtime. |
+| `sidecar.fields` | map | no | `{}` | Maps sidecar JSON keys to telemetry field names (e.g., `current_activity: cwd`). |
+
+#### `provisioning`
+
+Optional build-time metadata used by
+`generate_containerfile.py` to produce the Containerfile,
+and as documentation for manual container setup.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `provisioning.install.npm` | list | no | `[]` | npm packages to install globally (`npm install -g`). |
+| `provisioning.install.pip` | list | no | `[]` | pip packages to install (`pip3 install`). |
+| `provisioning.install.system` | list | no | `[]` | System packages to install via the package manager (`dnf install`). |
+| `provisioning.config_files` | list | no | `[]` | Config files to seed in the container image. Each entry has `path` (string), `mkdir` (bool), and optionally `content` (string). |
+| `provisioning.verify` | string | no | `null` | Command to verify the installation succeeded (e.g., `"claude --version"`). Run as a `RUN` step in the Containerfile. |
+| `provisioning.mounts` | list | no | `[]` | Host volume mounts. Each entry has `host` (string, `~` expanded), `container` (string), and `mode` (`"rw"` or `"ro"`). |
+| `provisioning.passthrough_env` | list | no | `[]` | Environment variables to pass from the host to the container at runtime (via `podman run -e` or quadlet `Environment=`). Distinct from `env` which the daemon injects at agent spawn time. |
+
+### Full Example
 
 ```yaml
-# Required: unique identifier used in spawn requests
 name: myagent
-
-# Display name shown in logs and UI
 display_name: My Agent
-
-# UI theme color for spawn buttons and badges.
-# Supported keywords: purple, blue, slate, green,
-# red, amber, cyan. Defaults to slate if omitted.
 color: green
-
-# Binary to check for availability
 binary: myagent-cli
-
-# If true, always listed as available (e.g. bash)
 always_available: false
 
-# Spawn commands
 commands:
-  # Command for new sessions
   new: ["myagent-cli"]
-  # Command for resume mode (can include fallback chains)
   resume: ["bash", "-c", "myagent-cli --resume || myagent-cli"]
 
-# Environment variables injected at spawn time.
-# Supports {otlp_port} and {agent_id} placeholders.
 env:
   MY_AGENT_TELEMETRY: "true"
   MY_AGENT_OTLP_ENDPOINT: "http://127.0.0.1:{otlp_port}"
 
-# Auth detection for the Spawn button visibility
 auth:
-  # Environment variables to check
   env_vars:
     - MY_AGENT_API_KEY
-  # "any" = at least one must be set
-  # "all" = all must be set
   require: any
 
-# MCP server config file locations
 mcp:
-  # Project-level config (relative to project dir)
   project_file: .mcp.json
-  # User-level config files (~ expanded)
   user_files:
     - ~/.myagent/config.json
 
-# OTLP telemetry metric mappings
 telemetry:
-  # Metric names for token usage tracking
   token_metrics:
     - myagent.token.usage
-  # Metric name for cost tracking (USD)
   cost_metric: myagent.cost.usage
-  # Metric names for tool/function activity
   activity_metrics:
     - myagent.tool.execution
-  # Runtime duration metric
   runtime_metric:
     name: myagent.active_time
-    unit: seconds  # or "milliseconds"
-  # Metrics to explicitly ignore (avoid double-counting)
+    unit: seconds
   excluded_metrics:
     - gen_ai.client.token.usage
 
-# Sidecar telemetry (for tools without OTLP support)
 sidecar:
-  # Shell command injected as PROMPT_COMMAND
   prompt_command: >-
     printf '{"cwd":"%s"}\n' "$PWD"
-  # File path pattern ({tmpdir} and {agent_id} replaced at runtime)
   file_pattern: "{tmpdir}/.agent-telemetry-{agent_id}"
-  # Map sidecar JSON keys to telemetry field names
   fields:
     current_activity: cwd
 
-# Permission prompt patterns (regex, case-insensitive)
-# These are merged with generic defaults (Y/n, yes/no, etc.)
 permission_patterns:
   - "Do you want to proceed"
   - "Allow .+ to run"
+
+provisioning:
+  install:
+    npm:
+      - "@example/my-agent-cli"
+  config_files:
+    - path: "/root/.myagent"
+      mkdir: true
+    - path: "/root/.myagent/config.json"
+      content: '{"key": "value"}'
+  verify: "myagent --version"
+  mounts:
+    - host: "~/.myagent"
+      container: "/root/.myagent"
+      mode: rw
+  passthrough_env:
+    - MY_AGENT_API_KEY
 ```
 
 ## How Profiles Are Used
@@ -139,6 +195,11 @@ permission_patterns:
 | Permission prompts | `permission_patterns` | Terminal output matching |
 | Sidecar telemetry | `sidecar.*` | `update_agents_git_info()` |
 | Companion buttons | `name`, `display_name` | Terminal companion bar |
+| Container install | `provisioning.install.*` | `generate_containerfile.py` |
+| Config seeding | `provisioning.config_files` | `generate_containerfile.py` |
+| Install verification | `provisioning.verify` | `generate_containerfile.py` |
+| Volume mounts | `provisioning.mounts` | Documentation / setup scripts |
+| Container env vars | `provisioning.passthrough_env` | Documentation / setup scripts |
 
 ## Resume Mode
 
@@ -160,7 +221,8 @@ Aider, Codex, Cursor), follow these steps:
 
 ### 1. Create the Profile
 
-Create a YAML file in `agent/profiles/`:
+Create a YAML file in `agent/profiles/` with both runtime
+configuration and provisioning metadata:
 
 ```yaml
 # agent/profiles/aider.yaml
@@ -177,41 +239,58 @@ auth:
   env_vars:
     - OPENAI_API_KEY
   require: any
+
+provisioning:
+  install:
+    pip:
+      - "aider-chat"
+  verify: "aider --version"
+  mounts:
+    - host: "~/.aider"
+      container: "/root/.aider"
+      mode: rw
+  passthrough_env:
+    - OPENAI_API_KEY
 ```
 
-### 2. Install the Binary in the Container
+### 2. Regenerate the Containerfile
 
-Update `agent/Containerfile` to install the tool. The
-method depends on the tool's distribution:
+The Containerfile is generated from a Jinja2 template
+plus profile provisioning metadata. Regenerate it to
+include the new tool's packages:
 
-```dockerfile
-# Example: pip-distributed tool
-RUN pip3 install --no-cache-dir aider-chat
-
-# Example: npm-distributed tool
-RUN npm install -g @some-org/some-agent
-
-# Example: standalone binary
-RUN curl -sSL https://example.com/agent \
-    -o /usr/local/bin/agent \
-    && chmod +x /usr/local/bin/agent
+```bash
+cd agent/
+python3 generate_containerfile.py
 ```
+
+This reads all profiles and produces a Containerfile
+with the correct `npm install`, `pip install`, config
+seeding, and verification steps. If your tool needs
+custom installation beyond what the provisioning schema
+supports (e.g., a tarball download with arch detection),
+add those steps directly to `Containerfile.template`.
 
 ### 3. Mount Credentials (if needed)
 
-If the tool needs config files or credentials from the
-host, add volume mounts to your container run command or
-compose file. Document the required mounts in
-`agent/README.md`.
+The profile's `provisioning.mounts` documents what host
+directories need to be mounted. Add them to your
+container run command or quadlet:
+
+```bash
+-v ~/.aider:/root/.aider          # podman run
+Volume=%h/.aider:/root/.aider     # systemd quadlet
+```
 
 ### 4. Set Auth Environment Variables
 
-If the profile has `auth.env_vars`, pass the required
-environment variables to the container:
+The profile's `provisioning.passthrough_env` documents
+what environment variables the container needs. Pass them
+through:
 
 ```bash
--e OPENAI_API_KEY="sk-..."   # podman run
-Environment=OPENAI_API_KEY=sk-...   # systemd quadlet
+-e OPENAI_API_KEY="sk-..."               # podman run
+Environment=OPENAI_API_KEY=sk-...        # systemd quadlet
 ```
 
 ### 5. Rebuild and Deploy

@@ -244,6 +244,11 @@ jobs:
           podman build --no-cache -t agent-dashboard-frontend \
             -f frontend/Containerfile .
 
+      - name: Generate agent daemon Containerfile
+        run: |
+          pip install -q pyyaml jinja2
+          python3 agent/generate_containerfile.py
+
       - name: Build agent daemon container
         run: |
           podman build --no-cache -t agent-dashboard-daemon \

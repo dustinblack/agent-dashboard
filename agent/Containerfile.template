@@ -1,8 +1,17 @@
+{# Containerfile template for the Agent Dashboard daemon.
+   Agent tool installations, config seeding, and verification
+   are driven by profile provisioning metadata. Static
+   infrastructure (base packages, gh, gcloud, dev tools)
+   is edited directly in this template.
+
+   Generate: python3 generate_containerfile.py
+   Build:    podman build -t agent-dashboard-daemon -f Containerfile .
+#}
 FROM registry.fedoraproject.org/fedora:42
 
 WORKDIR /app
 
-# Install basic utilities, nodejs, and npm
+# Install base system packages and development tools
 RUN dnf install --setopt=install_weak_deps=False --setopt=retries=3 -y \
     bash \
     bash-completion \
@@ -46,6 +55,9 @@ RUN dnf install --setopt=install_weak_deps=False --setopt=retries=3 -y \
     python3-devel \
     gcc \
     slirp4netns \
+{% for pkg in system_packages %}
+    {{ pkg }} \
+{% endfor %}
     && dnf clean all
 
 # Configure podman for containers-in-containers networking.
@@ -78,15 +90,27 @@ RUN ARCH=$(uname -m) \
     && ln -s /opt/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud \
     && ln -s /opt/google-cloud-sdk/bin/gsutil /usr/local/bin/gsutil
 
-# Install actual AI CLIs via npm
-RUN npm install -g @google/gemini-cli @anthropic-ai/claude-code
+# ── Agent tool installations (profile-driven) ─────
+{% if npm_packages %}
+RUN npm install -g {{ npm_packages | join(' ') }}
+{% endif %}
+{% if pip_packages %}
+RUN pip3 install --no-cache-dir {{ pip_packages | join(' ') }}
+{% endif %}
 
-# Verify CLI installations are functional on this architecture
-RUN gemini --version && claude --version
+{% for cf in config_files %}
+{% if cf.mkdir and not cf.content %}
+RUN mkdir -p {{ cf.path }}
+{% elif cf.content %}
+RUN mkdir -p $(dirname {{ cf.path }}) && \
+    echo '{{ cf.content }}' > {{ cf.path }}
+{% endif %}
+{% endfor %}
+{% if verify_commands %}
 
-# Pre-configure Gemini CLI to skip API key prompt
-RUN mkdir -p /root/.gemini && \
-    echo '{"security": {"auth": {"selectedType": "gemini-api"}}}' > /root/.gemini/settings.json
+# Verify agent CLI installations
+RUN {{ verify_commands | join(' && ') }}
+{% endif %}
 
 # Install general-purpose Python dev tools for linting and formatting
 RUN pip3 install --no-cache-dir black flake8 pylint
