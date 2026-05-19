@@ -37,9 +37,9 @@ The container image bundles the following tools so spawned agents have everythin
 The daemon relies on the following environment variables:
 - `HOST_TOKEN`: (Required) The pre-shared token for this host, registered with the Hub.
 - `DASHBOARD_URL`: (Optional) The URL of the central Dashboard Backend. Defaults to `http://localhost:8000`.
-- `PROJECTS_ROOT`: (Optional) Root directory to scan for project repositories. Defaults to `/git`.
+- `PROJECTS_ROOT`: (Optional) Root directory (or colon-separated list of directories) to scan for project repositories. Defaults to `/git`. Example: `PROJECTS_ROOT=/git:/workspace:/data/repos`.
 - `OTLP_PORT`: (Optional) Port for the local OTLP HTTP telemetry receiver. Defaults to `4318`. Set to a different value when running multiple daemons on the same host with `Network=host`.
-- `PROJECTS_DEPTH`: (Optional) Maximum directory depth to scan for git repositories below `PROJECTS_ROOT`. Defaults to `6`.
+- `PROJECTS_DEPTH`: (Optional) Maximum directory depth to scan for git repositories below each `PROJECTS_ROOT` entry. Defaults to `6`.
 
 ### Tool-Specific Configuration
 

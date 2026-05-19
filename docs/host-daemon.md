@@ -61,9 +61,9 @@ podman run -d --name host-daemon --network=host \
 |----------|-------------|---------|
 | `DASHBOARD_URL` | URL of the hub backend | *(required)* |
 | `HOST_TOKEN` | Token from the host registration step | *(required)* |
-| `PROJECTS_ROOT` | Root directory for project scanning | *(required)* |
+| `PROJECTS_ROOT` | Root directory (or colon-separated list) for project scanning | `/git` |
 | `OTLP_PORT` | OTLP telemetry receiver port | `4318` |
-| `PROJECTS_DEPTH` | Max scan depth below `PROJECTS_ROOT` | `6` |
+| `PROJECTS_DEPTH` | Max scan depth below each `PROJECTS_ROOT` entry | `6` |
 | `GEMINI_API_KEY` | API key for Gemini CLI | — |
 | `CLAUDE_CODE_USE_VERTEX` | Set to `1` to use Vertex AI for Claude | — |
 | `CLOUD_ML_REGION` | GCP region (e.g., `us-east5`) | — |

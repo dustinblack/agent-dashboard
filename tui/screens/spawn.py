@@ -55,6 +55,7 @@ class SpawnScreen(Screen):
         self.agents = agents or []
         self._selected_host_id: int | None = None
         self._projects: List[str] = []
+        self._strip_prefix: str = ""
 
     def compose(self) -> ComposeResult:
         """Builds the spawn screen layout."""
@@ -83,8 +84,12 @@ class SpawnScreen(Screen):
                 prompt="Select host first",
             )
 
-            # Project selector
+            # Project search and selector
             yield Label("Project", classes="field-label")
+            yield Input(
+                placeholder="Search projects...",
+                id="project-search",
+            )
             yield Select(
                 [],
                 id="project-select",
@@ -136,9 +141,13 @@ class SpawnScreen(Screen):
             if host and host.get("projects"):
                 projects = host["projects"].get("available_projects", [])
                 raw_tools = host["projects"].get("available_tools", [])
+                pr = host["projects"].get("projects_root", "/git")
+                roots = pr if isinstance(pr, list) else [pr]
+                self._strip_prefix = roots[0] + "/" if len(roots) == 1 else ""
             else:
                 projects = []
                 raw_tools = []
+                self._strip_prefix = ""
             self._projects = projects
 
             # Update tool selector from host's profiles
@@ -157,12 +166,11 @@ class SpawnScreen(Screen):
                 ]
             tool_select.set_options(tool_options)
 
-            # Update project selector
+            # Update project selector and clear search
             project_select = self.query_one("#project-select", Select)
-            if projects:
-                project_select.set_options([(p, p) for p in projects])
-            else:
-                project_select.set_options([])
+            project_select.set_options(self._project_options(projects))
+            search_input = self.query_one("#project-search", Input)
+            search_input.value = ""
 
             # Smart worktree default: enable if another
             # agent is active on the selected project
@@ -171,32 +179,49 @@ class SpawnScreen(Screen):
         elif event.select.id == "project-select":
             self._update_worktree_default()
 
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Filters the project list as the user types."""
+        if event.input.id != "project-search":
+            return
+        query = event.value.strip().lower()
+        project_select = self.query_one("#project-select", Select)
+        if not query:
+            project_select.set_options(self._project_options(self._projects))
+        else:
+            filtered = [p for p in self._projects if query in p.lower()]
+            project_select.set_options(self._project_options(filtered))
+
+    def _project_options(self, projects):
+        """Builds Select options from project paths.
+
+        Strips the common root prefix for single-root
+        configs to keep labels readable.
+        """
+        if not projects:
+            return []
+        prefix = self._strip_prefix or ""
+        return [
+            (
+                p[len(prefix) :] if prefix and p.startswith(prefix) else p,
+                p,
+            )
+            for p in projects
+        ]
+
     def _update_worktree_default(self) -> None:
         """Sets worktree toggle based on whether another
         agent is already active on the selected project.
+        Projects are absolute paths so direct comparison
+        works without joining with projects_root.
         """
         project_select = self.query_one("#project-select", Select)
         selected_project = project_select.value
         if selected_project is Select.BLANK:
             return
 
-        # Check if any active agent is on this project
-        # on the selected host
-        host = None
-        for h in self.hosts:
-            if h.get("id") == self._selected_host_id:
-                host = h
-                break
-        if not host:
-            return
-        projects_root = ""
-        if host.get("projects"):
-            projects_root = host["projects"].get("projects_root", "/git")
-        full_path = f"{projects_root}/{selected_project}"
-
         has_active = any(
             a.get("host_id") == self._selected_host_id
-            and (a.get("telemetry") or {}).get("project_dir") == full_path
+            and (a.get("telemetry") or {}).get("project_dir") == selected_project
             for a in self.agents
         )
         worktree_switch = self.query_one("#worktree-switch", Switch)
