@@ -38,7 +38,7 @@ export interface Host {
   status: string;
   created_at: string;
   projects?: {
-    projects_root: string;
+    projects_root: string | string[];
     available_projects: string[];
     available_tools?: (string | ToolInfo)[];
   };

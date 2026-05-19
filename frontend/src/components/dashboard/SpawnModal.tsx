@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   PlusCircle,
   X,
-  ChevronRight,
   RefreshCw,
   Folder,
   GitFork,
+  Search,
 } from 'lucide-react';
 import type { Agent, Host } from '../../api';
 
@@ -50,11 +50,40 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
     () => host.projects?.available_projects || [],
     [host.projects?.available_projects],
   );
+
+  // Compute display labels by stripping the common prefix
+  // from absolute paths for readability.
+  const projectsRoot = host.projects?.projects_root;
+  const roots = useMemo(
+    () =>
+      Array.isArray(projectsRoot)
+        ? projectsRoot
+        : projectsRoot
+          ? [projectsRoot]
+          : ['/git'],
+    [projectsRoot],
+  );
+  const stripPrefix = useMemo(() => {
+    if (roots.length === 1) return roots[0] + '/';
+    return '';
+  }, [roots]);
+  const displayLabel = (p: string) =>
+    stripPrefix && p.startsWith(stripPrefix) ? p.slice(stripPrefix.length) : p;
+
   const [selectedProject, setSelectedProject] = useState('');
+  const [projectSearch, setProjectSearch] = useState('');
   const [task, setTask] = useState('');
   const [resumeSession, setResumeSession] = useState(true);
   const [useWorktree, setUseWorktree] = useState(false);
   const showResume = supportsResumeProp ?? false;
+
+  // Filter projects by search query (case-insensitive
+  // substring match against the full path).
+  const filteredProjects = useMemo(() => {
+    if (!projectSearch) return projects;
+    const q = projectSearch.toLowerCase();
+    return projects.filter((p) => p.toLowerCase().includes(q));
+  }, [projects, projectSearch]);
 
   // Auto-select first project when list arrives
   useEffect(() => {
@@ -66,18 +95,15 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
 
   // Smart default: enable worktree isolation when another
   // agent is already active on the selected project.
-  // Uses the original project_dir for matching so
-  // worktree-isolated agents are counted too.
+  // Projects are absolute paths so direct comparison works.
   useEffect(() => {
     if (!selectedProject) return;
-    const projectsRoot = host.projects?.projects_root || '/git';
-    const fullPath = `${projectsRoot}/${selectedProject}`;
     const hasActiveAgent = activeAgents.some(
-      (a) => a.telemetry?.project_dir === fullPath,
+      (a) => a.telemetry?.project_dir === selectedProject,
     );
     // eslint-disable-next-line react-hooks/set-state-in-effect -- derive from props
     setUseWorktree(hasActiveAgent);
-  }, [selectedProject, activeAgents, host.projects?.projects_root]);
+  }, [selectedProject, activeAgents]);
 
   // When worktree is enabled, force session mode to "new"
   // since the worktree has no prior session state.
@@ -122,39 +148,55 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
                 Refresh
               </button>
             </div>
-            <div className="relative group">
-              <Folder
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-hover:text-accent transition-colors"
-                size={18}
+            <div className="relative">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+                size={14}
               />
-              <select
-                value={selectedProject}
-                onChange={(e) => setSelectedProject(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-10 text-slate-50 focus:outline-none focus:border-accent appearance-none transition-all cursor-pointer"
-              >
-                {projects.length === 0 && (
-                  <option value="">
-                    Loading projects from{' '}
-                    {host.projects?.projects_root || '/git'}
-                    ...
-                  </option>
-                )}
-                {projects.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-              <ChevronRight
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none group-hover:text-accent rotate-90"
-                size={18}
+              <input
+                type="text"
+                value={projectSearch}
+                onChange={(e) => setProjectSearch(e.target.value)}
+                placeholder="Search projects..."
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-9 pr-4 text-sm text-slate-50 focus:outline-none focus:border-accent transition-colors"
               />
             </div>
-            <p className="text-[10px] text-slate-500 mt-1.5 italic">
-              Projects found in{' '}
-              <code className="bg-slate-900 px-1 rounded">
-                {host.projects?.projects_root || '/git'}
-              </code>
+            <div className="mt-1.5 max-h-48 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg">
+              {projects.length === 0 ? (
+                <p className="text-sm text-slate-500 px-3 py-2 italic">
+                  Loading projects from {roots.join(', ')}...
+                </p>
+              ) : filteredProjects.length === 0 ? (
+                <p className="text-sm text-slate-500 px-3 py-2 italic">
+                  No projects match &ldquo;{projectSearch}&rdquo;
+                </p>
+              ) : (
+                filteredProjects.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setSelectedProject(p)}
+                    className={`w-full text-left px-3 py-1.5 text-sm font-mono flex items-center gap-2 transition-colors ${
+                      selectedProject === p
+                        ? 'bg-accent/20 text-accent'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    <Folder size={12} className="shrink-0" />
+                    {displayLabel(p)}
+                  </button>
+                ))
+              )}
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1 italic">
+              {roots.length === 1 ? (
+                <>
+                  Projects from{' '}
+                  <code className="bg-slate-900 px-1 rounded">{roots[0]}</code>
+                </>
+              ) : (
+                <>Projects from {roots.length} directories</>
+              )}
             </p>
           </div>
 
