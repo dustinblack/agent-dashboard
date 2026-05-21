@@ -162,6 +162,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
                 size={14}
               />
               <input
+                autoFocus
                 type="text"
                 value={projectSearch}
                 onChange={(e) => setProjectSearch(e.target.value)}
