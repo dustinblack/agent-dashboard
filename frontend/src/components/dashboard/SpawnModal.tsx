@@ -95,9 +95,9 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
 
   // Smart default: enable worktree isolation when another
   // agent is already active on the selected project.
-  // Handle both absolute paths (new daemons) and relative
-  // paths (old daemons) by checking both the raw value
-  // and the joined path.
+  // Only runs when the project selection changes — not
+  // on activeAgents updates — so it doesn't override
+  // user manual toggles.
   useEffect(() => {
     if (!selectedProject) return;
     const fullPath = selectedProject.startsWith('/')
@@ -110,7 +110,8 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
     );
     // eslint-disable-next-line react-hooks/set-state-in-effect -- derive from props
     setUseWorktree(hasActiveAgent);
-  }, [selectedProject, activeAgents, roots]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omit activeAgents to avoid overriding user toggles
+  }, [selectedProject, roots]);
 
   // When worktree is enabled, force session mode to "new"
   // since the worktree has no prior session state.
