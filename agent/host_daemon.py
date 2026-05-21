@@ -706,7 +706,11 @@ class HostDaemon:
             f"mode: {session_mode} in {full_path}"
         )
 
-        branch, project, remote_url = self.get_git_info(full_path)
+        # Get git info from the original project directory
+        # (not the worktree) so the card shows the real
+        # project name and remote URL initially.
+        git_info_path = original_project_dir or full_path
+        branch, project, remote_url = self.get_git_info(git_info_path)
         mcp_servers = self._detect_mcp_servers(original_project_dir, tool)
         telemetry = {
             "project_dir": original_project_dir,
@@ -1478,9 +1482,20 @@ class HostDaemon:
                     pid = info["pid"]
                     if not pid:
                         continue
-                    # Try to read the cwd of the child process
+                    # Try to read the cwd of the child process.
+                    # For worktree agents, use the original
+                    # project dir for project name and remote
+                    # URL so the card doesn't show the worktree
+                    # directory name.
                     cwd = os.readlink(f"/proc/{pid}/cwd")
+                    orig = info.get("original_project_dir")
                     branch, project, remote_url = self.get_git_info(cwd)
+                    if orig and orig != cwd:
+                        _, orig_project, orig_url = self.get_git_info(orig)
+                        if orig_project:
+                            project = orig_project
+                        if orig_url:
+                            remote_url = orig_url
 
                     tel = info["telemetry"]
                     changed = False
