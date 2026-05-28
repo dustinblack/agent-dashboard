@@ -290,6 +290,18 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
 
     window.addEventListener('resize', debouncedFit);
 
+    // Re-render the terminal when the tab/window regains
+    // focus — xterm.js canvas may not update while hidden.
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        requestAnimationFrame(actualPerformFit);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', () => {
+      requestAnimationFrame(actualPerformFit);
+    });
+
     let resizeObserver: ResizeObserver | null = null;
     if (terminalRef.current) {
       resizeObserver = new ResizeObserver(debouncedFit);
@@ -476,6 +488,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
 
     return () => {
       window.removeEventListener('resize', debouncedFit);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       if (resizeTimer) clearTimeout(resizeTimer);
       if (rafId !== null) cancelAnimationFrame(rafId);
       if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
