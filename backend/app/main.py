@@ -230,11 +230,6 @@ def read_hosts(
     List all registered hosts. Requires UI login.
     """
     hosts = db.query(models.Host).offset(skip).limit(limit).all()
-    print(
-        f"DEBUG: read_hosts returning {len(hosts)} hosts."
-        f" Sample projects:"
-        f" {[h.last_projects_json for h in hosts]}"
-    )
     return hosts
 
 
