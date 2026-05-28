@@ -137,10 +137,17 @@ async def handle_history_complete(sid, data):
 @sio.on("terminal_resize", namespace="/terminal")
 async def handle_terminal_resize(sid, data):
     """
-    Relays a terminal resize event from UI to all host daemons.
+    Relays a terminal resize event to the agent's room.
     data: {'sid': 'agent_id', 'cols': 80, 'rows': 24}
     """
-    await sio.emit("terminal_resize", data, namespace="/terminal")
+    agent_id = data.get("sid")
+    if agent_id:
+        await sio.emit(
+            "terminal_resize",
+            data,
+            room=agent_id,
+            namespace="/terminal",
+        )
 
 
 @sio.on("agent_telemetry", namespace="/terminal")
@@ -244,9 +251,15 @@ async def handle_agent_exit(sid, data):
 @sio.on("terminal_input", namespace="/terminal")
 async def handle_terminal_input(sid, data):
     """
-    Receives keystrokes from the UI and relays them to the Host Daemon.
+    Relays keystrokes to the agent's room where only
+    the owning daemon receives them.
     data: {'target_sid': 'agent_id', 'input': '...'}
     """
-    # Relay directly to all connected clients on this namespace.
-    # The Host Daemon will filter by agent_id.
-    await sio.emit("terminal_input", data, namespace="/terminal")
+    agent_id = data.get("target_sid")
+    if agent_id:
+        await sio.emit(
+            "terminal_input",
+            data,
+            room=agent_id,
+            namespace="/terminal",
+        )

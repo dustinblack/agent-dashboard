@@ -158,6 +158,14 @@ class HostDaemon:
             print(f"Connected to dashboard at {self.server_url}")
             # Report available projects immediately on connection
             await self.report_projects()
+            # Rejoin agent rooms so the backend can route
+            # terminal_input and terminal_resize to us.
+            for aid in self.agents:
+                await self.sio.emit(
+                    "join_room",
+                    {"room": aid},
+                    namespace="/terminal",
+                )
 
         @self.sio.on("request_projects", namespace="/terminal")
         async def on_request_projects(data):
@@ -819,6 +827,13 @@ class HostDaemon:
                         "agent_id": agent_id,
                         "telemetry": telemetry,
                     },
+                    namespace="/terminal",
+                )
+                # Join the agent's room so the backend
+                # routes terminal_input to this daemon.
+                await self.sio.emit(
+                    "join_room",
+                    {"room": agent_id},
                     namespace="/terminal",
                 )
             os.write(fd, b"\n")
