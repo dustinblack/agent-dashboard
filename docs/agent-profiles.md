@@ -53,8 +53,8 @@ commands:
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `commands.new` | list | no | `[]` | Command and arguments for starting a new session. |
-| `commands.resume` | list | no | `[]` | Command and arguments for resuming a previous session. If identical to `new`, the UI won't show a resume toggle. Can use bash fallback chains: `["bash", "-c", "tool --resume || tool"]`. |
+| `commands.new` | list | no | `[]` | Command and arguments for starting a new session. Supports custom CLI flags: `["claude", "--model", "opus"]`. |
+| `commands.resume` | list | no | `[]` | Command and arguments for resuming a previous session. If identical to `new`, the UI won't show a resume toggle. Can use bash fallback chains: `["bash", "-c", "tool --resume --model opus \|\| tool --model opus"]`. Include the same custom flags in both the resume and fallback commands. |
 
 #### `auth`
 

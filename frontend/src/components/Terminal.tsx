@@ -241,19 +241,17 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       isAtBottom = buf.viewportY >= buf.baseY;
     });
 
-    // --- Streaming-aware resize ---
-    // Defer fitAddon.fit() while output is actively
-    // streaming to prevent visible scroll jumps from
-    // buffer reflow during rapid writes.
-    let isStreaming = false;
-    let pendingFit = false;
-
-    const actualPerformFit = () => {
+    // --- Resize handling ---
+    // Debounce fitAddon.fit() to prevent rapid-fire calls
+    // during layout transitions. The fit runs immediately
+    // after the debounce settles — no streaming deferral,
+    // which could block fits indefinitely under high
+    // latency and cause black screens.
+    const performFit = () => {
       if (!terminalRef.current) return;
       try {
         const wasAtBottom = isAtBottom;
         fitAddon.fit();
-        // Restore scroll position after reflow
         if (wasAtBottom) {
           term.scrollToBottom();
         }
@@ -267,28 +265,28 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       } catch (e) {
         console.error('Fit failed:', e);
       }
-      pendingFit = false;
     };
 
-    const safePerformFit = () => {
-      if (isStreaming) {
-        pendingFit = true;
-        return;
-      }
-      actualPerformFit();
-    };
-
-    // Unified debounce for all resize triggers (window
-    // resize and ResizeObserver) to prevent rapid-fire
-    // fitAddon.fit() calls during layout transitions.
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     const RESIZE_DEBOUNCE_MS = 150;
     const debouncedFit = () => {
       if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(safePerformFit, RESIZE_DEBOUNCE_MS);
+      resizeTimer = setTimeout(performFit, RESIZE_DEBOUNCE_MS);
     };
 
     window.addEventListener('resize', debouncedFit);
+
+    // Re-render the terminal when the tab/window regains
+    // focus — xterm.js canvas may not update while hidden.
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        requestAnimationFrame(performFit);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', () => {
+      requestAnimationFrame(performFit);
+    });
 
     let resizeObserver: ResizeObserver | null = null;
     if (terminalRef.current) {
@@ -296,7 +294,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       resizeObserver.observe(terminalRef.current);
     }
 
-    requestAnimationFrame(actualPerformFit);
+    requestAnimationFrame(performFit);
     xtermRef.current = term;
 
     // --- Touch scrolling ---
@@ -353,22 +351,17 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
 
     // --- Output batching ---
     // Buffer rapid successive terminal_output events and
-    // flush them in a single term.write() per animation frame
-    // to prevent visible scroll jumping during fast output.
+    // flush them in a single term.write() per animation
+    // frame. Uses the write callback so xterm signals
+    // when processing is complete.
     let outputBuffer = '';
     let rafId: number | null = null;
     const flushOutput = () => {
       rafId = null;
       if (outputBuffer) {
-        term.write(outputBuffer);
+        const chunk = outputBuffer;
         outputBuffer = '';
-      }
-      // Output drained — clear streaming flag and run
-      // any deferred fit that was blocked during output.
-      isStreaming = false;
-      if (pendingFit) {
-        pendingFit = false;
-        requestAnimationFrame(actualPerformFit);
+        term.write(chunk);
       }
     };
 
@@ -389,7 +382,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       isReplaying.current = true;
       historyBuffer = [];
       socket.emit('join_room', { room: agentId });
-      actualPerformFit();
+      performFit();
 
       // Detect stale sessions: if history never completes
       // within 5s, the daemon likely no longer has this agent
@@ -414,7 +407,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
           historyBuffer = [];
         }
         isReplaying.current = false;
-        actualPerformFit();
+        performFit();
       }
     });
 
@@ -426,7 +419,6 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       } else {
         // Buffer live output and flush per animation frame
         outputBuffer += data.output;
-        isStreaming = true;
         if (rafId === null) {
           rafId = requestAnimationFrame(flushOutput);
         }
@@ -476,6 +468,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
 
     return () => {
       window.removeEventListener('resize', debouncedFit);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       if (resizeTimer) clearTimeout(resizeTimer);
       if (rafId !== null) cancelAnimationFrame(rafId);
       if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);

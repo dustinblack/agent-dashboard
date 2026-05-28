@@ -211,9 +211,9 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
 
           {showResume && (
             <div
-              className={`flex items-center justify-between ${useWorktree ? 'opacity-50' : ''}`}
+              className={`flex items-center gap-3 ${useWorktree ? 'opacity-50' : ''}`}
             >
-              <div>
+              <div className="flex-1 min-w-0">
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest">
                   Session Mode
                 </label>
@@ -229,7 +229,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
                 type="button"
                 onClick={() => setResumeSession(!resumeSession)}
                 disabled={useWorktree}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
                   effectiveResume ? 'bg-accent' : 'bg-slate-600'
                 } ${useWorktree ? 'cursor-not-allowed' : ''}`}
               >
@@ -239,14 +239,14 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
                   }`}
                 />
               </button>
-              <span className="text-xs text-slate-300 font-medium ml-2 w-16">
+              <span className="text-xs text-slate-300 font-medium w-16 shrink-0">
                 {effectiveResume ? 'Resume' : 'New'}
               </span>
             </div>
           )}
 
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                 <GitFork size={12} />
                 Worktree Isolation
@@ -260,7 +260,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
             <button
               type="button"
               onClick={() => setUseWorktree(!useWorktree)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
                 useWorktree ? 'bg-accent' : 'bg-slate-600'
               }`}
             >
@@ -270,7 +270,7 @@ const SpawnModal: React.FC<SpawnModalProps> = ({
                 }`}
               />
             </button>
-            <span className="text-xs text-slate-300 font-medium ml-2 w-16">
+            <span className="text-xs text-slate-300 font-medium w-16 shrink-0">
               {useWorktree ? 'Isolated' : 'Shared'}
             </span>
           </div>

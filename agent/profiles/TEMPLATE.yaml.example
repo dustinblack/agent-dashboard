@@ -42,13 +42,16 @@ always_available: false
 # strings (command + arguments).
 
 commands:
-  # Command for new sessions.
+  # Command for new sessions. Add custom CLI flags here:
+  #   new: ["myagent-cli", "--model", "large", "--verbose"]
   new: ["myagent-cli"]
 
   # Command for resuming a previous session. The UI shows
   # a "Resume Session" toggle when this differs from 'new'.
   # Use a bash fallback chain to gracefully handle cases
-  # where no session exists to resume:
+  # where no session exists to resume. Include the same
+  # custom flags in both the resume and fallback commands:
+  #   resume: ["bash", "-c", "myagent-cli --resume --model large || myagent-cli --model large"]
   resume: ["bash", "-c", "myagent-cli --resume || myagent-cli"]
 
 # ── Environment Variables ─────────────────────────────
