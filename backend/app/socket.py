@@ -112,8 +112,8 @@ async def handle_join_room(sid, data):
     if agent_id:
         await sio.enter_room(sid, agent_id, namespace="/terminal")
         # Identify whether this is a daemon or UI client
-        async with sio.session(sid, namespace="/terminal") as session:
-            is_host = session.get("is_host", False)
+        session = await sio.get_session(sid, namespace="/terminal")
+        is_host = session.get("is_host", False) if session else False
         client_type = "Host Daemon" if is_host else "UI Client"
         print(f"{client_type} {sid} joined Agent room: {agent_id}")
 
