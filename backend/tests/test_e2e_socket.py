@@ -204,6 +204,12 @@ def test_socketio_relay_multiplex_e2e(live_server):
     )
     agent_id = r_spawn.json()["agent_id"]
 
+    # Host joins the agent's room (as the real daemon
+    # does after spawning) so it receives room-targeted
+    # terminal_input and terminal_resize events.
+    host_sio.emit("join_room", {"room": agent_id}, namespace="/terminal")
+    time.sleep(0.2)
+
     # 2. UI connects
     ui_sio = socketio.Client()
     ui_received_output = []
