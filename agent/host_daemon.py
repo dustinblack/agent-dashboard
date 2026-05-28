@@ -149,9 +149,25 @@ class HostDaemon:
 
         @self.sio.on("*", namespace="/terminal")
         async def catch_all(event, data):
-            # Suppress noisy heartbeat/terminal output logs in debug
-            if event not in ["terminal_output", "terminal_input"]:
-                print(f"DEBUG: Received event '{event}' with data: {data}")
+            if event in ("terminal_output", "terminal_input"):
+                return
+            # Summarize large payloads to avoid blocking
+            # the event loop with synchronous print() calls.
+            if event == "host_telemetry_update":
+                tel = data.get("telemetry", {})
+                n = len(tel.get("available_projects", []))
+                hid = data.get("host_id")
+                print(f"DEBUG: {event} host_id={hid}" f" projects={n}")
+            elif event == "agent_telemetry_update":
+                aid = data.get("agent_id", "?")[:8]
+                tel = data.get("telemetry", {})
+                print(
+                    f"DEBUG: {event} agent={aid}"
+                    f" model={tel.get('model', '?')}"
+                    f" status={tel.get('agent_status', '?')}"
+                )
+            else:
+                print(f"DEBUG: Received event" f" '{event}' with data: {data}")
 
         @self.sio.on("connect", namespace="/terminal")
         async def on_connect():

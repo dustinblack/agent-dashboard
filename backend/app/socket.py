@@ -167,9 +167,6 @@ async def handle_agent_telemetry(sid, data):
     """
     agent_id = data.get("agent_id")
     telemetry = data.get("telemetry")
-    print(
-        f"DEBUG: handle_agent_telemetry received for agent_id {agent_id}: {telemetry}"
-    )
     if agent_id and telemetry:
         db = next(database.get_db())
         try:
@@ -185,8 +182,6 @@ async def handle_agent_telemetry(sid, data):
                 new_tel.update(telemetry)
                 db_agent.telemetry_json = new_tel
                 db.commit()
-                msg = f"DEBUG: successfully updated DB for agent {agent_id}"
-                print(msg)
 
                 # Broadcast update to all UI clients for real-time card refresh
                 await sio.emit(
@@ -208,7 +203,14 @@ async def handle_host_telemetry(sid, data):
     """
     async with sio.session(sid, namespace="/terminal") as session:
         host_id = session.get("host_id")
-        print(f"Received host_telemetry from SID {sid} (Host ID: {host_id}): {data}")
+        n_projects = len(data.get("available_projects", []))
+        n_tools = len(data.get("available_tools", []))
+        print(
+            f"Received host_telemetry from"
+            f" Host ID: {host_id}"
+            f" ({n_projects} projects,"
+            f" {n_tools} tools)"
+        )
         if host_id:
             db = next(database.get_db())
             try:
