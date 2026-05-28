@@ -55,6 +55,9 @@ provisioning:
     - host: "~/.claude"
       container: "/root/.claude"
       mode: rw
+    - host: "~/.claude.json"
+      container: "/root/.claude.json"
+      mode: ro
     - host: "~/.config/gcloud"
       container: "/root/.config/gcloud"
       mode: ro

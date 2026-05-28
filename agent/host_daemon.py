@@ -100,13 +100,19 @@ class HostDaemon:
     def __init__(self, server_url: str, host_token: str):
         self.server_url = server_url
         self.host_token = host_token
-        self.projects_root = os.getenv("PROJECTS_ROOT", "/git")
+        # Parse PROJECTS_ROOT as a colon-separated list of
+        # directories to scan for git repositories. A single
+        # path (no colon) works as before.
+        roots_str = os.getenv("PROJECTS_ROOT", "/git")
+        self.projects_roots = [r.strip() for r in roots_str.split(":") if r.strip()]
+        # First root used as default for backward compat
+        self.projects_root = self.projects_roots[0]
         # OTLP receiver port — configurable to allow multiple
         # daemons on the same host via Network=host
         self.otlp_port = int(os.getenv("OTLP_PORT", "4318"))
         # Maximum directory depth to scan for git repositories
-        # below PROJECTS_ROOT. Default of 6 covers most GitLab
-        # org hierarchies without being unlimited.
+        # below each PROJECTS_ROOT entry. Default of 6 covers
+        # most GitLab org hierarchies without being unlimited.
         self.projects_depth = int(os.getenv("PROJECTS_DEPTH", "6"))
         # Load agent profiles from YAML/JSON configs
         self.profiles = load_profiles()
@@ -266,30 +272,33 @@ class HostDaemon:
                     pass
 
     def _scan_projects(self) -> list:
-        """Scans PROJECTS_ROOT for git repositories.
+        """Scans all PROJECTS_ROOT directories for git repos.
 
         Synchronous method intended to be called from an
-        executor to avoid blocking the event loop.
+        executor to avoid blocking the event loop. Iterates
+        over all configured roots and returns absolute paths.
 
         Returns:
-            Sorted list of project relative paths.
+            Sorted list of absolute project paths.
         """
         projects = []
-        if os.path.exists(self.projects_root):
+        for scan_root in self.projects_roots:
+            if not os.path.exists(scan_root):
+                continue
             try:
-                for root, dirs, _files in os.walk(self.projects_root):
-                    rel_path = os.path.relpath(root, self.projects_root)
+                for dirpath, dirs, _files in os.walk(scan_root):
+                    rel_path = os.path.relpath(dirpath, scan_root)
                     depth = 0 if rel_path == "." else len(rel_path.split(os.sep))
                     if depth > self.projects_depth:
                         dirs[:] = []
                         continue
                     if ".git" in dirs:
                         if rel_path != ".":
-                            projects.append(rel_path)
+                            projects.append(os.path.join(scan_root, rel_path))
                         dirs[:] = [d for d in dirs if d != ".git"]
-                projects.sort()
             except Exception as e:
-                print(f"Error scanning projects root {self.projects_root}: {e}")
+                print(f"Error scanning projects root {scan_root}: {e}")
+        projects.sort()
         return projects
 
     async def update_projects_cache(self):
@@ -308,6 +317,24 @@ class HostDaemon:
                 print(f"Project cache update failed: {e}")
 
             await asyncio.sleep(60)
+
+    def _find_project_root(self, project_path: str) -> str:
+        """Finds which projects root contains a path.
+
+        Checks each configured root to see if the path
+        starts with it. Falls back to the first root if
+        no match is found.
+
+        Args:
+            project_path: Absolute path to a project.
+
+        Returns:
+            The matching root directory path.
+        """
+        for root in self.projects_roots:
+            if project_path.startswith(root + "/") or project_path == root:
+                return root
+        return self.projects_roots[0]
 
     def _make_tool_info(self, profile) -> dict:
         """Builds a tool metadata dict from a profile for
@@ -406,7 +433,7 @@ class HostDaemon:
             await self.sio.emit(
                 "host_telemetry",
                 {
-                    "projects_root": self.projects_root,
+                    "projects_root": self.projects_roots,
                     "available_projects": projects,
                     "available_tools": tools,
                 },
@@ -582,18 +609,20 @@ class HostDaemon:
             full_path = os.path.abspath(full_path)
 
         # Create a git worktree for isolation if requested.
-        # The worktree is stored under PROJECTS_ROOT/.agent-worktrees/
-        # to keep the original repo clean.  MCP detection and
-        # companion matching use the original project_dir.
+        # The worktree is stored under the project's root
+        # directory in .agent-worktrees/ to keep the original
+        # repo clean. MCP detection and companion matching
+        # use the original project_dir.
         original_project_dir = full_path
         worktree_path = None
         worktree_branch = None
         if use_worktree and full_path:
             try:
-                project_name = os.path.relpath(full_path, self.projects_root)
+                project_root = self._find_project_root(full_path)
+                project_name = os.path.relpath(full_path, project_root)
                 short_id = agent_id[:8]
                 worktree_dir = os.path.join(
-                    self.projects_root,
+                    project_root,
                     ".agent-worktrees",
                     project_name,
                     f"agent-{short_id}",
@@ -642,8 +671,15 @@ class HostDaemon:
         # worktree). Set worktree_path so the UI shows the
         # worktree indicator, and resolve the original
         # project_dir for MCP detection and companion matching.
-        worktree_marker = os.path.join(self.projects_root, ".agent-worktrees")
-        if not worktree_path and full_path and full_path.startswith(worktree_marker):
+        # Check all roots for worktree markers
+        in_worktree = False
+        if not worktree_path and full_path:
+            for rt in self.projects_roots:
+                marker = os.path.join(rt, ".agent-worktrees")
+                if full_path.startswith(marker):
+                    in_worktree = True
+                    break
+        if in_worktree:
             worktree_path = full_path
             # Resolve original project_dir from the worktree's
             # git configuration.
@@ -670,7 +706,11 @@ class HostDaemon:
             f"mode: {session_mode} in {full_path}"
         )
 
-        branch, project, remote_url = self.get_git_info(full_path)
+        # Get git info from the original project directory
+        # (not the worktree) so the card shows the real
+        # project name and remote URL initially.
+        git_info_path = original_project_dir or full_path
+        branch, project, remote_url = self.get_git_info(git_info_path)
         mcp_servers = self._detect_mcp_servers(original_project_dir, tool)
         telemetry = {
             "project_dir": original_project_dir,
@@ -1442,9 +1482,20 @@ class HostDaemon:
                     pid = info["pid"]
                     if not pid:
                         continue
-                    # Try to read the cwd of the child process
+                    # Try to read the cwd of the child process.
+                    # For worktree agents, use the original
+                    # project dir for project name and remote
+                    # URL so the card doesn't show the worktree
+                    # directory name.
                     cwd = os.readlink(f"/proc/{pid}/cwd")
+                    orig = info.get("original_project_dir")
                     branch, project, remote_url = self.get_git_info(cwd)
+                    if orig and orig != cwd:
+                        _, orig_project, orig_url = self.get_git_info(orig)
+                        if orig_project:
+                            project = orig_project
+                        if orig_url:
+                            remote_url = orig_url
 
                     tel = info["telemetry"]
                     changed = False

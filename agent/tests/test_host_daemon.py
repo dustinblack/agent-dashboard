@@ -11,6 +11,7 @@ F. _detect_mcp_servers
 """
 
 import json
+import os
 import subprocess
 from unittest.mock import patch, mock_open
 
@@ -575,3 +576,83 @@ class TestAgentProfiles:
         with tempfile.TemporaryDirectory() as tmpdir:
             profiles = load_profiles(tmpdir)
         assert profiles == {}
+
+
+# ── H. Multi-Root Projects ─────────────────────────────
+
+
+class TestMultiRoot:
+    """Tests for multi-root PROJECTS_ROOT support."""
+
+    def test_single_root_parsing(self):
+        """Single PROJECTS_ROOT parses as one-element list."""
+        with patch.dict(os.environ, {"PROJECTS_ROOT": "/git"}):
+            d = HostDaemon("http://dummy:8000", "dummy")
+            assert d.projects_roots == ["/git"]
+            assert d.projects_root == "/git"
+
+    def test_multi_root_parsing(self):
+        """Colon-separated PROJECTS_ROOT parses as list."""
+        with patch.dict(
+            os.environ,
+            {"PROJECTS_ROOT": "/git:/workspace:/data/repos"},
+        ):
+            d = HostDaemon("http://dummy:8000", "dummy")
+            assert d.projects_roots == [
+                "/git",
+                "/workspace",
+                "/data/repos",
+            ]
+            assert d.projects_root == "/git"
+
+    def test_multi_root_strips_whitespace(self):
+        """Whitespace around roots is stripped."""
+        with patch.dict(
+            os.environ,
+            {"PROJECTS_ROOT": " /git : /workspace "},
+        ):
+            d = HostDaemon("http://dummy:8000", "dummy")
+            assert d.projects_roots == ["/git", "/workspace"]
+
+    def test_multi_root_ignores_empty(self):
+        """Empty entries from trailing colons are ignored."""
+        with patch.dict(
+            os.environ,
+            {"PROJECTS_ROOT": "/git::/workspace:"},
+        ):
+            d = HostDaemon("http://dummy:8000", "dummy")
+            assert d.projects_roots == ["/git", "/workspace"]
+
+    def test_find_project_root(self):
+        """_find_project_root returns the matching root."""
+        with patch.dict(
+            os.environ,
+            {"PROJECTS_ROOT": "/git:/workspace"},
+        ):
+            d = HostDaemon("http://dummy:8000", "dummy")
+            assert d._find_project_root("/git/org/proj") == "/git"
+            assert d._find_project_root("/workspace/myapp") == "/workspace"
+            # Falls back to first root for unknown paths
+            assert d._find_project_root("/other/path") == "/git"
+
+    def test_scan_projects_returns_absolute(self):
+        """_scan_projects returns absolute paths."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create two roots with git repos
+            root1 = os.path.join(tmpdir, "root1")
+            root2 = os.path.join(tmpdir, "root2")
+            os.makedirs(os.path.join(root1, "proj1", ".git"))
+            os.makedirs(os.path.join(root2, "proj2", ".git"))
+
+            with patch.dict(
+                os.environ,
+                {"PROJECTS_ROOT": f"{root1}:{root2}"},
+            ):
+                d = HostDaemon("http://dummy:8000", "dummy")
+                projects = d._scan_projects()
+                assert os.path.join(root1, "proj1") in projects
+                assert os.path.join(root2, "proj2") in projects
+                # All paths are absolute
+                assert all(os.path.isabs(p) for p in projects)
