@@ -104,14 +104,22 @@ async def handle_terminal_output(sid, data):
 @sio.on("join_room", namespace="/terminal")
 async def handle_join_room(sid, data):
     """
-    Allows the UI to join a specific agent's room to receive its output.
+    Adds a client to an agent's room. Used by both UI
+    clients (to receive output) and host daemons (to
+    receive room-targeted input and resize events).
     """
     agent_id = data.get("room")
     if agent_id:
         await sio.enter_room(sid, agent_id, namespace="/terminal")
-        print(f"UI Client {sid} joined Agent room: {agent_id}")
+        # Identify whether this is a daemon or UI client
+        async with sio.session(sid, namespace="/terminal") as session:
+            is_host = session.get("is_host", False)
+        client_type = "Host Daemon" if is_host else "UI Client"
+        print(f"{client_type} {sid} joined Agent room: {agent_id}")
 
         # Request history replay from the host daemon
+        # (only meaningful for UI clients, but harmless
+        # if a daemon receives its own history request)
         await sio.emit("request_history", {"agent_id": agent_id}, namespace="/terminal")
 
 

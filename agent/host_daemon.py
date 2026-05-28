@@ -166,6 +166,7 @@ class HostDaemon:
                     {"room": aid},
                     namespace="/terminal",
                 )
+                print(f"Rejoined agent room: {aid}")
 
         @self.sio.on("request_projects", namespace="/terminal")
         async def on_request_projects(data):
@@ -836,6 +837,7 @@ class HostDaemon:
                     {"room": agent_id},
                     namespace="/terminal",
                 )
+                print(f"Joined agent room: {agent_id}")
             os.write(fd, b"\n")
 
     async def watch_agents(self):
