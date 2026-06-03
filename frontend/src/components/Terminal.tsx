@@ -217,7 +217,9 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       // sessions. Agent output with heavy escape sequences
       // (cursor movement, progress bars, color codes) can
       // consume orders of magnitude more memory per line
-      // than plain text.
+      // than plain text. The daemon's history deque holds
+      // 1000 chunks, so reconnecting replays far less than
+      // this limit regardless.
       scrollback: 2000,
       theme: {
         background: '#000000',

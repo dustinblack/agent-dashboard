@@ -1,0 +1,74 @@
+# Antigravity CLI (agy) agent profile
+# Google's replacement for Gemini CLI, which sunsets
+# June 18, 2026 for free/personal users.
+#
+# KNOWN LIMITATION: agy ignores the shell CWD and uses
+# its own workspace model. Spawning into a specific
+# project directory does not work — agy may start in
+# its scratch directory or pick a different project.
+# No --cwd or --workspace flag exists yet (GitHub
+# issue #7). This profile is experimental until Google
+# adds workspace targeting.
+name: agy
+display_name: Antigravity
+color: cyan
+binary: agy
+
+commands:
+  new: ["agy"]
+  # agy has no --resume CLI flag (GitHub issue #7).
+  # /resume works inside a session but can't be
+  # invoked from the command line. Setting resume
+  # equal to new suppresses the UI resume toggle.
+  resume: ["agy"]
+
+# Telemetry env vars — starting with Gemini CLI's
+# OTLP conventions as a best guess. Update once
+# agy's actual telemetry behavior is verified.
+env:
+  GEMINI_CLI_TELEMETRY_ENABLED: "true"
+  GEMINI_TELEMETRY_ENABLED: "true"
+  GEMINI_TELEMETRY_OTLP_ENDPOINT: "http://127.0.0.1:{otlp_port}"
+  GEMINI_TELEMETRY_OTLP_PROTOCOL: "http"
+  GEMINI_TELEMETRY_USE_COLLECTOR: "true"
+  GEMINI_TELEMETRY_TARGET: "local"
+  AGY_CLI_HIDE_ACCOUNT_INFO: "1"
+
+# No auth gate — agy supports Google OAuth and API
+# keys. The CLI handles its own auth prompts.
+
+mcp:
+  user_files:
+    - ~/.gemini/antigravity-cli/settings.json
+
+# Telemetry mappings — starting with Gemini CLI's
+# metric names. Update once agy's actual OTLP
+# output is verified.
+telemetry:
+  token_metrics:
+    - gemini_cli.token.usage
+  activity_metrics:
+    - gemini_cli.tool.call.count
+    - gemini_cli.tool.call.latency
+  runtime_metric:
+    name: gemini_cli.agent.duration
+    unit: milliseconds
+  excluded_metrics:
+    - gen_ai.client.token.usage
+
+permission_patterns:
+  - "Allow .+ to run"
+  - "Do you want to allow"
+
+# Build-time provisioning metadata
+provisioning:
+  config_files:
+    - path: "/root/.gemini/antigravity-cli"
+      mkdir: true
+  verify: "agy --version"
+  mounts:
+    - host: "~/.gemini"
+      container: "/root/.gemini"
+      mode: rw
+  passthrough_env:
+    - GEMINI_API_KEY

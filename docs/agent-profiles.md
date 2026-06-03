@@ -8,12 +8,13 @@ startup.
 
 ## Bundled Profiles
 
-Three profiles are included out of the box:
+Four profiles are included out of the box:
 
 | Profile | File | Description |
 |---------|------|-------------|
 | Claude | `agent/profiles/claude.yaml` | Claude Code CLI with OTLP telemetry and MCP detection |
-| Gemini | `agent/profiles/gemini.yaml` | Gemini CLI with custom telemetry endpoints |
+| Antigravity | `agent/profiles/agy.yaml` | Antigravity CLI (`agy`) — Google's replacement for Gemini CLI |
+| Gemini | `agent/profiles/gemini.yaml` | Gemini CLI (sunsets June 18, 2026 for free/personal users) |
 | Bash | `agent/profiles/bash.yaml` | Bash shell with PROMPT_COMMAND sidecar telemetry |
 
 ## Creating a Custom Profile
@@ -380,6 +381,35 @@ Restart the daemon. The new tool will automatically:
 - Have its resume toggle derived from the commands config
 
 No frontend or backend code changes are required.
+
+## Migrating from Gemini CLI to Antigravity CLI
+
+Google's Antigravity CLI (`agy`) replaces Gemini CLI,
+which sunsets **June 18, 2026** for free and personal
+users. Enterprise API key users can continue using
+Gemini CLI indefinitely.
+
+### Automatic migration
+
+On first launch, `agy` auto-migrates Gemini CLI config
+(MCP servers, permissions, keybindings). Since both
+tools share the `~/.gemini` volume mount, migration
+finds existing config automatically. You can also run
+`agy plugin import gemini` manually inside a session.
+
+### Coexistence
+
+Both profiles can be active simultaneously during the
+transition period — Gemini and Antigravity appear as
+separate spawn buttons in the dashboard. This allows
+testing `agy` while keeping Gemini sessions running.
+
+### Post-sunset cleanup
+
+After June 18, 2026, free/personal users can remove
+`agent/profiles/gemini.yaml` and regenerate the
+Containerfile to drop Gemini CLI from the container
+image.
 
 ## Known Limitations
 
