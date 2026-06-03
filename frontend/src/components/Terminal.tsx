@@ -213,6 +213,12 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
 
     const term = new XTerm({
       cursorBlink: true,
+      // Cap scrollback to limit memory growth in long
+      // sessions. Agent output with heavy escape sequences
+      // (cursor movement, progress bars, color codes) can
+      // consume orders of magnitude more memory per line
+      // than plain text.
+      scrollback: 2000,
       theme: {
         background: '#000000',
         foreground: '#f1f5f9',
