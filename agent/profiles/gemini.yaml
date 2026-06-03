@@ -3,7 +3,7 @@
 # personal users on June 18, 2026. Enterprise API key
 # users (Gemini Code Assist Standard/Enterprise) retain
 # access. Google's replacement is Antigravity CLI (agy).
-# See issue #65 for agy integration status.
+# See agy.yaml and issue #65 for agy integration status.
 name: gemini
 display_name: Gemini
 color: blue
