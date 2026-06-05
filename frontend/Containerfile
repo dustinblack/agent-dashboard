@@ -18,9 +18,11 @@ FROM docker.io/library/node:22-slim AS build
 
 WORKDIR /app
 
-# Copy package files and install dependencies
+# Copy package files and install dependencies.
+# Retry on failure to handle intermittent npm
+# registry errors in CI.
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm ci || (sleep 5 && npm ci)
 
 # Copy source and config files (node_modules stays from npm ci)
 COPY frontend/src/ src/
