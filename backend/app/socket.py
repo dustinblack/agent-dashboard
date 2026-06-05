@@ -104,15 +104,29 @@ async def handle_terminal_output(sid, data):
 @sio.on("join_room", namespace="/terminal")
 async def handle_join_room(sid, data):
     """
-    Allows the UI to join a specific agent's room to receive its output.
+    Adds a client to an agent's room. Used by both UI
+    clients (to receive output) and host daemons (to
+    receive room-targeted input and resize events).
     """
     agent_id = data.get("room")
     if agent_id:
         await sio.enter_room(sid, agent_id, namespace="/terminal")
-        print(f"UI Client {sid} joined Agent room: {agent_id}")
+        # Identify whether this is a daemon or UI client
+        session = await sio.get_session(sid, namespace="/terminal")
+        is_host = session.get("is_host", False) if session else False
+        client_type = "Host Daemon" if is_host else "UI Client"
+        print(f"{client_type} {sid} joined Agent room: {agent_id}")
 
-        # Request history replay from the host daemon
-        await sio.emit("request_history", {"agent_id": agent_id}, namespace="/terminal")
+        # Request history replay only for UI clients.
+        # Daemons join rooms for input routing, not for
+        # history — replaying history on daemon reconnect
+        # floods the connection and causes a reconnect loop.
+        if not is_host:
+            await sio.emit(
+                "request_history",
+                {"agent_id": agent_id},
+                namespace="/terminal",
+            )
 
 
 @sio.on("request_projects", namespace="/terminal")
@@ -137,10 +151,17 @@ async def handle_history_complete(sid, data):
 @sio.on("terminal_resize", namespace="/terminal")
 async def handle_terminal_resize(sid, data):
     """
-    Relays a terminal resize event from UI to all host daemons.
+    Relays a terminal resize event to the agent's room.
     data: {'sid': 'agent_id', 'cols': 80, 'rows': 24}
     """
-    await sio.emit("terminal_resize", data, namespace="/terminal")
+    agent_id = data.get("sid")
+    if agent_id:
+        await sio.emit(
+            "terminal_resize",
+            data,
+            room=agent_id,
+            namespace="/terminal",
+        )
 
 
 @sio.on("agent_telemetry", namespace="/terminal")
@@ -152,9 +173,6 @@ async def handle_agent_telemetry(sid, data):
     """
     agent_id = data.get("agent_id")
     telemetry = data.get("telemetry")
-    print(
-        f"DEBUG: handle_agent_telemetry received for agent_id {agent_id}: {telemetry}"
-    )
     if agent_id and telemetry:
         db = next(database.get_db())
         try:
@@ -170,8 +188,6 @@ async def handle_agent_telemetry(sid, data):
                 new_tel.update(telemetry)
                 db_agent.telemetry_json = new_tel
                 db.commit()
-                msg = f"DEBUG: successfully updated DB for agent {agent_id}"
-                print(msg)
 
                 # Broadcast update to all UI clients for real-time card refresh
                 await sio.emit(
@@ -193,7 +209,14 @@ async def handle_host_telemetry(sid, data):
     """
     async with sio.session(sid, namespace="/terminal") as session:
         host_id = session.get("host_id")
-        print(f"Received host_telemetry from SID {sid} (Host ID: {host_id}): {data}")
+        n_projects = len(data.get("available_projects", []))
+        n_tools = len(data.get("available_tools", []))
+        print(
+            f"Received host_telemetry from"
+            f" Host ID: {host_id}"
+            f" ({n_projects} projects,"
+            f" {n_tools} tools)"
+        )
         if host_id:
             db = next(database.get_db())
             try:
@@ -244,9 +267,15 @@ async def handle_agent_exit(sid, data):
 @sio.on("terminal_input", namespace="/terminal")
 async def handle_terminal_input(sid, data):
     """
-    Receives keystrokes from the UI and relays them to the Host Daemon.
+    Relays keystrokes to the agent's room where only
+    the owning daemon receives them.
     data: {'target_sid': 'agent_id', 'input': '...'}
     """
-    # Relay directly to all connected clients on this namespace.
-    # The Host Daemon will filter by agent_id.
-    await sio.emit("terminal_input", data, namespace="/terminal")
+    agent_id = data.get("target_sid")
+    if agent_id:
+        await sio.emit(
+            "terminal_input",
+            data,
+            room=agent_id,
+            namespace="/terminal",
+        )
