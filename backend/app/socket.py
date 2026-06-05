@@ -117,10 +117,16 @@ async def handle_join_room(sid, data):
         client_type = "Host Daemon" if is_host else "UI Client"
         print(f"{client_type} {sid} joined Agent room: {agent_id}")
 
-        # Request history replay from the host daemon
-        # (only meaningful for UI clients, but harmless
-        # if a daemon receives its own history request)
-        await sio.emit("request_history", {"agent_id": agent_id}, namespace="/terminal")
+        # Request history replay only for UI clients.
+        # Daemons join rooms for input routing, not for
+        # history — replaying history on daemon reconnect
+        # floods the connection and causes a reconnect loop.
+        if not is_host:
+            await sio.emit(
+                "request_history",
+                {"agent_id": agent_id},
+                namespace="/terminal",
+            )
 
 
 @sio.on("request_projects", namespace="/terminal")
