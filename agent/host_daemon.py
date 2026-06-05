@@ -9,6 +9,7 @@ relay I/O via Socket.IO, and receive OpenTelemetry data.
 import asyncio
 import fcntl
 import json
+import logging
 import os
 import pty
 import re
@@ -27,6 +28,13 @@ import socketio
 from aiohttp import web
 
 from agent.profiles import load_profiles
+
+logging.basicConfig(
+    format="%(asctime)s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.INFO,
+)
+log = logging.getLogger("daemon")
 
 # Default permission patterns — generic prompts that
 # apply to all agent tools. Tool-specific patterns are
@@ -152,26 +160,26 @@ class HostDaemon:
             if event in ("terminal_output", "terminal_input"):
                 return
             # Summarize large payloads to avoid blocking
-            # the event loop with synchronous print() calls.
+            # the event loop with synchronous logging calls.
             if event == "host_telemetry_update":
                 tel = data.get("telemetry", {})
                 n = len(tel.get("available_projects", []))
                 hid = data.get("host_id")
-                print(f"DEBUG: {event} host_id={hid}" f" projects={n}")
+                log.info(f"DEBUG: {event} host_id={hid}" f" projects={n}")
             elif event == "agent_telemetry_update":
                 aid = data.get("agent_id", "?")[:8]
                 tel = data.get("telemetry", {})
-                print(
+                log.info(
                     f"DEBUG: {event} agent={aid}"
                     f" model={tel.get('model', '?')}"
                     f" status={tel.get('agent_status', '?')}"
                 )
             else:
-                print(f"DEBUG: Received event" f" '{event}' with data: {data}")
+                log.info(f"DEBUG: Received event" f" '{event}' with data: {data}")
 
         @self.sio.on("connect", namespace="/terminal")
         async def on_connect():
-            print(f"Connected to dashboard at {self.server_url}")
+            log.info(f"Connected to dashboard at {self.server_url}")
             # Report available projects immediately on connection
             await self.report_projects()
             # Rejoin agent rooms so the backend can route
@@ -182,7 +190,7 @@ class HostDaemon:
                     {"room": aid},
                     namespace="/terminal",
                 )
-                print(f"Rejoined agent room: {aid}")
+                log.info(f"Rejoined agent room: {aid}")
 
         @self.sio.on("request_projects", namespace="/terminal")
         async def on_request_projects(data):
@@ -201,7 +209,7 @@ class HostDaemon:
                 try:
                     fcntl.ioctl(master_fd, termios.TIOCSWINSZ, size)
                 except Exception as e:
-                    print(f"Failed to resize terminal {agent_id}: {e}")
+                    log.info(f"Failed to resize terminal {agent_id}: {e}")
 
         @self.sio.on("spawn_agent", namespace="/terminal")
         async def on_spawn_agent(data):
@@ -231,7 +239,7 @@ class HostDaemon:
                     rows,
                 )
             except Exception as e:
-                print(f"Failed to spawn agent {agent_id}: {e}")
+                log.info(f"Failed to spawn agent {agent_id}: {e}")
                 if self.sio.connected:
                     await self.sio.emit(
                         "agent_status_update",
@@ -246,7 +254,7 @@ class HostDaemon:
         async def on_stop_agent(data):
             agent_id = data.get("agent_id")
             if agent_id in self.agents:
-                print(f"Stopping agent {agent_id} by request.")
+                log.info(f"Stopping agent {agent_id} by request.")
                 pid = self.agents[agent_id]["pid"]
                 try:
                     os.kill(pid, signal.SIGTERM)
@@ -269,7 +277,7 @@ class HostDaemon:
         async def on_request_history(data):
             agent_id = data.get("agent_id")
             if agent_id in self.agents and self.sio.connected:
-                print(f"Replaying history for agent: {agent_id}")
+                log.info(f"Replaying history for agent: {agent_id}")
                 for chunk in self.agents[agent_id]["history"]:
                     await self.sio.emit(
                         "terminal_output",
@@ -322,7 +330,7 @@ class HostDaemon:
                             projects.append(os.path.join(scan_root, rel_path))
                         dirs[:] = [d for d in dirs if d != ".git"]
             except Exception as e:
-                print(f"Error scanning projects root {scan_root}: {e}")
+                log.info(f"Error scanning projects root {scan_root}: {e}")
         projects.sort()
         return projects
 
@@ -339,7 +347,7 @@ class HostDaemon:
                 if self.sio.connected:
                     await self.report_projects()
             except Exception as e:
-                print(f"Project cache update failed: {e}")
+                log.info(f"Project cache update failed: {e}")
 
             await asyncio.sleep(60)
 
@@ -416,7 +424,7 @@ class HostDaemon:
                 if all(os.getenv(v) for v in profile.auth.env_vars):
                     tools.append(self._make_tool_info(profile))
                 else:
-                    print(
+                    log.info(
                         f"{profile.display_name} CLI found "
                         f"but auth not configured — "
                         f"not advertising."
@@ -425,12 +433,12 @@ class HostDaemon:
                 if any(os.getenv(v) for v in profile.auth.env_vars):
                     tools.append(self._make_tool_info(profile))
                 else:
-                    print(
+                    log.info(
                         f"{profile.display_name} CLI found "
                         f"but auth not configured — "
                         f"not advertising."
                     )
-        print(f"Available tools: {tools}")
+        log.info(f"Available tools: {tools}")
         return tools
 
     async def scan_and_report_projects(self):
@@ -442,7 +450,7 @@ class HostDaemon:
         new_projects = await loop.run_in_executor(None, self._scan_projects)
         async with self.projects_lock:
             self.cached_projects = new_projects
-        print(f"Force rescan: found {len(new_projects)} projects.")
+        log.info(f"Force rescan: found {len(new_projects)} projects.")
         await self.report_projects()
 
     async def report_projects(self):
@@ -453,7 +461,7 @@ class HostDaemon:
             projects = list(self.cached_projects)
 
         tools = self._detect_available_tools()
-        print(f"Reporting {len(projects)} projects, {len(tools)} tools to Hub.")
+        log.info(f"Reporting {len(projects)} projects, {len(tools)} tools to Hub.")
         if self.sio.connected:
             await self.sio.emit(
                 "host_telemetry",
@@ -594,7 +602,7 @@ class HostDaemon:
                         if name not in servers:
                             servers.append(name)
         except Exception as e:
-            print(f"MCP detection error for {tool}: {e}")
+            log.info(f"MCP detection error for {tool}: {e}")
 
         return servers
 
@@ -677,12 +685,12 @@ class HostDaemon:
                 full_path = worktree_dir
                 # Worktrees have no prior session state
                 session_mode = "new"
-                print(
+                log.info(
                     f"Created worktree for {agent_id}: "
                     f"{worktree_dir} (branch {worktree_branch})"
                 )
             except Exception as e:
-                print(
+                log.info(
                     f"Failed to create worktree for "
                     f"{agent_id}: {e}. "
                     f"Falling back to original directory."
@@ -726,7 +734,7 @@ class HostDaemon:
             except Exception:
                 pass
 
-        print(
+        log.info(
             f"Spawning agent {agent_id} with tool: {tool} "
             f"mode: {session_mode} in {full_path}"
         )
@@ -809,7 +817,7 @@ class HostDaemon:
             try:
                 os.execvpe(cmd[0], cmd, env)
             except Exception as e:
-                print(f"Failed to execute {cmd}: {e}")
+                log.info(f"Failed to execute {cmd}: {e}")
                 os._exit(1)
         else:  # Parent process
             # Set initial PTY dimensions before the agent
@@ -820,7 +828,7 @@ class HostDaemon:
                 size = struct.pack("HHHH", rows, cols, 0, 0)
                 fcntl.ioctl(fd, termios.TIOCSWINSZ, size)
             except Exception as e:
-                print(f"Failed to set initial PTY size " f"for {agent_id}: {e}")
+                log.info(f"Failed to set initial PTY size " f"for {agent_id}: {e}")
 
             self.agents[agent_id] = {
                 "master_fd": fd,
@@ -853,7 +861,7 @@ class HostDaemon:
                     {"room": agent_id},
                     namespace="/terminal",
                 )
-                print(f"Joined agent room: {agent_id}")
+                log.info(f"Joined agent room: {agent_id}")
             os.write(fd, b"\n")
 
     async def watch_agents(self):
@@ -952,7 +960,7 @@ class HostDaemon:
     def close_agent(self, agent_id: str):
         """Closes the PTY fd and removes an agent from tracking."""
         if agent_id in self.agents:
-            print(f"Closing agent {agent_id}")
+            log.info(f"Closing agent {agent_id}")
             fd = self.agents[agent_id]["master_fd"]
             try:
                 os.close(fd)
@@ -982,9 +990,9 @@ class HostDaemon:
                         capture_output=True,
                         check=False,
                     )
-                    print(f"Removed worktree {wt_path}")
+                    log.info(f"Removed worktree {wt_path}")
                 except Exception as e:
-                    print(f"Failed to remove worktree {wt_path}: {e}")
+                    log.info(f"Failed to remove worktree {wt_path}: {e}")
                 if wt_branch:
                     try:
                         subprocess.run(
@@ -994,7 +1002,7 @@ class HostDaemon:
                             check=False,
                         )
                     except Exception as e:
-                        print(f"Failed to delete branch {wt_branch}: {e}")
+                        log.info(f"Failed to delete branch {wt_branch}: {e}")
                 # Clean up empty parent directories
                 try:
                     parent = os.path.dirname(wt_path)
@@ -1213,12 +1221,12 @@ class HostDaemon:
         """
         try:
             data = await request.json()
-            print(f"OTLP received on {request.path}: " f"{list(data.keys())}")
+            log.info(f"OTLP received on {request.path}: " f"{list(data.keys())}")
 
             # Optional verbose debug mode for inspecting
             # raw OTLP payloads from agent tools.
             if os.getenv("OTLP_DEBUG"):
-                print(
+                log.info(
                     f"OTLP DEBUG {request.path}:\n"
                     f"{json.dumps(data, indent=2, default=str)}"
                 )
@@ -1232,7 +1240,9 @@ class HostDaemon:
                 agent_id = self._resolve_agent_id(res_attrs)
 
                 if not agent_id:
-                    print(f"OTLP: no agent match for resource " f"attrs: {res_attrs}")
+                    log.info(
+                        f"OTLP: no agent match for resource " f"attrs: {res_attrs}"
+                    )
                     continue
                 tel = self.agents[agent_id]["telemetry"]
                 changed = False
@@ -1442,7 +1452,7 @@ class HostDaemon:
 
             return web.Response(status=200)
         except Exception as e:
-            print(f"OTLP Error: {e}")
+            log.info(f"OTLP Error: {e}")
             return web.Response(status=400)
 
     async def start_otlp_server(self):
@@ -1454,7 +1464,7 @@ class HostDaemon:
         self.otlp_runner = web.AppRunner(app)
         await self.otlp_runner.setup()
         site = web.TCPSite(self.otlp_runner, "127.0.0.1", self.otlp_port)
-        print(f"OTLP Receiver listening on " f"http://127.0.0.1:{self.otlp_port}")
+        log.info(f"OTLP Receiver listening on " f"http://127.0.0.1:{self.otlp_port}")
         await site.start()
 
     async def update_agent_status(self):
@@ -1597,8 +1607,8 @@ class HostDaemon:
             except asyncio.CancelledError:
                 return
             except Exception as e:
-                print(f"Background task '{name}' failed: {e}")
-                print(f"Restarting '{name}' in 5 seconds...")
+                log.info(f"Background task '{name}' failed: {e}")
+                log.info(f"Restarting '{name}' in 5 seconds...")
                 await asyncio.sleep(5)
 
     async def run(self):
@@ -1637,7 +1647,7 @@ class HostDaemon:
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            print(f"Daemon error: {e}")
+            log.info(f"Daemon error: {e}")
         finally:
             self.running = False
             if self.otlp_runner:
@@ -1646,11 +1656,11 @@ class HostDaemon:
                 self.close_agent(agent_id)
             if self.sio.connected:
                 await self.sio.disconnect()
-            print("Daemon stopped.")
+            log.info("Daemon stopped.")
 
     def stop(self):
         """Signals all background tasks to stop."""
-        print("\nShutting down daemon...")
+        log.info("\nShutting down daemon...")
         self.running = False
         if hasattr(self, "watcher_task") and not self.watcher_task.done():
             self.watcher_task.cancel()
@@ -1667,7 +1677,7 @@ async def main():
     server_url = os.getenv("DASHBOARD_URL", "http://localhost:8000")
     host_token = os.getenv("HOST_TOKEN")
     if not host_token:
-        print("Error: HOST_TOKEN environment variable is required.")
+        log.info("Error: HOST_TOKEN environment variable is required.")
         sys.exit(1)
     daemon = HostDaemon(server_url, host_token)
     loop = asyncio.get_running_loop()
