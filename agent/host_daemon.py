@@ -451,6 +451,8 @@ class HostDaemon:
         async with self.projects_lock:
             self.cached_projects = new_projects
         log.info(f"Force rescan: found {len(new_projects)} projects.")
+        # Invalidate tool cache so force-refresh re-detects
+        self._cached_tools = None
         await self.report_projects()
 
     async def report_projects(self):
@@ -460,7 +462,16 @@ class HostDaemon:
         async with self.projects_lock:
             projects = list(self.cached_projects)
 
-        tools = self._detect_available_tools()
+        # Use cached tools — _detect_available_tools() runs
+        # synchronous subprocess calls that block the event
+        # loop. Tools don't change at runtime so we detect
+        # once at startup and on explicit refresh.
+        if not hasattr(self, "_cached_tools") or not self._cached_tools:
+            loop = asyncio.get_running_loop()
+            self._cached_tools = await loop.run_in_executor(
+                None, self._detect_available_tools
+            )
+        tools = self._cached_tools
         log.info(f"Reporting {len(projects)} projects, {len(tools)} tools to Hub.")
         if self.sio.connected:
             await self.sio.emit(

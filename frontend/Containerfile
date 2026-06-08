@@ -19,10 +19,13 @@ FROM docker.io/library/node:22-slim AS build
 WORKDIR /app
 
 # Copy package files and install dependencies.
-# Retry on failure to handle intermittent npm
-# registry errors in CI.
+# Verify axios is resolvable after install to catch
+# partial installs from intermittent npm registry
+# errors that exit 0 but leave node_modules incomplete.
 COPY frontend/package*.json ./
-RUN npm ci || (sleep 5 && npm ci)
+RUN npm ci \
+    && node -e "require.resolve('axios')" \
+    || (echo "Retrying npm ci..." && rm -rf node_modules && npm ci)
 
 # Copy source and config files (node_modules stays from npm ci)
 COPY frontend/src/ src/
