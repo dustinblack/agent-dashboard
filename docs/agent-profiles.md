@@ -308,6 +308,24 @@ Restart the daemon. The new tool will automatically:
 
 No frontend or backend code changes are required.
 
+## Known Limitations
+
+### Session resume path mismatch
+
+Claude Code keys project history by **absolute CWD path**.
+Host sessions use paths like `/home/user/workspace/project`,
+but inside the daemon container the same project is mounted
+at a different path (e.g., `/git/project`). This creates
+separate project directories in `~/.claude/projects/` —
+`/resume` inside a daemon session won't find conversations
+from host-side sessions, and vice versa.
+
+**Workaround:** Start and resume sessions consistently from
+the same environment (always via the dashboard, or always
+on the host). Alternatively, mount volumes at paths matching
+the host (e.g., `-v /home/user/workspace:/home/user/workspace`)
+so the CWD is identical in both environments.
+
 ## Notes
 
 - The standard OTLP endpoint and resource attributes
