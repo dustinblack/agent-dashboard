@@ -157,13 +157,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onAttach }) => {
     socket.on(
       'agent_telemetry_update',
       (data: { agent_id: string; telemetry: Agent['telemetry'] }) => {
-        setAgents((prev) =>
-          prev.map((a) =>
+        setAgents((prev) => {
+          const exists = prev.some((a) => a.agent_id === data.agent_id);
+          if (!exists) {
+            // Agent not in state — likely spawned after
+            // a daemon reconnect cleared old records.
+            // Trigger a full fetch to pick up the new agent.
+            fetchData();
+            return prev;
+          }
+          return prev.map((a) =>
             a.agent_id === data.agent_id
               ? { ...a, telemetry: data.telemetry }
               : a,
-          ),
-        );
+          );
+        });
       },
     );
 
