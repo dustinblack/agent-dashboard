@@ -413,6 +413,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
           historyBuffer = [];
         }
         isReplaying.current = false;
+        replayEndTime = Date.now();
         performFit();
       }
     });
@@ -452,17 +453,29 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       },
     );
 
-    // Filter terminal responses (like DA — Device Attributes)
-    // from user input before relaying to the daemon. xterm.js
-    // responds to DA queries (ESC [ c) from the remote process
-    // with ESC [ ? ... c, which flows back through onData.
-    // Some CLIs (Gemini) capture this response as stdin input,
-    // showing "1;2c" in the prompt.
+    // Filter terminal query responses from user input.
     // eslint-disable-next-line no-control-regex
-    const DA_RESPONSE = /\x1b\[\?[\d;]*c/;
+    const TERM_RESPONSES = new RegExp(
+      [
+        '\\x1b\\[\\??[\\d;]*c', // DA (Device Attributes)
+        '\\x1b\\[[\\d;]*R', // CPR (Cursor Position Report)
+        '\\x1b\\[[\\d;]*\\$y', // DECRPM (DEC Private Mode Report)
+        '\\x1b\\][\\d;]*;[^\\x07\\x1b]*(?:\\x07|\\x1b\\\\)', // OSC responses
+      ].join('|'),
+      'g',
+    );
+    // Suppress onData briefly after history replay ends.
+    // xterm.js generates terminal query responses while
+    // processing replayed output, and these fire through
+    // onData after isReplaying clears. The ESC prefixes
+    // may be stripped by xterm, making regex matching
+    // unreliable. A 500ms suppression window catches
+    // all queued responses without affecting real typing.
+    let replayEndTime = 0;
     term.onData((data) => {
       if (!isReplaying.current) {
-        const filtered = data.replace(DA_RESPONSE, '');
+        if (Date.now() - replayEndTime < 500) return;
+        const filtered = data.replace(TERM_RESPONSES, '');
         if (filtered) {
           socket.emit('terminal_input', {
             target_sid: agentId,
