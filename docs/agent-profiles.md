@@ -488,8 +488,32 @@ pi install npm:pi-otel npm:@0xkobold/pi-mcp
 
 ### Extension configuration
 
-- **pi-otel**: After installing, configure OTLP settings
-  in `~/.pi/agent/settings.json`:
+- **pi-otel**: The Pi profile injects the essential
+  OTLP environment variables at spawn time:
+  - `OTEL_EXPORTER_OTLP_ENDPOINT` — set by the daemon
+    to `http://127.0.0.1:{otlp_port}` for all tools.
+  - `OTEL_EXPORTER_OTLP_PROTOCOL` — set to `http/json`
+    so pi-otel uses the daemon's HTTP/JSON receiver.
+  - `OTEL_SERVICE_NAME` — set to the agent's unique ID
+    so the daemon can match OTLP data to the correct
+    session. **This is required for multi-instance
+    tracking.** Pi-otel reads `OTEL_SERVICE_NAME` with
+    higher priority than `OTEL_RESOURCE_ATTRIBUTES` —
+    without it, all Pi sessions report
+    `service.name="pi"` (the default) and the daemon
+    cannot distinguish between them.
+  - `PI_OTEL_METRICS` — set to `1` to enable the
+    `PeriodicExportingMetricReader` in the OTel SDK.
+    **Metrics are disabled by default in pi-otel.** Without
+    this, the token usage histogram, tool call counter,
+    and operation duration histogram defined in the Pi
+    profile's `telemetry` section are never emitted.
+    Token tracking partially falls back to span
+    attributes, but the activity counter and runtime
+    histogram are lost.
+
+  You can optionally configure additional settings in
+  `~/.pi/agent/settings.json`:
   ```json
   {
     "otel": {
@@ -503,11 +527,11 @@ pi install npm:pi-otel npm:@0xkobold/pi-mcp
     }
   }
   ```
-  The daemon injects `OTEL_EXPORTER_OTLP_ENDPOINT` at
-  spawn time, which pi-otel respects. Metrics and logs
-  signals are disabled by default — enable them in
-  settings.json or via `PI_OTEL_METRICS=1` and
-  `PI_OTEL_LOGS=1` env vars.
+  The profile's env vars take precedence over
+  settings.json for the values they set. The `logs`
+  signal can be enabled via `PI_OTEL_LOGS=1` env var
+  or in settings.json — it forwards OTel internal
+  diagnostics to the OTLP endpoint.
 
   > **Known issue (pi-otel v0.1.0):** HTTP exporters
   > send to `POST /` instead of `/v1/{signal}` paths
@@ -602,6 +626,11 @@ so the CWD is identical in both environments.
 - The standard OTLP endpoint and resource attributes
   (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_RESOURCE_ATTRIBUTES`)
   are always injected by the daemon regardless of profile.
+- Some OTel SDKs (notably pi-otel) read `OTEL_SERVICE_NAME`
+  with higher priority than the `service.name` key in
+  `OTEL_RESOURCE_ATTRIBUTES`. Profiles for such tools
+  should set `OTEL_SERVICE_NAME: "{agent_id}"` in their
+  `env` section to ensure correct multi-instance tracking.
 - Generic permission patterns (Y/n, yes/no, Continue?, etc.)
   are always active. Profile patterns are merged in addition.
 - Profile changes require a daemon restart to take effect.

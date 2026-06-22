@@ -18,8 +18,26 @@ commands:
 # (NikiforovAll/pi-otel#4), HTTP exporters send to
 # POST / instead of /v1/{signal} — the daemon has a
 # root-path workaround for this.
+#
+# OTEL_SERVICE_NAME must be set explicitly because
+# pi-otel reads it with higher priority than
+# OTEL_RESOURCE_ATTRIBUTES. Without it, all Pi
+# sessions report service.name="pi" (the default in
+# pi-otel's config.js) and multi-instance tracking
+# breaks — the daemon can't distinguish which Pi
+# session emitted a given metric or span.
+#
+# PI_OTEL_METRICS enables the PeriodicExporting
+# MetricReader in the OTel SDK. Metrics are disabled
+# by default in pi-otel — without this flag, the
+# token_metrics, activity_metrics, and runtime_metric
+# defined below are never emitted. Token tracking
+# partially falls back to span attributes, but the
+# activity counter and duration histogram are lost.
 env:
   OTEL_EXPORTER_OTLP_PROTOCOL: "http/json"
+  OTEL_SERVICE_NAME: "{agent_id}"
+  PI_OTEL_METRICS: "1"
 
 # No auth gate — Pi is provider-agnostic and
 # handles its own provider selection and auth.
@@ -61,9 +79,24 @@ provisioning:
       container: "/root/.pi"
       mode: rw
   passthrough_env:
+    # Core providers
     - ANTHROPIC_API_KEY
     - OPENAI_API_KEY
     - GEMINI_API_KEY
+    # Google Cloud / Vertex AI
     - GOOGLE_CLOUD_PROJECT
     - GOOGLE_CLOUD_LOCATION
     - GOOGLE_APPLICATION_CREDENTIALS
+    # Additional providers — optional, only needed
+    # when using Pi with these specific backends.
+    - XAI_API_KEY
+    - GROQ_API_KEY
+    - DEEPSEEK_API_KEY
+    - AZURE_OPENAI_API_KEY
+    - AZURE_OPENAI_BASE_URL
+    # Amazon Bedrock
+    - AWS_PROFILE
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_BEARER_TOKEN_BEDROCK
+    - AWS_REGION
