@@ -26,6 +26,8 @@ podman run -d --name host-daemon --network=host \
   -v $HOME/.gitconfig:/root/.gitconfig:ro \
   -v $HOME/.gemini/:/root/.gemini \
   -v $HOME/.claude/:/root/.claude \
+  -v $HOME/.claude.json:/root/.claude.json:ro \
+  -v $HOME/.pi:/root/.pi \
   -v $HOME/.config/gcloud:/root/.config/gcloud:ro \
   -v $HOME/.config/gh:/root/.config/gh:ro \
   -v $HOME/.config/glab-cli:/root/.config/glab-cli:ro \
@@ -39,11 +41,10 @@ podman run -d --name host-daemon --network=host \
 > label confinement.
 
 > [!TIP]
-> **Missing config directories:** Volume mounts for
-> `~/.claude/` and `~/.gemini/` will fail if the directories
-> don't exist on the host. If you haven't used one of these
-> tools locally, create them first: `mkdir -p ~/.claude
-> ~/.gemini`
+> **Missing config directories:** Volume mounts will fail
+> if the directories don't exist on the host. If you
+> haven't used these tools locally, create them first:
+> `mkdir -p ~/.claude ~/.gemini ~/.pi/agent`
 
 > [!TIP]
 > **Reconfiguring the daemon:** Environment variables and
@@ -78,9 +79,11 @@ podman run -d --name host-daemon --network=host \
 | `/path/to/your/git` | `/git` | rw | Project source code |
 | `~/.ssh` | `/root/.ssh` | ro | SSH keys for git operations |
 | `~/.gitconfig` | `/root/.gitconfig` | ro | Git configuration |
-| `~/.gemini/` | `/root/.gemini` | rw | Gemini CLI settings |
+| `~/.gemini/` | `/root/.gemini` | rw | Gemini CLI / Antigravity CLI settings |
 | `~/.claude/` | `/root/.claude` | rw | Claude Code settings |
-| `~/.config/gcloud` | `/root/.config/gcloud` | ro | GCP credentials |
+| `~/.claude.json` | `/root/.claude.json` | ro | Claude Code MCP server config |
+| `~/.pi/` | `/root/.pi` | rw | Pi coding agent settings and extensions |
+| `~/.config/gcloud` | `/root/.config/gcloud` | ro | GCP credentials (Vertex AI) |
 | `~/.config/gh` | `/root/.config/gh` | ro | GitHub CLI config |
 | `~/.config/glab-cli` | `/root/.config/glab-cli` | ro | GitLab CLI config |
 

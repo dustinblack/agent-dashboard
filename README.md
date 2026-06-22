@@ -244,17 +244,18 @@ podman run -d --name host-daemon --network=host --privileged \
   -v $HOME/.ssh:/root/.ssh:ro \
   -v $HOME/.gitconfig:/root/.gitconfig:ro \
   -v $HOME/.claude/:/root/.claude \
+  -v $HOME/.claude.json:/root/.claude.json:ro \
   -v $HOME/.gemini/:/root/.gemini \
+  -v $HOME/.pi:/root/.pi \
   localhost/agent-dashboard-daemon:latest
 ```
 
 > [!TIP]
 > **Missing config directories:** The volume mounts above
-> expect `~/.claude/` and `~/.gemini/` to exist on the host.
-> If you haven't used one of these tools locally, create the
-> directory first:
+> expect agent config directories to exist on the host.
+> If you haven't used these tools locally, create them first:
 > ```bash
-> mkdir -p ~/.claude ~/.gemini
+> mkdir -p ~/.claude ~/.gemini ~/.pi/agent
 > ```
 
 > [!TIP]
