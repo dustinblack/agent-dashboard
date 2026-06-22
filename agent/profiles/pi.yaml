@@ -34,16 +34,18 @@ env:
 # Telemetry requires the pi-otel extension.
 # Install inside a Pi session:
 #   pi install npm:pi-otel
-# Uses OpenTelemetry GenAI semantic conventions.
-# Metric names are best-guess — verify after testing.
+# Metric names from pi-otel v0.1.0 source
+# (dist/otel/metrics.js). Token usage is a
+# histogram — the daemon extracts the cumulative
+# sum from histogram data points.
 telemetry:
   token_metrics:
     - gen_ai.client.token.usage
   activity_metrics:
-    - pi.tool
+    - gen_ai.client.tool.calls
   runtime_metric:
-    name: pi.interaction.duration
-    unit: milliseconds
+    name: gen_ai.client.operation.duration
+    unit: seconds
 
 # Build-time provisioning metadata
 provisioning:

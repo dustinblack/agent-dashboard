@@ -1297,6 +1297,7 @@ class HostDaemon:
                 agent_id = self._resolve_agent_id(res_attrs)
 
                 if not agent_id:
+                    log.info("OTLP: no agent match for trace" f" resource: {res_attrs}")
                     continue
                 tel = self.agents[agent_id]["telemetry"]
                 changed = False
@@ -1358,6 +1359,9 @@ class HostDaemon:
                 agent_id = self._resolve_agent_id(res_attrs)
 
                 if not agent_id:
+                    log.info(
+                        "OTLP: no agent match for metric" f" resource: {res_attrs}"
+                    )
                     continue
                 tel = self.agents[agent_id]["telemetry"]
                 changed = False
@@ -1379,8 +1383,13 @@ class HostDaemon:
                             )
 
                             # Model detection from any metric with a
-                            # 'model' attribute
-                            model = dp_attrs.get("model")
+                            # 'model' attribute. GenAI conventions
+                            # also use gen_ai.response.model.
+                            model = (
+                                dp_attrs.get("model")
+                                or dp_attrs.get("gen_ai.response.model")
+                                or dp_attrs.get("gen_ai.request.model")
+                            )
                             if (
                                 model
                                 and isinstance(model, str)
@@ -1389,7 +1398,17 @@ class HostDaemon:
                                 tel["model"] = model
                                 changed = True
 
-                            # Token tracking from tool-specific
+                            # Extract the data point value. Sum and
+                            # Gauge metrics use asInt/asDouble.
+                            # Histogram metrics store cumulative
+                            # totals in the "sum" field instead.
+                            dp_value = (
+                                dp.get("asInt")
+                                or dp.get("asDouble")
+                                or dp.get("sum")
+                                or 0
+                            )
+
                             # Token, cost, activity, and runtime
                             # metrics are matched against the
                             # lookup tables built from agent
@@ -1397,16 +1416,22 @@ class HostDaemon:
                             # are defined in the profile YAML
                             # files under agent/profiles/.
                             #
-                            # Token metrics are OTLP cumulative
-                            # Sum counters — use max() not +=.
+                            # Token metrics may be OTLP cumulative
+                            # Sum counters or Histograms (pi-otel
+                            # uses histograms). Use max() not +=.
                             if (
                                 name in self._token_metrics
                                 and name not in self._excluded_metrics
                             ):
-                                value = dp.get("asInt") or dp.get("asDouble") or 0
-                                if value:
-                                    int_value = int(value)
-                                    token_type = dp_attrs.get("type", "")
+                                if dp_value:
+                                    int_value = int(dp_value)
+                                    # Claude uses "type", GenAI
+                                    # semconv uses "gen_ai.token.type"
+                                    token_type = (
+                                        dp_attrs.get("type")
+                                        or dp_attrs.get("gen_ai.token.type")
+                                        or ""
+                                    )
                                     if token_type == "input":
                                         tel["input_tokens"] = max(
                                             tel.get("input_tokens", 0),
@@ -1422,7 +1447,10 @@ class HostDaemon:
                                             tel.get("cache_read_tokens", 0),
                                             int_value,
                                         )
-                                    elif token_type in ("cacheCreation", "cache"):
+                                    elif token_type in (
+                                        "cacheCreation",
+                                        "cache",
+                                    ):
                                         tel["cache_creation_tokens"] = max(
                                             tel.get("cache_creation_tokens", 0),
                                             int_value,
@@ -1437,18 +1465,19 @@ class HostDaemon:
 
                             # Cost metrics (cumulative Sum, USD)
                             if name in self._cost_metrics:
-                                value = dp.get("asDouble") or dp.get("asInt") or 0
-                                if value:
+                                if dp_value:
                                     tel["cost_usd"] = max(
                                         tel.get("cost_usd", 0.0),
-                                        float(value),
+                                        float(dp_value),
                                     )
                                     changed = True
 
                             # Activity metrics (tool/function name)
                             if name in self._activity_metrics:
-                                fn = dp_attrs.get("function_name") or dp_attrs.get(
-                                    "tool_name"
+                                fn = (
+                                    dp_attrs.get("function_name")
+                                    or dp_attrs.get("tool_name")
+                                    or dp_attrs.get("gen_ai.tool.name")
                                 )
                                 if fn and isinstance(fn, str):
                                     tel["current_activity"] = fn
@@ -1456,13 +1485,12 @@ class HostDaemon:
 
                             # Runtime duration metrics
                             if name in self._runtime_metrics:
-                                value = dp.get("asInt") or dp.get("asDouble") or 0
-                                if value:
+                                if dp_value:
                                     unit = self._runtime_metrics[name]
                                     if unit == "milliseconds":
-                                        tel["run_time_seconds"] = int(value / 1000)
+                                        tel["run_time_seconds"] = int(dp_value / 1000)
                                     else:
-                                        tel["run_time_seconds"] = int(value)
+                                        tel["run_time_seconds"] = int(dp_value)
                                     changed = True
 
                 if changed:
