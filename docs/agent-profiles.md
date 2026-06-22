@@ -421,27 +421,33 @@ pi install npm:pi-otel npm:@0xkobold/pi-mcp
 
 Pi supports Claude and Gemini models via Google Cloud
 Vertex AI through the `@ssweens/pi-vertex` extension.
-Install it inside a Pi session:
+
+**1. Install the extension** inside a Pi session:
 
 ```
 pi install npm:@ssweens/pi-vertex
 ```
 
-Vertex AI requires `--provider vertex` at launch time.
-Edit `agent/profiles/pi.yaml` to add the flag:
+**2. Set the default provider** in
+`~/.pi/agent/settings.json`:
 
-```yaml
-commands:
-  new: ["pi", "--provider", "vertex"]
-  resume: ["bash", "-c",
-    "pi --provider vertex --continue || pi --provider vertex"]
+```json
+{
+  "defaultProvider": "vertex",
+  "defaultModel": "claude-sonnet-4-6"
+}
 ```
 
-You also need the following in your daemon quadlet or
-`podman run` command:
+This avoids needing `--provider vertex` on the command
+line — Pi will use Vertex AI by default for all
+sessions. You can also set `defaultModel` to your
+preferred model.
+
+**3. Add Vertex env vars** to your daemon quadlet or
+`podman run` command. Pi-vertex uses different env var
+names than Claude Code:
 
 ```ini
-# Pi-vertex uses different env var names than Claude Code.
 # If you already have ANTHROPIC_VERTEX_PROJECT_ID and
 # CLOUD_ML_REGION for Claude Code, add these with the
 # same values:
