@@ -409,10 +409,29 @@ pi install npm:pi-otel npm:@0xkobold/pi-mcp
 - **pi-otel**: After installing, configure OTLP settings
   in `~/.pi/agent/settings.json`:
   ```json
-  {"otel": {"enabled": true, "protocol": "http/json"}}
+  {
+    "otel": {
+      "enabled": true,
+      "protocol": "http/json",
+      "signals": {
+        "traces": true,
+        "metrics": true,
+        "logs": true
+      }
+    }
+  }
   ```
   The daemon injects `OTEL_EXPORTER_OTLP_ENDPOINT` at
-  spawn time, which pi-otel respects.
+  spawn time, which pi-otel respects. Metrics and logs
+  signals are disabled by default — enable them in
+  settings.json or via `PI_OTEL_METRICS=1` and
+  `PI_OTEL_LOGS=1` env vars.
+
+  > **Known issue (pi-otel v0.1.0):** HTTP exporters
+  > send to `POST /` instead of `/v1/{signal}` paths
+  > due to a [URL construction bug](https://github.com/NikiforovAll/pi-otel/issues/4).
+  > The daemon includes a root-path workaround that
+  > auto-detects the signal type from the payload.
 - **pi-mcp**: Reads server configs from
   `~/.pi/agent/mcp.json`. Can import configs from
   Claude Code, Cursor, and VS Code.

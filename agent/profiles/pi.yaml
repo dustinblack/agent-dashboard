@@ -12,18 +12,14 @@ commands:
   new: ["pi"]
   resume: ["bash", "-c", "pi --continue || pi"]
 
-# Force OTLP HTTP/JSON protocol for all signals.
-# pi-otel uses separate exporters per signal and may
-# default to gRPC for traces/metrics even when the
-# global protocol is set to http/json. The per-signal
-# env vars ensure all three signals use HTTP/JSON
-# paths (/v1/traces, /v1/metrics, /v1/logs) that our
-# daemon's OTLP receiver handles.
+# Set OTLP HTTP/JSON protocol for pi-otel. The
+# daemon's OTLP receiver accepts HTTP/JSON on port
+# 4318. Note: due to a bug in pi-otel v0.1.0
+# (NikiforovAll/pi-otel#4), HTTP exporters send to
+# POST / instead of /v1/{signal} — the daemon has a
+# root-path workaround for this.
 env:
   OTEL_EXPORTER_OTLP_PROTOCOL: "http/json"
-  OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "http/json"
-  OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: "http/json"
-  OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: "http/json"
 
 # No auth gate — Pi is provider-agnostic and
 # handles its own provider selection and auth.
