@@ -477,7 +477,7 @@ Install the following inside a Pi session on first use:
 
 | Extension | Install Command | Purpose |
 |-----------|----------------|---------|
-| [pi-otel](https://www.npmjs.com/package/pi-otel) | `pi install npm:pi-otel` | OTLP telemetry for dashboard cards (traces, metrics, logs). Enables token usage, cost, and activity on agent cards. |
+| [pi-otel](https://www.npmjs.com/package/pi-otel) | `pi install npm:pi-otel` | OTLP telemetry for dashboard cards. Enables agent status and tool activity tracking. Model and token data pending upstream fixes (see below). |
 | [pi-mcp](https://github.com/0xKobold/pi-mcp) | `pi install npm:@0xkobold/pi-mcp` | MCP server connectivity. Supports stdio, SSE, HTTP, and WebSocket transports. |
 
 Or install both at once:
@@ -509,11 +509,20 @@ pi install npm:pi-otel npm:@0xkobold/pi-mcp
   settings.json or via `PI_OTEL_METRICS=1` and
   `PI_OTEL_LOGS=1` env vars.
 
-  > **Known issue (pi-otel v0.1.0):** HTTP exporters
-  > send to `POST /` instead of `/v1/{signal}` paths
-  > due to a [URL construction bug](https://github.com/NikiforovAll/pi-otel/issues/4).
-  > The daemon includes a root-path workaround that
-  > auto-detects the signal type from the payload.
+  > **Known issues (pi-otel v0.1.0):**
+  >
+  > - HTTP exporters send to `POST /` instead of
+  >   `/v1/{signal}` paths due to a
+  >   [URL construction bug](https://github.com/NikiforovAll/pi-otel/issues/4).
+  >   The daemon includes a root-path workaround that
+  >   auto-detects the signal type from the payload.
+  > - `pi.llm_request` spans are
+  >   [not emitted](https://github.com/NikiforovAll/pi-otel/issues/5),
+  >   so **model name, token usage, and cost are not
+  >   available**. Agent status and tool activity
+  >   (e.g., "bash", "read") work correctly. Model
+  >   and token tracking will work once this is fixed
+  >   upstream — no daemon changes needed.
 - **pi-mcp**: Reads server configs from
   `~/.pi/agent/mcp.json`. Can import configs from
   Claude Code, Cursor, and VS Code.
