@@ -466,29 +466,24 @@ image.
 
 ## Recommended Pi Extensions
 
-Pi uses community extensions for telemetry, cloud
-providers, and MCP connectivity. Extensions are
-installed per-user inside a Pi session and persist
-via the `~/.pi` volume mount. They cannot be
-pre-installed in the container image because the host
-volume mount overlays the container's `/root/.pi`
-directory at runtime.
+Pi uses community extensions for telemetry and MCP
+connectivity. Extensions are installed per-user inside
+a Pi session and persist via the `~/.pi` volume mount.
+They cannot be pre-installed in the container image
+because the host volume mount overlays the container's
+`/root/.pi` directory at runtime.
 
-Install the following extensions inside a Pi session
-on first use. Each was selected as the most complete
-and actively maintained option in its category as of
-June 2026.
+Install the following inside a Pi session on first use:
 
 | Extension | Install Command | Purpose |
 |-----------|----------------|---------|
 | [pi-otel](https://www.npmjs.com/package/pi-otel) | `pi install npm:pi-otel` | OTLP telemetry for dashboard cards (traces, metrics, logs). Enables token usage, cost, and activity on agent cards. |
-| [pi-vertex](https://pi.dev/packages/@ssweens/pi-vertex) | `pi install npm:@ssweens/pi-vertex` | Vertex AI provider for Claude and Gemini models via Google Cloud. Use `/login` to configure after installing. |
 | [pi-mcp](https://github.com/0xKobold/pi-mcp) | `pi install npm:@0xkobold/pi-mcp` | MCP server connectivity. Supports stdio, SSE, HTTP, and WebSocket transports. |
 
-Or install all three at once:
+Or install both at once:
 
 ```
-pi install npm:pi-otel npm:@ssweens/pi-vertex npm:@0xkobold/pi-mcp
+pi install npm:pi-otel npm:@0xkobold/pi-mcp
 ```
 
 ### Extension configuration
@@ -500,13 +495,37 @@ pi install npm:pi-otel npm:@ssweens/pi-vertex npm:@0xkobold/pi-mcp
   ```
   The daemon injects `OTEL_EXPORTER_OTLP_ENDPOINT` at
   spawn time, which pi-otel respects.
-- **pi-vertex**: After installing, run `/login` inside
-  a Pi session and select "Google Vertex AI". Uses
-  `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and
-  gcloud ADC credentials (mounted via `~/.config/gcloud`).
 - **pi-mcp**: Reads server configs from
   `~/.pi/agent/mcp.json`. Can import configs from
   Claude Code, Cursor, and VS Code.
+
+### Using Pi with Vertex AI
+
+Pi supports Claude and Gemini models via Google Cloud
+Vertex AI through the `@ssweens/pi-vertex` extension.
+Install it inside a Pi session:
+
+```
+pi install npm:@ssweens/pi-vertex
+```
+
+Vertex AI requires `--provider vertex` at launch time.
+Edit `agent/profiles/pi.yaml` to add the flag:
+
+```yaml
+commands:
+  new: ["pi", "--provider", "vertex"]
+  resume: ["bash", "-c",
+    "pi --provider vertex --continue || pi --provider vertex"]
+```
+
+You also need `GOOGLE_CLOUD_PROJECT` and gcloud ADC
+credentials (`~/.config/gcloud` mount) configured in
+your quadlet.
+
+> **Note:** A built-in Vertex AI provider for Pi is
+> [proposed upstream](https://github.com/earendil-works/pi/issues/5082),
+> which would eliminate the need for this extension.
 
 ### Replacing an extension
 
