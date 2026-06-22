@@ -382,48 +382,57 @@ Restart the daemon. The new tool will automatically:
 
 No frontend or backend code changes are required.
 
-## Bundled Pi Extensions
+## Recommended Pi Extensions
 
-The Pi coding agent uses a community extension system
-for telemetry, cloud providers, and MCP connectivity.
-Three extensions are pre-installed in the daemon
-container. Each was selected for being the most
-complete and actively maintained option in its
-category as of June 2026.
+Pi uses community extensions for telemetry, cloud
+providers, and MCP connectivity. Extensions are
+installed per-user inside a Pi session and persist
+via the `~/.pi` volume mount. They cannot be
+pre-installed in the container image because the host
+volume mount overlays the container's `/root/.pi`
+directory at runtime.
 
-Users can replace, remove, or add extensions via
-`pi install` / `pi uninstall` inside a session, or by
-editing `~/.pi/agent/settings.json` (persisted via the
-`~/.pi` volume mount).
+Install the following extensions inside a Pi session
+on first use. Each was selected as the most complete
+and actively maintained option in its category as of
+June 2026.
 
-| Extension | Package | Purpose |
-|-----------|---------|---------|
-| [pi-otel](https://www.npmjs.com/package/pi-otel) | `npm:pi-otel` | OTLP telemetry for dashboard cards (traces, metrics, logs). The only OTel extension for Pi. |
-| [pi-vertex](https://pi.dev/packages/@ssweens/pi-vertex) | `npm:@ssweens/pi-vertex` | Vertex AI provider for Claude and Gemini models via Google Cloud. Supports gcloud ADC auth and cost tracking. |
-| [pi-mcp](https://github.com/0xKobold/pi-mcp) | `npm:@0xkobold/pi-mcp` | MCP server connectivity. Supports stdio, SSE, HTTP, and WebSocket transports. Auto-discovers tools with allowlist/denylist filtering. |
+| Extension | Install Command | Purpose |
+|-----------|----------------|---------|
+| [pi-otel](https://www.npmjs.com/package/pi-otel) | `pi install npm:pi-otel` | OTLP telemetry for dashboard cards (traces, metrics, logs). Enables token usage, cost, and activity on agent cards. |
+| [pi-vertex](https://pi.dev/packages/@ssweens/pi-vertex) | `pi install npm:@ssweens/pi-vertex` | Vertex AI provider for Claude and Gemini models via Google Cloud. Use `/login` to configure after installing. |
+| [pi-mcp](https://github.com/0xKobold/pi-mcp) | `pi install npm:@0xkobold/pi-mcp` | MCP server connectivity. Supports stdio, SSE, HTTP, and WebSocket transports. |
+
+Or install all three at once:
+
+```
+pi install npm:pi-otel npm:@ssweens/pi-vertex npm:@0xkobold/pi-mcp
+```
+
+### Extension configuration
+
+- **pi-otel**: After installing, configure OTLP settings
+  in `~/.pi/agent/settings.json`:
+  ```json
+  {"otel": {"enabled": true, "protocol": "http/json"}}
+  ```
+  The daemon injects `OTEL_EXPORTER_OTLP_ENDPOINT` at
+  spawn time, which pi-otel respects.
+- **pi-vertex**: After installing, run `/login` inside
+  a Pi session and select "Google Vertex AI". Uses
+  `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and
+  gcloud ADC credentials (mounted via `~/.config/gcloud`).
+- **pi-mcp**: Reads server configs from
+  `~/.pi/agent/mcp.json`. Can import configs from
+  Claude Code, Cursor, and VS Code.
 
 ### Replacing an extension
 
 These are community-maintained packages. If a better
-alternative emerges or one becomes unmaintained, replace
-it in `agent/Containerfile.template` (the `pi install`
-line) and update this documentation. The profile YAML
-itself doesn't reference extensions — they're installed
-at container build time and configured via settings
-files in the mounted `~/.pi` directory.
-
-### Extension configuration
-
-- **pi-otel**: Pre-configured in the seeded
-  `settings.json` for HTTP/JSON protocol. The daemon
-  injects `OTEL_EXPORTER_OTLP_ENDPOINT` at spawn time.
-- **pi-vertex**: Uses `GOOGLE_CLOUD_PROJECT`,
-  `GOOGLE_CLOUD_LOCATION`, and gcloud ADC credentials
-  (mounted via `~/.config/gcloud`). Launch with
-  `pi --provider vertex --model claude-sonnet-4-6`.
-- **pi-mcp**: Reads server configs from
-  `~/.pi/agent/mcp.json`. Can import configs from
-  Claude Code, Cursor, and VS Code.
+alternative emerges or one becomes unmaintained, swap
+it with `pi uninstall <old>` and `pi install <new>`.
+Update this documentation when replacing a recommended
+extension.
 
 ## Known Limitations
 

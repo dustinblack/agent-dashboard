@@ -19,10 +19,12 @@ commands:
 # No permission_patterns — Pi's design philosophy
 # is "no permission popups" by default.
 
-# No mcp section — Pi uses its own extension system
-# for MCP connectivity (pi-mcp, pre-installed).
+# No mcp section — Pi uses its own extension system.
+# See "Recommended Pi Extensions" in docs/agent-profiles.md.
 
-# Telemetry via pi-otel extension (pre-installed).
+# Telemetry requires the pi-otel extension.
+# Install inside a Pi session:
+#   pi install npm:pi-otel
 # Uses OpenTelemetry GenAI semantic conventions.
 # Metric names are best-guess — verify after testing.
 telemetry:
@@ -42,13 +44,6 @@ provisioning:
   config_files:
     - path: "/root/.pi/agent"
       mkdir: true
-    # Pre-configure pi-otel for HTTP/JSON OTLP
-    # (matching the daemon's receiver protocol)
-    # and disable install telemetry pings.
-    - path: "/root/.pi/agent/settings.json"
-      content: >-
-        {"otel":{"enabled":true,"protocol":"http/json"},
-        "enableInstallTelemetry":false}
   verify: "pi --version"
   mounts:
     - host: "~/.pi"
