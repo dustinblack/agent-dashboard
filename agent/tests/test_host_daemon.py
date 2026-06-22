@@ -568,6 +568,23 @@ class TestAgentProfiles:
         # Bash has no provisioning
         assert profiles["bash"].provisioning is None
 
+    def test_pi_profile_fields(self):
+        """Pi profile has expected configuration."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+        pi = profiles["pi"]
+        assert pi.binary == "pi"
+        assert pi.display_name == "Pi"
+        assert pi.color == "green"
+        assert pi.commands.new == ["pi"]
+        assert pi.supports_resume is True
+        assert pi.auth.env_vars == []
+        assert pi.provisioning is not None
+        assert "@mariozechner/pi-coding-agent" in pi.provisioning.install.npm
+        assert pi.provisioning.verify == "pi --version"
+        assert any(m.host == "~/.pi" for m in pi.provisioning.mounts)
+
     def test_unknown_profile_returns_empty(self):
         """Loading from empty directory returns no profiles."""
         import tempfile

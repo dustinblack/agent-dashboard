@@ -8,12 +8,13 @@ startup.
 
 ## Bundled Profiles
 
-Three profiles are included out of the box:
+Four profiles are included out of the box:
 
 | Profile | File | Description |
 |---------|------|-------------|
 | Claude | `agent/profiles/claude.yaml` | Claude Code CLI with OTLP telemetry and MCP detection |
-| Gemini | `agent/profiles/gemini.yaml` | Gemini CLI with custom telemetry endpoints |
+| Pi | `agent/profiles/pi.yaml` | Pi coding agent — provider-agnostic, supports Claude/GPT/Gemini/local models |
+| Gemini | `agent/profiles/gemini.yaml` | Gemini CLI (sunset June 18, 2026 for free/personal users) |
 | Bash | `agent/profiles/bash.yaml` | Bash shell with PROMPT_COMMAND sidecar telemetry |
 
 ## Creating a Custom Profile
@@ -380,6 +381,49 @@ Restart the daemon. The new tool will automatically:
 - Have its resume toggle derived from the commands config
 
 No frontend or backend code changes are required.
+
+## Bundled Pi Extensions
+
+The Pi coding agent uses a community extension system
+for telemetry, cloud providers, and MCP connectivity.
+Three extensions are pre-installed in the daemon
+container. Each was selected for being the most
+complete and actively maintained option in its
+category as of June 2026.
+
+Users can replace, remove, or add extensions via
+`pi install` / `pi uninstall` inside a session, or by
+editing `~/.pi/agent/settings.json` (persisted via the
+`~/.pi` volume mount).
+
+| Extension | Package | Purpose |
+|-----------|---------|---------|
+| [pi-otel](https://www.npmjs.com/package/pi-otel) | `npm:pi-otel` | OTLP telemetry for dashboard cards (traces, metrics, logs). The only OTel extension for Pi. |
+| [pi-vertex](https://pi.dev/packages/@ssweens/pi-vertex) | `npm:@ssweens/pi-vertex` | Vertex AI provider for Claude and Gemini models via Google Cloud. Supports gcloud ADC auth and cost tracking. |
+| [pi-mcp](https://github.com/0xKobold/pi-mcp) | `npm:@0xkobold/pi-mcp` | MCP server connectivity. Supports stdio, SSE, HTTP, and WebSocket transports. Auto-discovers tools with allowlist/denylist filtering. |
+
+### Replacing an extension
+
+These are community-maintained packages. If a better
+alternative emerges or one becomes unmaintained, replace
+it in `agent/Containerfile.template` (the `pi install`
+line) and update this documentation. The profile YAML
+itself doesn't reference extensions — they're installed
+at container build time and configured via settings
+files in the mounted `~/.pi` directory.
+
+### Extension configuration
+
+- **pi-otel**: Pre-configured in the seeded
+  `settings.json` for HTTP/JSON protocol. The daemon
+  injects `OTEL_EXPORTER_OTLP_ENDPOINT` at spawn time.
+- **pi-vertex**: Uses `GOOGLE_CLOUD_PROJECT`,
+  `GOOGLE_CLOUD_LOCATION`, and gcloud ADC credentials
+  (mounted via `~/.config/gcloud`). Launch with
+  `pi --provider vertex --model claude-sonnet-4-6`.
+- **pi-mcp**: Reads server configs from
+  `~/.pi/agent/mcp.json`. Can import configs from
+  Claude Code, Cursor, and VS Code.
 
 ## Known Limitations
 

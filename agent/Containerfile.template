@@ -98,6 +98,17 @@ RUN npm install -g {{ npm_packages | join(' ') }}
 RUN pip3 install --no-cache-dir {{ pip_packages | join(' ') }}
 {% endif %}
 
+# Pre-install Pi extensions for dashboard telemetry,
+# Vertex AI provider, and MCP server connectivity.
+# These are Pi-specific extensions (not npm globals).
+# Harmless if pi isn't installed (profile removed).
+# See docs/agent-profiles.md "Bundled Pi Extensions"
+# for selection rationale and replacement guidance.
+RUN pi install npm:pi-otel \
+    npm:@ssweens/pi-vertex \
+    npm:@0xkobold/pi-mcp \
+    2>/dev/null || true
+
 {% for cf in config_files %}
 {% if cf.mkdir and not cf.content %}
 RUN mkdir -p {{ cf.path }}

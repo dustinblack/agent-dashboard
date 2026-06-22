@@ -1,0 +1,63 @@
+# Pi coding agent profile
+# Provider-agnostic terminal coding agent by
+# Mario Zechner. Supports Claude, GPT, Gemini,
+# Grok, and local models (Ollama).
+# https://pi.dev / https://github.com/badlogic/pi-mono
+name: pi
+display_name: Pi
+color: green
+binary: pi
+
+commands:
+  new: ["pi"]
+  resume: ["bash", "-c", "pi --continue || pi"]
+
+# No auth gate — Pi is provider-agnostic and
+# handles its own provider selection and auth.
+# Works with API keys, Vertex AI, or local models.
+
+# No permission_patterns — Pi's design philosophy
+# is "no permission popups" by default.
+
+# No mcp section — Pi uses its own extension system
+# for MCP connectivity (pi-mcp, pre-installed).
+
+# Telemetry via pi-otel extension (pre-installed).
+# Uses OpenTelemetry GenAI semantic conventions.
+# Metric names are best-guess — verify after testing.
+telemetry:
+  token_metrics:
+    - gen_ai.client.token.usage
+  activity_metrics:
+    - pi.tool
+  runtime_metric:
+    name: pi.interaction.duration
+    unit: milliseconds
+
+# Build-time provisioning metadata
+provisioning:
+  install:
+    npm:
+      - "@mariozechner/pi-coding-agent"
+  config_files:
+    - path: "/root/.pi/agent"
+      mkdir: true
+    # Pre-configure pi-otel for HTTP/JSON OTLP
+    # (matching the daemon's receiver protocol)
+    # and disable install telemetry pings.
+    - path: "/root/.pi/agent/settings.json"
+      content: >-
+        {"otel":{"enabled":true,"protocol":"http/json"},
+        "enableInstallTelemetry":false}
+  verify: "pi --version"
+  mounts:
+    - host: "~/.pi"
+      container: "/root/.pi"
+      mode: rw
+  passthrough_env:
+    - ANTHROPIC_API_KEY
+    - OPENAI_API_KEY
+    - GEMINI_API_KEY
+    - GOOGLE_CLOUD_PROJECT
+    - GOOGLE_CLOUD_LOCATION
+    - GOOGLE_APPLICATION_CREDENTIALS
