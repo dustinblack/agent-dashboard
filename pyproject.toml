@@ -37,6 +37,7 @@ disable = [
     "too-many-arguments",
     "too-many-positional-arguments",
     "logging-fstring-interpolation",
+    "fixme",
 ]
 
 [tool.coverage.run]

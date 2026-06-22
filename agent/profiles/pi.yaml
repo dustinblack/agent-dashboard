@@ -16,8 +16,10 @@ commands:
 # daemon's OTLP receiver accepts HTTP/JSON on port
 # 4318. Note: due to a bug in pi-otel v0.1.0
 # (NikiforovAll/pi-otel#4), HTTP exporters send to
-# POST / instead of /v1/{signal} — the daemon has a
-# root-path workaround for this.
+# POST / instead of /v1/{signal}. A fix has been
+# submitted upstream (NikiforovAll/pi-otel#6). Once
+# merged and released, remove the daemon's root-path
+# workaround route in start_otlp_server().
 #
 # OTEL_SERVICE_NAME must be set explicitly because
 # pi-otel reads it with higher priority than

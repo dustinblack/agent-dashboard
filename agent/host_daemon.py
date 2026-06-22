@@ -1268,6 +1268,8 @@ class HostDaemon:
             # Identify signal types present in the payload
             # for clearer logging (especially when requests
             # arrive on the root-path workaround route).
+            # TODO: Remove signal-sniffing once the root-path
+            # route is removed (see NikiforovAll/pi-otel#6).
             signals = [
                 k.replace("resource", "").lower()
                 for k in data
@@ -1560,6 +1562,12 @@ class HostDaemon:
         # passes cfg.endpoint as the exporter url option,
         # which bypasses the SDK's signal-path appending.
         # See: https://github.com/NikiforovAll/pi-otel/issues/4
+        #
+        # TODO: Remove this route once pi-otel merges the
+        # upstream fix (NikiforovAll/pi-otel#6) and a new
+        # release is published. The local patched copy in
+        # ~/.pi already has the fix, but upstream v0.1.0
+        # still sends to POST /.
         app.router.add_post("/", self.handle_otlp)
         self.otlp_runner = web.AppRunner(app)
         await self.otlp_runner.setup()
