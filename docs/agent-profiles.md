@@ -519,9 +519,27 @@ commands:
     "pi --provider vertex --continue || pi --provider vertex"]
 ```
 
-You also need `GOOGLE_CLOUD_PROJECT` and gcloud ADC
-credentials (`~/.config/gcloud` mount) configured in
-your quadlet.
+You also need the following in your daemon quadlet or
+`podman run` command:
+
+```ini
+# Pi-vertex uses different env var names than Claude Code.
+# If you already have ANTHROPIC_VERTEX_PROJECT_ID and
+# CLOUD_ML_REGION for Claude Code, add these with the
+# same values:
+Environment=GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+Environment=GOOGLE_CLOUD_LOCATION=us-east5
+```
+
+| Claude Code env var | Pi-vertex equivalent |
+|---|---|
+| `ANTHROPIC_VERTEX_PROJECT_ID` | `GOOGLE_CLOUD_PROJECT` |
+| `CLOUD_ML_REGION` | `GOOGLE_CLOUD_LOCATION` |
+| `CLAUDE_CODE_USE_VERTEX` | (not used by Pi) |
+
+The gcloud ADC credentials (`~/.config/gcloud` mount)
+handle authentication for both Claude Code and Pi — no
+additional credential setup needed.
 
 > **Note:** A built-in Vertex AI provider for Pi is
 > [proposed upstream](https://github.com/earendil-works/pi/issues/5082),
