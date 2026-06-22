@@ -581,7 +581,7 @@ class TestAgentProfiles:
         assert pi.supports_resume is True
         assert pi.auth.env_vars == []
         assert pi.provisioning is not None
-        assert "@mariozechner/pi-coding-agent" in pi.provisioning.install.npm
+        assert "@earendil-works/pi-coding-agent" in pi.provisioning.install.npm
         assert pi.provisioning.verify == "pi --version"
         assert any(m.host == "~/.pi" for m in pi.provisioning.mounts)
 
