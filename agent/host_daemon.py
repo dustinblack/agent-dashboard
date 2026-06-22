@@ -1196,6 +1196,8 @@ class HostDaemon:
             tool_hint = "gemini"
         elif "claude" in svc.lower() or "claude" in all_vals:
             tool_hint = "claude"
+        elif "pi" == svc.lower() or "pi-otel" in all_vals:
+            tool_hint = "pi"
 
         if tool_hint:
             candidates = [
@@ -1232,7 +1234,18 @@ class HostDaemon:
         """
         try:
             data = await request.json()
-            log.info(f"OTLP received on {request.path}: " f"{list(data.keys())}")
+            # Identify signal types present in the payload
+            # for clearer logging (especially when requests
+            # arrive on the root-path workaround route).
+            signals = [
+                k.replace("resource", "").lower()
+                for k in data
+                if k.startswith("resource")
+            ]
+            log.info(
+                f"OTLP received on {request.path}"
+                f" signals={signals or list(data.keys())}"
+            )
 
             # Optional verbose debug mode for inspecting
             # raw OTLP payloads from agent tools.
@@ -1472,6 +1485,13 @@ class HostDaemon:
         app.router.add_post("/v1/logs", self.handle_otlp)
         app.router.add_post("/v1/traces", self.handle_otlp)
         app.router.add_post("/v1/metrics", self.handle_otlp)
+        # Workaround for pi-otel (and potentially other OTel
+        # clients) that send HTTP/JSON OTLP to the root path
+        # instead of /v1/{signal}. pi-otel's pickByProtocol
+        # passes cfg.endpoint as the exporter url option,
+        # which bypasses the SDK's signal-path appending.
+        # See: https://github.com/NikiforovAll/pi-otel/issues/4
+        app.router.add_post("/", self.handle_otlp)
         self.otlp_runner = web.AppRunner(app)
         await self.otlp_runner.setup()
         site = web.TCPSite(self.otlp_runner, "127.0.0.1", self.otlp_port)
