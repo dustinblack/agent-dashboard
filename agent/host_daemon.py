@@ -1110,10 +1110,30 @@ class HostDaemon:
             if val is not None:
                 output_tokens = int(val)
                 break
-        for key in ("cache_read_tokens", "cache_creation_tokens"):
+        # Cache tokens — check both short names (Claude)
+        # and GenAI semconv names (pi-otel).
+        cache_read = None
+        cache_creation = None
+        for key in (
+            "cache_read_tokens",
+            "gen_ai.usage.cache_read_input_tokens",
+        ):
             val = attrs.get(key)
             if val is not None:
-                cache_tokens = (cache_tokens or 0) + int(val)
+                cache_read = int(val)
+                break
+        for key in (
+            "cache_creation_tokens",
+            "gen_ai.usage.cache_creation_input_tokens",
+        ):
+            val = attrs.get(key)
+            if val is not None:
+                cache_creation = int(val)
+                break
+        if cache_read is not None or cache_creation is not None:
+            cache_tokens = (cache_read or 0) + (cache_creation or 0)
+        else:
+            cache_tokens = None
 
         if input_tokens is not None or output_tokens is not None:
             total = (input_tokens or 0) + (output_tokens or 0) + (cache_tokens or 0)
@@ -1129,6 +1149,15 @@ class HostDaemon:
         if input_tokens is not None and input_tokens > 0:
             tel["context_tokens"] = input_tokens
             changed = True
+
+        # Cost — pi-otel puts cumulative session cost on
+        # pi.llm_request span attributes as pi.cost.usd.
+        cost = attrs.get("pi.cost.usd")
+        if cost is not None:
+            cost_f = float(cost)
+            if cost_f > tel.get("cost_usd", 0.0):
+                tel["cost_usd"] = cost_f
+                changed = True
 
         # Current activity — extract the latest tool/function
         # name from span or log attributes.  Gemini uses
