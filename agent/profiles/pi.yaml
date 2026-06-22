@@ -12,6 +12,13 @@ commands:
   new: ["pi"]
   resume: ["bash", "-c", "pi --continue || pi"]
 
+# Force OTLP HTTP/JSON protocol for pi-otel to match
+# the daemon's receiver. Without this, pi-otel may
+# default to protobuf encoding which our receiver
+# can't parse.
+env:
+  OTEL_EXPORTER_OTLP_PROTOCOL: "http/json"
+
 # No auth gate — Pi is provider-agnostic and
 # handles its own provider selection and auth.
 # Works with API keys, Vertex AI, or local models.
