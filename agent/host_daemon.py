@@ -1132,11 +1132,13 @@ class HostDaemon:
 
         # Current activity — extract the latest tool/function
         # name from span or log attributes.  Gemini uses
-        # 'function_name', Claude uses 'tool_name'.
+        # 'function_name', Claude uses 'tool_name', pi-otel
+        # uses 'gen_ai.tool.name'.
         activity = None
         for key in (
             "function_name",
             "tool_name",
+            "gen_ai.tool.name",
             "gen_ai.operation.name",
         ):
             val = attrs.get(key)
@@ -1320,10 +1322,20 @@ class HostDaemon:
                         if self._update_telemetry_from_attrs(tel, attrs):
                             changed = True
 
+                        # Extract activity from span names like
+                        # "pi.tool.bash", "pi.tool.read", etc.
+                        # when attributes didn't provide it.
+                        span_name = span.get("name") or ""
+                        if span_name.startswith("pi.tool."):
+                            tool = span_name[len("pi.tool.") :]
+                            if tool and tel.get("current_activity") != tool:
+                                tel["current_activity"] = tool
+                                changed = True
+
                         # Check span name for permission /
                         # waiting signals (future-proofing for
                         # when tools emit these via OTLP).
-                        span_name = (span.get("name") or "").lower()
+                        span_name = span_name.lower()
                         if any(kw in span_name for kw in _wait_keywords):
                             info = self.agents[agent_id]
                             info["permission_candidate"] = time.monotonic()
