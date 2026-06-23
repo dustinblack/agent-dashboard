@@ -177,6 +177,79 @@ provisioning:
     - MY_AGENT_API_KEY
 ```
 
+## Local Overrides
+
+Profile files in `agent/profiles/` are tracked by Git.
+To customize a profile for your environment without
+modifying tracked files, create a companion
+`.local.yaml` file:
+
+```
+agent/profiles/pi.local.yaml
+```
+
+The `.local` suffix is already in `.gitignore`, so
+these files won't be committed or cause dirty working
+trees.
+
+### Example
+
+To allow Pi to connect to MCP servers with self-signed
+TLS certificates:
+
+```yaml
+# agent/profiles/pi.local.yaml
+name: pi
+env:
+  NODE_TLS_REJECT_UNAUTHORIZED: "0"
+```
+
+To add a custom model flag and extra provider key:
+
+```yaml
+# agent/profiles/claude.local.yaml
+name: claude
+commands:
+  new: ["claude", "--model", "opus"]
+  resume: ["bash", "-c", "claude --continue --model opus || claude --model opus"]
+env:
+  MY_CUSTOM_VAR: "value"
+```
+
+### Merge behavior
+
+Local overrides are merged into the base profile
+before parsing. The merge semantics depend on the
+field type:
+
+| Field type | Behavior | Example |
+|-----------|----------|--------|
+| **Scalars** (`binary`, `color`, etc.) | Local replaces base | `color: green` overrides `color: blue` |
+| **`env`** (dict) | Dict merge — local keys override, base keys preserved | Local `{B: 2}` + base `{A: 1}` → `{A: 1, B: 2}` |
+| **`commands`** (dict) | Dict merge — local keys override per-command | Local `{new: [...]}` overrides `new`, preserves `resume` |
+| **`permission_patterns`** (list) | Extend — local items appended, duplicates removed | |
+| **`telemetry.*_metrics`** (lists) | Extend | `token_metrics`, `activity_metrics`, `excluded_metrics` |
+| **`mcp.user_files`** (list) | Extend | |
+| **`provisioning.passthrough_env`** (list) | Extend | |
+| **`sidecar.fields`** (dict) | Dict merge | |
+| **`name`** | Never overridden | Used for matching only |
+
+### Supported file extensions
+
+The daemon checks for companions in this order:
+1. `{name}.local.yaml`
+2. `{name}.local.yml`
+3. `{name}.local.json`
+
+Only the first match is used.
+
+### Error handling
+
+If a `.local` file is malformed (invalid YAML/JSON),
+the base profile loads without the override and the
+error is logged. A `.local` file without a matching
+base profile is silently ignored.
+
 ## How Profiles Are Used
 
 | Feature | Profile Field | Used By |

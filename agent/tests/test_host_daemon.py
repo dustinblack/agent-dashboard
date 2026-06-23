@@ -16,6 +16,7 @@ import subprocess
 from unittest.mock import patch, mock_open
 
 import pytest
+import yaml
 
 from agent.host_daemon import HostDaemon, _split_utf8
 
@@ -578,7 +579,310 @@ class TestAgentProfiles:
         assert profiles == {}
 
 
-# ── H. Multi-Root Projects ─────────────────────────────
+# ── H. Local Profile Overrides ─────────────────────
+
+
+class TestLocalProfileOverrides:
+    """Tests for *.local.yaml profile override merging."""
+
+    def test_env_dict_merge(self):
+        """Local env keys override base; base keys preserved."""
+        from agent.profiles import _merge_profile_data
+
+        base = {
+            "name": "test",
+            "env": {"A": "1", "B": "2"},
+        }
+        override = {"name": "test", "env": {"B": "99", "C": "3"}}
+        merged = _merge_profile_data(base, override)
+        assert merged["env"] == {"A": "1", "B": "99", "C": "3"}
+
+    def test_permission_patterns_extend(self):
+        """Local permission_patterns appended, no dupes."""
+        from agent.profiles import _merge_profile_data
+
+        base = {
+            "name": "test",
+            "permission_patterns": ["pat1", "pat2"],
+        }
+        override = {
+            "name": "test",
+            "permission_patterns": ["pat2", "pat3"],
+        }
+        merged = _merge_profile_data(base, override)
+        assert merged["permission_patterns"] == [
+            "pat1",
+            "pat2",
+            "pat3",
+        ]
+
+    def test_scalar_override(self):
+        """Local scalar values replace base values."""
+        from agent.profiles import _merge_profile_data
+
+        base = {
+            "name": "test",
+            "color": "blue",
+            "binary": "old-bin",
+        }
+        override = {"name": "test", "color": "green"}
+        merged = _merge_profile_data(base, override)
+        assert merged["color"] == "green"
+        assert merged["binary"] == "old-bin"
+
+    def test_name_never_overridden(self):
+        """The name field is never overridden by local."""
+        from agent.profiles import _merge_profile_data
+
+        base = {"name": "original"}
+        override = {"name": "sneaky"}
+        merged = _merge_profile_data(base, override)
+        assert merged["name"] == "original"
+
+    def test_commands_dict_merge(self):
+        """Local commands merge per-key into base."""
+        from agent.profiles import _merge_profile_data
+
+        base = {
+            "name": "test",
+            "commands": {
+                "new": ["tool"],
+                "resume": ["tool", "--resume"],
+            },
+        }
+        override = {
+            "name": "test",
+            "commands": {"new": ["tool", "--model", "big"]},
+        }
+        merged = _merge_profile_data(base, override)
+        assert merged["commands"]["new"] == [
+            "tool",
+            "--model",
+            "big",
+        ]
+        assert merged["commands"]["resume"] == [
+            "tool",
+            "--resume",
+        ]
+
+    def test_telemetry_list_extend(self):
+        """Local telemetry lists extend base lists."""
+        from agent.profiles import _merge_profile_data
+
+        base = {
+            "name": "test",
+            "telemetry": {
+                "token_metrics": ["metric.a"],
+                "activity_metrics": ["act.a"],
+            },
+        }
+        override = {
+            "name": "test",
+            "telemetry": {
+                "token_metrics": ["metric.b"],
+                "cost_metric": "cost.new",
+            },
+        }
+        merged = _merge_profile_data(base, override)
+        assert merged["telemetry"]["token_metrics"] == [
+            "metric.a",
+            "metric.b",
+        ]
+        # Scalar within telemetry is overridden
+        assert merged["telemetry"]["cost_metric"] == "cost.new"
+        # Untouched base list preserved
+        assert merged["telemetry"]["activity_metrics"] == [
+            "act.a",
+        ]
+
+    def test_provisioning_passthrough_extend(self):
+        """Local passthrough_env extends base list."""
+        from agent.profiles import _merge_profile_data
+
+        base = {
+            "name": "test",
+            "provisioning": {
+                "passthrough_env": ["KEY_A", "KEY_B"],
+            },
+        }
+        override = {
+            "name": "test",
+            "provisioning": {
+                "passthrough_env": ["KEY_B", "KEY_C"],
+            },
+        }
+        merged = _merge_profile_data(base, override)
+        assert merged["provisioning"]["passthrough_env"] == [
+            "KEY_A",
+            "KEY_B",
+            "KEY_C",
+        ]
+
+    def test_mcp_user_files_extend(self):
+        """Local mcp.user_files extends base list."""
+        from agent.profiles import _merge_profile_data
+
+        base = {
+            "name": "test",
+            "mcp": {
+                "project_file": ".mcp.json",
+                "user_files": ["~/.tool/config.json"],
+            },
+        }
+        override = {
+            "name": "test",
+            "mcp": {"user_files": ["~/.tool/extra.json"]},
+        }
+        merged = _merge_profile_data(base, override)
+        assert merged["mcp"]["user_files"] == [
+            "~/.tool/config.json",
+            "~/.tool/extra.json",
+        ]
+        # project_file preserved from base
+        assert merged["mcp"]["project_file"] == ".mcp.json"
+
+    def test_sidecar_fields_dict_merge(self):
+        """Local sidecar.fields merges as a dict."""
+        from agent.profiles import _merge_profile_data
+
+        base = {
+            "name": "test",
+            "sidecar": {
+                "fields": {"activity": "cwd"},
+            },
+        }
+        override = {
+            "name": "test",
+            "sidecar": {
+                "fields": {"exit_code": "rc"},
+            },
+        }
+        merged = _merge_profile_data(base, override)
+        assert merged["sidecar"]["fields"] == {
+            "activity": "cwd",
+            "exit_code": "rc",
+        }
+
+    def test_load_profiles_with_local_override(self):
+        """load_profiles merges .local.yaml into the
+        base profile."""
+        import tempfile
+
+        from agent.profiles import load_profiles
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Write base profile
+            base = {
+                "name": "myagent",
+                "display_name": "My Agent",
+                "binary": "myagent",
+                "color": "blue",
+                "env": {"A": "1"},
+                "commands": {"new": ["myagent"]},
+            }
+            with open(
+                os.path.join(tmpdir, "myagent.yaml"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                yaml.dump(base, f)
+
+            # Write local override
+            local = {
+                "name": "myagent",
+                "env": {"B": "2"},
+                "color": "green",
+            }
+            with open(
+                os.path.join(tmpdir, "myagent.local.yaml"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                yaml.dump(local, f)
+
+            profiles = load_profiles(tmpdir)
+
+        p = profiles["myagent"]
+        # env merged
+        assert p.env == {"A": "1", "B": "2"}
+        # scalar overridden
+        assert p.color == "green"
+        # base value preserved
+        assert p.display_name == "My Agent"
+
+    def test_local_override_not_loaded_standalone(self):
+        """A .local.yaml file is not loaded as a
+        standalone profile."""
+        import tempfile
+
+        from agent.profiles import load_profiles
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Only a local file, no base
+            local = {
+                "name": "orphan",
+                "color": "red",
+            }
+            with open(
+                os.path.join(tmpdir, "orphan.local.yaml"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                yaml.dump(local, f)
+
+            profiles = load_profiles(tmpdir)
+
+        assert "orphan" not in profiles
+
+    def test_local_override_error_handled(self):
+        """A malformed .local.yaml doesn't crash profile
+        loading — the base profile loads without it."""
+        import tempfile
+
+        from agent.profiles import load_profiles
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Write valid base profile
+            base = {
+                "name": "myagent",
+                "binary": "myagent",
+                "color": "blue",
+            }
+            with open(
+                os.path.join(tmpdir, "myagent.yaml"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                yaml.dump(base, f)
+
+            # Write malformed local override
+            with open(
+                os.path.join(tmpdir, "myagent.local.yaml"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                f.write("{{{invalid yaml")
+
+            profiles = load_profiles(tmpdir)
+
+        # Base profile still loaded
+        assert "myagent" in profiles
+        assert profiles["myagent"].color == "blue"
+
+    def test_base_not_modified(self):
+        """_merge_profile_data does not mutate inputs."""
+        from agent.profiles import _merge_profile_data
+
+        base = {"name": "t", "env": {"A": "1"}}
+        override = {"name": "t", "env": {"B": "2"}}
+        base_copy = {"name": "t", "env": {"A": "1"}}
+        override_copy = {"name": "t", "env": {"B": "2"}}
+        _merge_profile_data(base, override)
+        assert base == base_copy
+        assert override == override_copy
+
+
+# ── I. Multi-Root Projects ─────────────────────────────
 
 
 class TestMultiRoot:
