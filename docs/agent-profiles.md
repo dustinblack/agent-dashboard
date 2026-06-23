@@ -607,6 +607,37 @@ extension.
 
 ## Known Limitations
 
+### Self-signed TLS certificates
+
+Pi (and other Node.js-based agents like Claude Code and
+Gemini CLI) will reject connections to MCP servers or
+other services that use self-signed TLS certificates.
+If you need to connect to such services, set
+`NODE_TLS_REJECT_UNAUTHORIZED=0` in the agent's
+environment.
+
+You can add it to the Pi profile's `env` section:
+
+```yaml
+env:
+  NODE_TLS_REJECT_UNAUTHORIZED: "0"
+```
+
+Or pass it through to the container at runtime:
+
+```bash
+-e NODE_TLS_REJECT_UNAUTHORIZED=0    # podman run
+Environment=NODE_TLS_REJECT_UNAUTHORIZED=0  # quadlet
+```
+
+> **Security note:** This disables TLS certificate
+> verification for all outbound HTTPS connections in
+> that agent process, not just the MCP server. Only
+> use this in environments where you trust the network
+> (e.g., internal development networks with a private
+> CA). The preferred solution is to install your CA
+> certificate in the container's trust store.
+
 ### Session resume path mismatch
 
 Claude Code keys project history by **absolute CWD path**.
