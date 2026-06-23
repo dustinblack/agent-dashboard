@@ -254,6 +254,167 @@ def _parse_profile(data: dict) -> AgentProfile:
     return profile
 
 
+# Keys whose values are dicts that should be merged
+# (local overrides base keys, base keys preserved).
+_DICT_MERGE_KEYS = {"env"}
+
+# Keys whose values are lists that should be extended
+# (local items appended, duplicates removed).
+_LIST_EXTEND_KEYS = {"permission_patterns"}
+
+# Nested paths for dict-merge and list-extend behavior
+# inside sub-objects. Each tuple is
+# (parent_key, child_key, merge_type).
+_NESTED_MERGE = [
+    ("commands", None, "dict"),
+    ("auth", None, "dict"),
+    ("telemetry", "token_metrics", "list"),
+    ("telemetry", "activity_metrics", "list"),
+    ("telemetry", "excluded_metrics", "list"),
+    ("mcp", "user_files", "list"),
+    ("sidecar", "fields", "dict"),
+    ("provisioning", "passthrough_env", "list"),
+]
+
+
+def _merge_profile_data(base: dict, override: dict) -> dict:
+    """Deep-merges a local override dict into a base
+    profile dict.
+
+    Merge semantics by field type:
+    - Top-level dicts (env): local keys override base
+      keys; base-only keys are preserved.
+    - Top-level lists (permission_patterns): local items
+      are appended; duplicates removed.
+    - Nested dicts (commands, auth, sidecar.fields):
+      same dict-merge as top-level.
+    - Nested lists (telemetry.token_metrics,
+      mcp.user_files, provisioning.passthrough_env):
+      same list-extend as top-level.
+    - Scalars (binary, color, display_name, etc.):
+      local value replaces base.
+    - The 'name' field is never overridden — it is used
+      for matching only.
+
+    Args:
+        base: The base profile dict from the tracked
+            YAML file.
+        override: The local override dict from the
+            .local.yaml companion file.
+
+    Returns:
+        A new merged dict. Neither input is modified.
+    """
+    # Collect parent keys from _NESTED_MERGE so we
+    # know which top-level keys need dict-merge at the
+    # parent level (not scalar replacement).
+    _nested_parents = {nm[0] for nm in _NESTED_MERGE}
+
+    merged = dict(base)
+
+    for key, value in override.items():
+        # Never override the profile name — it's used
+        # for matching the local file to its base.
+        if key == "name":
+            continue
+
+        if key in _DICT_MERGE_KEYS and isinstance(value, dict):
+            base_dict = merged.get(key, {})
+            if isinstance(base_dict, dict):
+                merged[key] = {**base_dict, **value}
+            else:
+                merged[key] = value
+        elif key in _LIST_EXTEND_KEYS and isinstance(value, list):
+            base_list = merged.get(key, [])
+            if isinstance(base_list, list):
+                combined = list(base_list)
+                for item in value:
+                    if item not in combined:
+                        combined.append(item)
+                merged[key] = combined
+            else:
+                merged[key] = value
+        elif key in _nested_parents and isinstance(value, dict):
+            # Sub-objects with nested merge rules get
+            # dict-merged at the parent level first so
+            # base-only keys (like mcp.project_file)
+            # are preserved. Child-level merge rules
+            # are applied below.
+            base_obj = merged.get(key)
+            if isinstance(base_obj, dict):
+                merged[key] = {**base_obj, **value}
+            else:
+                merged[key] = value
+        else:
+            merged[key] = value
+
+    # Apply child-level merge rules within sub-objects
+    # that exist in both base and override.
+    for parent, child, merge_type in _NESTED_MERGE:
+        if parent not in override or child is None:
+            continue
+        override_parent = override[parent]
+        if not isinstance(override_parent, dict):
+            continue
+        if child not in override_parent:
+            continue
+        base_parent = base.get(parent)
+        if not isinstance(base_parent, dict):
+            continue
+
+        # Work on the already-merged parent dict.
+        merged_parent = dict(merged.get(parent, {}))
+
+        if merge_type == "list":
+            base_list = base_parent.get(child, [])
+            override_list = override_parent.get(child, [])
+            if isinstance(base_list, list) and isinstance(override_list, list):
+                combined = list(base_list)
+                for item in override_list:
+                    if item not in combined:
+                        combined.append(item)
+                merged_parent[child] = combined
+        elif merge_type == "dict":
+            base_dict = base_parent.get(child, {})
+            override_dict = override_parent.get(child, {})
+            if isinstance(base_dict, dict) and isinstance(override_dict, dict):
+                merged_parent[child] = {
+                    **base_dict,
+                    **override_dict,
+                }
+
+        merged[parent] = merged_parent
+
+    return merged
+
+
+def _find_local_override(directory: str, base_name: str) -> Optional[str]:
+    """Finds a .local.yaml/.local.yml/.local.json
+    companion file for a base profile.
+
+    Args:
+        directory: Path to the profiles directory.
+        base_name: Base filename without extension
+            (e.g. 'pi' from 'pi.yaml').
+
+    Returns:
+        Full path to the local override file, or None.
+    """
+    for ext in (".local.yaml", ".local.yml", ".local.json"):
+        path = os.path.join(directory, base_name + ext)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def _is_local_override(filename: str) -> bool:
+    """Returns True if the filename is a .local override
+    file (e.g. 'pi.local.yaml'). These are processed
+    separately after their base profile is loaded.
+    """
+    return ".local." in filename
+
+
 def load_profiles(
     directory: str = None,
 ) -> Dict[str, AgentProfile]:
@@ -261,7 +422,13 @@ def load_profiles(
 
     Reads all .yaml, .yml, and .json files from the
     specified directory and parses them into AgentProfile
-    instances.
+    instances. After loading each base profile, checks
+    for a companion .local.yaml/.local.yml/.local.json
+    file and deep-merges it into the profile.
+
+    Local override files (*.local.yaml) are gitignored
+    and allow environment-specific customizations
+    without modifying tracked profile files.
 
     Args:
         directory: Path to the profiles directory.
@@ -282,6 +449,10 @@ def load_profiles(
     for filename in sorted(os.listdir(directory)):
         if not filename.endswith((".yaml", ".yml", ".json")):
             continue
+        # Skip .local override files — they are merged
+        # into their base profile below.
+        if _is_local_override(filename):
+            continue
         filepath = os.path.join(directory, filename)
         try:
             with open(filepath, "r", encoding="utf-8") as f:
@@ -289,6 +460,24 @@ def load_profiles(
             if not data or not isinstance(data, dict):
                 print(f"Skipping empty profile: {filename}")
                 continue
+
+            # Check for a .local companion file and
+            # merge it into the base profile data
+            # before parsing.
+            base_name = filename.rsplit(".", 1)[0]
+            local_path = _find_local_override(directory, base_name)
+            if local_path:
+                try:
+                    with open(local_path, "r", encoding="utf-8") as lf:
+                        local_data = yaml.safe_load(lf)
+                    if local_data and isinstance(local_data, dict):
+                        data = _merge_profile_data(data, local_data)
+                        local_name = os.path.basename(local_path)
+                        print(f"Merged local overrides: " f"{local_name}")
+                except Exception as e:
+                    local_name = os.path.basename(local_path)
+                    print(f"Error loading local override " f"{local_name}: {e}")
+
             profile = _parse_profile(data)
             if not profile.name:
                 print(f"Profile missing 'name' field: " f"{filename}")
