@@ -616,14 +616,18 @@ If you need to connect to such services, set
 `NODE_TLS_REJECT_UNAUTHORIZED=0` in the agent's
 environment.
 
-You can add it to the Pi profile's `env` section:
+The recommended approach is a [local override](#local-overrides)
+so you don't modify the tracked profile:
 
 ```yaml
+# agent/profiles/pi.local.yaml
+name: pi
 env:
   NODE_TLS_REJECT_UNAUTHORIZED: "0"
 ```
 
-Or pass it through to the container at runtime:
+Alternatively, pass it through to the container at
+runtime:
 
 ```bash
 -e NODE_TLS_REJECT_UNAUTHORIZED=0    # podman run
