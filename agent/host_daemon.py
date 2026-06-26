@@ -406,12 +406,15 @@ class HostDaemon:
             if profile.always_available:
                 tools.append(self._make_tool_info(profile))
                 continue
-            # Check if binary exists
+            # Check if binary exists. Use a generous
+            # timeout because some tools (e.g. Pi) load
+            # extensions during --version, which can take
+            # several seconds under load.
             try:
                 subprocess.run(
                     [profile.binary, "--version"],
                     capture_output=True,
-                    timeout=5,
+                    timeout=15,
                     check=False,
                 )
             except (OSError, subprocess.TimeoutExpired):
