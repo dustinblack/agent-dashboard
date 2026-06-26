@@ -1548,7 +1548,11 @@ class HostDaemon:
                             namespace="/terminal",
                         )
 
-            return web.Response(status=200)
+            return web.Response(
+                status=200,
+                body=b"{}",
+                content_type="application/json",
+            )
         except Exception as e:
             log.info(f"OTLP Error: {e}")
             return web.Response(status=400)
