@@ -9,13 +9,15 @@ color: cyan
 binary: agy
 
 commands:
-  # --add-dir . tells agy to include the CWD (set by
-  # the daemon via os.chdir) in its workspace, solving
-  # the previous CWD-ignorance limitation.
-  new: ["agy", "--add-dir", "."]
+  # --new-project creates a fresh project context so
+  # agy's implicit memory from previous host-side
+  # sessions doesn't bleed stale paths into the
+  # container workspace.  --add-dir . adds the CWD
+  # (set by the daemon via os.chdir) to the workspace.
+  new: ["agy", "--new-project", "--add-dir", "."]
   # --continue resumes the most recent conversation.
-  # Falls back to a new session if no history exists.
-  resume: ["bash", "-c", "agy --continue --add-dir . || agy --add-dir ."]
+  # Falls back to a new project if no history exists.
+  resume: ["bash", "-c", "agy --continue --add-dir . || agy --new-project --add-dir ."]
 
 # Telemetry env vars — agy is built on the Gemini CLI
 # codebase and still honors the GEMINI_TELEMETRY_*
