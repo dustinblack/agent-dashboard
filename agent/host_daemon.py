@@ -154,6 +154,11 @@ class HostDaemon:
         self.cached_projects = []
         self.projects_lock = asyncio.Lock()
         self.otlp_runner = None
+        # Event set once the OTLP HTTP server is
+        # listening.  spawn_agent() awaits this so
+        # pi-otel's 300 ms TCP probe at session_start
+        # doesn't race against server startup.
+        self._otlp_ready = asyncio.Event()
 
         @self.sio.on("*", namespace="/terminal")
         async def catch_all(event, data):
@@ -748,6 +753,21 @@ class HostDaemon:
             except Exception:
                 pass
 
+        # Wait for the OTLP receiver to be listening
+        # before spawning the agent process.  pi-otel
+        # probes the endpoint with a 300 ms TCP connect
+        # at session_start; if the server isn't ready the
+        # probe fails and telemetry is silently disabled
+        # for the entire session.
+        try:
+            await asyncio.wait_for(self._otlp_ready.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            log.warning(
+                f"OTLP server not ready after 5 s — "
+                f"agent {agent_id} may not report "
+                f"telemetry"
+            )
+
         log.info(
             f"Spawning agent {agent_id} with tool: {tool} "
             f"mode: {session_mode} in {full_path}"
@@ -1271,8 +1291,8 @@ class HostDaemon:
             # Identify signal types present in the payload
             # for clearer logging (especially when requests
             # arrive on the root-path workaround route).
-            # TODO: Remove signal-sniffing once the root-path
-            # route is removed (see NikiforovAll/pi-otel#6).
+            # Signal-sniffing helps when payloads arrive on
+            # the root-path compatibility route.
             signals = [
                 k.replace("resource", "").lower()
                 for k in data
@@ -1563,24 +1583,19 @@ class HostDaemon:
         app.router.add_post("/v1/logs", self.handle_otlp)
         app.router.add_post("/v1/traces", self.handle_otlp)
         app.router.add_post("/v1/metrics", self.handle_otlp)
-        # Workaround for pi-otel (and potentially other OTel
-        # clients) that send HTTP/JSON OTLP to the root path
-        # instead of /v1/{signal}. pi-otel's pickByProtocol
-        # passes cfg.endpoint as the exporter url option,
-        # which bypasses the SDK's signal-path appending.
-        # See: https://github.com/NikiforovAll/pi-otel/issues/4
-        #
-        # TODO: Remove this route once pi-otel merges the
-        # upstream fix (NikiforovAll/pi-otel#6) and a new
-        # release is published. The local patched copy in
-        # ~/.pi already has the fix, but upstream v0.1.0
-        # still sends to POST /.
+        # Compatibility route: accept OTLP payloads on the
+        # root path for clients that send to the endpoint URL
+        # directly instead of appending /v1/{signal}.  This is
+        # harmless and keeps the receiver resilient regardless
+        # of client implementation details.
+        # History: https://github.com/NikiforovAll/pi-otel/issues/4
         app.router.add_post("/", self.handle_otlp)
         self.otlp_runner = web.AppRunner(app)
         await self.otlp_runner.setup()
         site = web.TCPSite(self.otlp_runner, "127.0.0.1", self.otlp_port)
-        log.info(f"OTLP Receiver listening on " f"http://127.0.0.1:{self.otlp_port}")
         await site.start()
+        self._otlp_ready.set()
+        log.info(f"OTLP Receiver listening on " f"http://127.0.0.1:{self.otlp_port}")
 
     async def update_agent_status(self):
         """Periodically derives agent_status from OTLP and output activity.
