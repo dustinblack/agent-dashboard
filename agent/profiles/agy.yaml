@@ -2,29 +2,26 @@
 # Google's replacement for Gemini CLI, which sunsets
 # June 18, 2026 for free/personal users.
 #
-# KNOWN LIMITATION: agy ignores the shell CWD and uses
-# its own workspace model. Spawning into a specific
-# project directory does not work — agy may start in
-# its scratch directory or pick a different project.
-# No --cwd or --workspace flag exists yet (GitHub
-# issue #7). This profile is experimental until Google
-# adds workspace targeting.
+# Requires agy >= 1.0.12 for --add-dir and --continue.
 name: agy
 display_name: Antigravity
 color: cyan
 binary: agy
 
 commands:
-  new: ["agy"]
-  # agy has no --resume CLI flag (GitHub issue #7).
-  # /resume works inside a session but can't be
-  # invoked from the command line. Setting resume
-  # equal to new suppresses the UI resume toggle.
-  resume: ["agy"]
+  # --add-dir . tells agy to include the CWD (set by
+  # the daemon via os.chdir) in its workspace, solving
+  # the previous CWD-ignorance limitation.
+  new: ["agy", "--add-dir", "."]
+  # --continue resumes the most recent conversation.
+  # Falls back to a new session if no history exists.
+  resume: ["bash", "-c", "agy --continue --add-dir . || agy --add-dir ."]
 
-# Telemetry env vars — starting with Gemini CLI's
-# OTLP conventions as a best guess. Update once
-# agy's actual telemetry behavior is verified.
+# Telemetry env vars — agy is built on the Gemini CLI
+# codebase and still honors the GEMINI_TELEMETRY_*
+# env vars for OTLP export (verified via binary
+# analysis of v1.0.15). The standard OTEL_* vars are
+# injected by the daemon automatically.
 env:
   GEMINI_CLI_TELEMETRY_ENABLED: "true"
   GEMINI_TELEMETRY_ENABLED: "true"
@@ -41,9 +38,9 @@ mcp:
   user_files:
     - ~/.gemini/antigravity-cli/settings.json
 
-# Telemetry mappings — starting with Gemini CLI's
-# metric names. Update once agy's actual OTLP
-# output is verified.
+# Telemetry mappings — agy shares Gemini CLI's OTLP
+# metric namespace (devtools.cider.agent.* internally,
+# exported as gemini_cli.* via the OTLP bridge).
 telemetry:
   token_metrics:
     - gemini_cli.token.usage
@@ -72,3 +69,4 @@ provisioning:
       mode: rw
   passthrough_env:
     - GEMINI_API_KEY
+    - GOOGLE_API_KEY

@@ -389,6 +389,10 @@ which sunsets **June 18, 2026** for free and personal
 users. Enterprise API key users can continue using
 Gemini CLI indefinitely.
 
+The Antigravity profile requires **agy >= 1.0.12**,
+which added `--add-dir` (workspace directory targeting)
+and `--continue` (session resume from the command line).
+
 ### Automatic migration
 
 On first launch, `agy` auto-migrates Gemini CLI config
@@ -396,6 +400,22 @@ On first launch, `agy` auto-migrates Gemini CLI config
 tools share the `~/.gemini` volume mount, migration
 finds existing config automatically. You can also run
 `agy plugin import gemini` manually inside a session.
+
+### Workspace targeting
+
+The profile uses `--add-dir .` to add the daemon's
+working directory to agy's workspace. This ensures
+agy operates on the correct project even though it
+does not use the shell CWD by default.
+
+### Session resume
+
+The resume command uses `--continue` to pick up the
+most recent conversation. If no prior session exists,
+it falls back to starting a new conversation. The
+`--conversation <id>` flag is also available for
+resuming a specific conversation, but the profile
+defaults to the simpler `--continue` behavior.
 
 ### Coexistence
 
