@@ -403,10 +403,14 @@ finds existing config automatically. You can also run
 
 ### Workspace targeting
 
-The profile uses `--add-dir .` to add the daemon's
-working directory to agy's workspace. This ensures
-agy operates on the correct project even though it
-does not use the shell CWD by default.
+The profile uses `--new-project --add-dir .` to create
+a fresh project context and add the daemon's working
+directory to agy's workspace. `--new-project` prevents
+agy's implicit memory (learned from previous host-side
+sessions) from bleeding stale paths into the container
+workspace. Without it, agy may try to navigate to
+host paths like `/home/user/...` that don't exist
+inside the container.
 
 ### Session resume
 
