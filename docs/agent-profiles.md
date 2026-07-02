@@ -14,6 +14,7 @@ Four profiles are included out of the box:
 |---------|------|-------------|
 | Claude | `agent/profiles/claude.yaml` | Claude Code CLI with OTLP telemetry and MCP detection |
 | Pi | `agent/profiles/pi.yaml` | Pi coding agent — provider-agnostic, supports Claude/GPT/Gemini/local models |
+| Antigravity | `agent/profiles/agy.yaml` | Antigravity CLI (`agy`) — Google's replacement for Gemini CLI |
 | Gemini | `agent/profiles/gemini.yaml` | Gemini CLI (sunset June 18, 2026 for free/personal users) |
 | Bash | `agent/profiles/bash.yaml` | Bash shell with PROMPT_COMMAND sidecar telemetry |
 
@@ -522,6 +523,55 @@ alternative emerges or one becomes unmaintained, swap
 it with `pi uninstall <old>` and `pi install <new>`.
 Update this documentation when replacing a recommended
 extension.
+
+## Migrating from Gemini CLI to Antigravity CLI
+
+Google's Antigravity CLI (`agy`) replaces Gemini CLI,
+which sunsets **June 18, 2026** for free and personal
+users. Enterprise API key users can continue using
+Gemini CLI indefinitely.
+
+The Antigravity profile requires **agy >= 1.0.12**,
+which added `--add-dir` (workspace directory targeting)
+and `--continue` (session resume from the command line).
+
+### Automatic migration
+
+On first launch, `agy` auto-migrates Gemini CLI config
+(MCP servers, permissions, keybindings). Since both
+tools share the `~/.gemini` volume mount, migration
+finds existing config automatically. You can also run
+`agy plugin import gemini` manually inside a session.
+
+### Workspace targeting
+
+The profile uses `--add-dir .` to add the daemon's
+working directory to agy's workspace. This ensures
+agy operates on the correct project even though it
+does not use the shell CWD by default.
+
+### Session resume
+
+The resume command uses `--continue` to pick up the
+most recent conversation. If no prior session exists,
+it falls back to starting a new conversation. The
+`--conversation <id>` flag is also available for
+resuming a specific conversation, but the profile
+defaults to the simpler `--continue` behavior.
+
+### Coexistence
+
+Both profiles can be active simultaneously during the
+transition period — Gemini and Antigravity appear as
+separate spawn buttons in the dashboard. This allows
+testing `agy` while keeping Gemini sessions running.
+
+### Post-sunset cleanup
+
+After June 18, 2026, free/personal users can remove
+`agent/profiles/gemini.yaml` and regenerate the
+Containerfile to drop Gemini CLI from the container
+image.
 
 ## Known Limitations
 

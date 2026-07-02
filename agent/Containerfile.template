@@ -90,6 +90,12 @@ RUN ARCH=$(uname -m) \
     && ln -s /opt/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud \
     && ln -s /opt/google-cloud-sdk/bin/gsutil /usr/local/bin/gsutil
 
+# Install Antigravity CLI (agy) — Google's replacement for Gemini CLI.
+# The installer drops the Go binary to ~/.local/bin/agy; the symlink
+# puts it on the container's default PATH.
+RUN curl -fsSL https://antigravity.google/cli/install.sh | bash \
+    && ln -sf /root/.local/bin/agy /usr/local/bin/agy
+
 # ── Agent tool installations (profile-driven) ─────
 {% if npm_packages %}
 RUN npm install -g {{ npm_packages | join(' ') }}
