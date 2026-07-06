@@ -1570,8 +1570,9 @@ class HostDaemon:
 
             return web.Response(
                 status=200,
-                body=b"{}",
+                text="{}",
                 content_type="application/json",
+                headers={"Connection": "close"},
             )
         except Exception as e:
             log.info(f"OTLP Error: {e}")
