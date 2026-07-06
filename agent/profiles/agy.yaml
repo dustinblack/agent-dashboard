@@ -64,6 +64,14 @@ provisioning:
   config_files:
     - path: "/root/.gemini/antigravity-cli"
       mkdir: true
+    # Default settings: disable non-workspace access so
+    # agy stays scoped to the project directory and
+    # prompts before exploring outside it.  The host
+    # volume mount overlays this at runtime, so users
+    # must also set allowNonWorkspaceAccess=false in
+    # their host-side settings.json.
+    - path: "/root/.gemini/antigravity-cli/settings.json"
+      content: '{"allowNonWorkspaceAccess": false}'
   verify: "agy --version"
   mounts:
     - host: "~/.gemini"
