@@ -412,6 +412,27 @@ workspace. Without it, agy may try to navigate to
 host paths like `/home/user/...` that don't exist
 inside the container.
 
+### Workspace isolation
+
+Set `allowNonWorkspaceAccess` to `false` in
+`~/.gemini/antigravity-cli/settings.json`:
+
+```json
+{
+  "allowNonWorkspaceAccess": false
+}
+```
+
+This prevents agy from reading or writing files
+outside the workspace directories. If you explicitly
+ask agy to access an external path, it will prompt
+for permission instead of silently exploring.
+
+The profile provisions this as the default for fresh
+installs, but the host `~/.gemini` volume mount
+overlays it at runtime — set it on your host machine
+to ensure it takes effect.
+
 ### Session resume
 
 The resume command uses `--continue` to pick up the
