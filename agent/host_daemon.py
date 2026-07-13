@@ -154,6 +154,11 @@ class HostDaemon:
         self.cached_projects = []
         self.projects_lock = asyncio.Lock()
         self.otlp_runner = None
+        # Event set once the OTLP HTTP server is
+        # listening.  spawn_agent() awaits this so
+        # pi-otel's 300 ms TCP probe at session_start
+        # doesn't race against server startup.
+        self._otlp_ready = asyncio.Event()
 
         @self.sio.on("*", namespace="/terminal")
         async def catch_all(event, data):
@@ -406,12 +411,15 @@ class HostDaemon:
             if profile.always_available:
                 tools.append(self._make_tool_info(profile))
                 continue
-            # Check if binary exists
+            # Check if binary exists. Use a generous
+            # timeout because some tools (e.g. Pi) load
+            # extensions during --version, which can take
+            # several seconds under load.
             try:
                 subprocess.run(
                     [profile.binary, "--version"],
                     capture_output=True,
-                    timeout=5,
+                    timeout=15,
                     check=False,
                 )
             except (OSError, subprocess.TimeoutExpired):
@@ -485,7 +493,7 @@ class HostDaemon:
             )
 
     @staticmethod
-    def _remote_to_web_url(remote_url: str) -> str | None:
+    def _remote_to_web_url(remote_url: str) -> Optional[str]:
         """Converts a git remote URL to an HTTPS web URL.
 
         Handles SSH and HTTPS formats:
@@ -744,6 +752,21 @@ class HostDaemon:
                 original_project_dir = os.path.dirname(git_common)
             except Exception:
                 pass
+
+        # Wait for the OTLP receiver to be listening
+        # before spawning the agent process.  pi-otel
+        # probes the endpoint with a 300 ms TCP connect
+        # at session_start; if the server isn't ready the
+        # probe fails and telemetry is silently disabled
+        # for the entire session.
+        try:
+            await asyncio.wait_for(self._otlp_ready.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            log.warning(
+                f"OTLP server not ready after 5 s — "
+                f"agent {agent_id} may not report "
+                f"telemetry"
+            )
 
         log.info(
             f"Spawning agent {agent_id} with tool: {tool} "
@@ -1110,10 +1133,30 @@ class HostDaemon:
             if val is not None:
                 output_tokens = int(val)
                 break
-        for key in ("cache_read_tokens", "cache_creation_tokens"):
+        # Cache tokens — check both short names (Claude)
+        # and GenAI semconv names (pi-otel).
+        cache_read = None
+        cache_creation = None
+        for key in (
+            "cache_read_tokens",
+            "gen_ai.usage.cache_read_input_tokens",
+        ):
             val = attrs.get(key)
             if val is not None:
-                cache_tokens = (cache_tokens or 0) + int(val)
+                cache_read = int(val)
+                break
+        for key in (
+            "cache_creation_tokens",
+            "gen_ai.usage.cache_creation_input_tokens",
+        ):
+            val = attrs.get(key)
+            if val is not None:
+                cache_creation = int(val)
+                break
+        if cache_read is not None or cache_creation is not None:
+            cache_tokens = (cache_read or 0) + (cache_creation or 0)
+        else:
+            cache_tokens = None
 
         if input_tokens is not None or output_tokens is not None:
             total = (input_tokens or 0) + (output_tokens or 0) + (cache_tokens or 0)
@@ -1130,13 +1173,24 @@ class HostDaemon:
             tel["context_tokens"] = input_tokens
             changed = True
 
+        # Cost — pi-otel puts cumulative session cost on
+        # pi.llm_request span attributes as pi.cost.usd.
+        cost = attrs.get("pi.cost.usd")
+        if cost is not None:
+            cost_f = float(cost)
+            if cost_f > tel.get("cost_usd", 0.0):
+                tel["cost_usd"] = cost_f
+                changed = True
+
         # Current activity — extract the latest tool/function
         # name from span or log attributes.  Gemini uses
-        # 'function_name', Claude uses 'tool_name'.
+        # 'function_name', Claude uses 'tool_name', pi-otel
+        # uses 'gen_ai.tool.name'.
         activity = None
         for key in (
             "function_name",
             "tool_name",
+            "gen_ai.tool.name",
             "gen_ai.operation.name",
         ):
             val = attrs.get(key)
@@ -1196,6 +1250,8 @@ class HostDaemon:
             tool_hint = "gemini"
         elif "claude" in svc.lower() or "claude" in all_vals:
             tool_hint = "claude"
+        elif "pi" == svc.lower() or "pi-otel" in all_vals:
+            tool_hint = "pi"
 
         if tool_hint:
             candidates = [
@@ -1232,7 +1288,18 @@ class HostDaemon:
         """
         try:
             data = await request.json()
-            log.info(f"OTLP received on {request.path}: " f"{list(data.keys())}")
+            # Identify signal types present in the payload
+            # for clearer logging (especially when requests
+            # arrive on the root-path compatibility route).
+            signals = [
+                k.replace("resource", "").lower()
+                for k in data
+                if k.startswith("resource")
+            ]
+            log.info(
+                f"OTLP received on {request.path}"
+                f" signals={signals or list(data.keys())}"
+            )
 
             # Optional verbose debug mode for inspecting
             # raw OTLP payloads from agent tools.
@@ -1284,6 +1351,7 @@ class HostDaemon:
                 agent_id = self._resolve_agent_id(res_attrs)
 
                 if not agent_id:
+                    log.info("OTLP: no agent match for trace" f" resource: {res_attrs}")
                     continue
                 tel = self.agents[agent_id]["telemetry"]
                 changed = False
@@ -1306,10 +1374,20 @@ class HostDaemon:
                         if self._update_telemetry_from_attrs(tel, attrs):
                             changed = True
 
+                        # Extract activity from span names like
+                        # "pi.tool.bash", "pi.tool.read", etc.
+                        # when attributes didn't provide it.
+                        span_name = span.get("name") or ""
+                        if span_name.startswith("pi.tool."):
+                            tool = span_name[len("pi.tool.") :]
+                            if tool and tel.get("current_activity") != tool:
+                                tel["current_activity"] = tool
+                                changed = True
+
                         # Check span name for permission /
                         # waiting signals (future-proofing for
                         # when tools emit these via OTLP).
-                        span_name = (span.get("name") or "").lower()
+                        span_name = span_name.lower()
                         if any(kw in span_name for kw in _wait_keywords):
                             info = self.agents[agent_id]
                             info["permission_candidate"] = time.monotonic()
@@ -1345,6 +1423,9 @@ class HostDaemon:
                 agent_id = self._resolve_agent_id(res_attrs)
 
                 if not agent_id:
+                    log.info(
+                        "OTLP: no agent match for metric" f" resource: {res_attrs}"
+                    )
                     continue
                 tel = self.agents[agent_id]["telemetry"]
                 changed = False
@@ -1366,8 +1447,13 @@ class HostDaemon:
                             )
 
                             # Model detection from any metric with a
-                            # 'model' attribute
-                            model = dp_attrs.get("model")
+                            # 'model' attribute. GenAI conventions
+                            # also use gen_ai.response.model.
+                            model = (
+                                dp_attrs.get("model")
+                                or dp_attrs.get("gen_ai.response.model")
+                                or dp_attrs.get("gen_ai.request.model")
+                            )
                             if (
                                 model
                                 and isinstance(model, str)
@@ -1376,7 +1462,17 @@ class HostDaemon:
                                 tel["model"] = model
                                 changed = True
 
-                            # Token tracking from tool-specific
+                            # Extract the data point value. Sum and
+                            # Gauge metrics use asInt/asDouble.
+                            # Histogram metrics store cumulative
+                            # totals in the "sum" field instead.
+                            dp_value = (
+                                dp.get("asInt")
+                                or dp.get("asDouble")
+                                or dp.get("sum")
+                                or 0
+                            )
+
                             # Token, cost, activity, and runtime
                             # metrics are matched against the
                             # lookup tables built from agent
@@ -1384,16 +1480,22 @@ class HostDaemon:
                             # are defined in the profile YAML
                             # files under agent/profiles/.
                             #
-                            # Token metrics are OTLP cumulative
-                            # Sum counters — use max() not +=.
+                            # Token metrics may be OTLP cumulative
+                            # Sum counters or Histograms (pi-otel
+                            # uses histograms). Use max() not +=.
                             if (
                                 name in self._token_metrics
                                 and name not in self._excluded_metrics
                             ):
-                                value = dp.get("asInt") or dp.get("asDouble") or 0
-                                if value:
-                                    int_value = int(value)
-                                    token_type = dp_attrs.get("type", "")
+                                if dp_value:
+                                    int_value = int(dp_value)
+                                    # Claude uses "type", GenAI
+                                    # semconv uses "gen_ai.token.type"
+                                    token_type = (
+                                        dp_attrs.get("type")
+                                        or dp_attrs.get("gen_ai.token.type")
+                                        or ""
+                                    )
                                     if token_type == "input":
                                         tel["input_tokens"] = max(
                                             tel.get("input_tokens", 0),
@@ -1409,7 +1511,10 @@ class HostDaemon:
                                             tel.get("cache_read_tokens", 0),
                                             int_value,
                                         )
-                                    elif token_type in ("cacheCreation", "cache"):
+                                    elif token_type in (
+                                        "cacheCreation",
+                                        "cache",
+                                    ):
                                         tel["cache_creation_tokens"] = max(
                                             tel.get("cache_creation_tokens", 0),
                                             int_value,
@@ -1424,18 +1529,19 @@ class HostDaemon:
 
                             # Cost metrics (cumulative Sum, USD)
                             if name in self._cost_metrics:
-                                value = dp.get("asDouble") or dp.get("asInt") or 0
-                                if value:
+                                if dp_value:
                                     tel["cost_usd"] = max(
                                         tel.get("cost_usd", 0.0),
-                                        float(value),
+                                        float(dp_value),
                                     )
                                     changed = True
 
                             # Activity metrics (tool/function name)
                             if name in self._activity_metrics:
-                                fn = dp_attrs.get("function_name") or dp_attrs.get(
-                                    "tool_name"
+                                fn = (
+                                    dp_attrs.get("function_name")
+                                    or dp_attrs.get("tool_name")
+                                    or dp_attrs.get("gen_ai.tool.name")
                                 )
                                 if fn and isinstance(fn, str):
                                     tel["current_activity"] = fn
@@ -1443,13 +1549,12 @@ class HostDaemon:
 
                             # Runtime duration metrics
                             if name in self._runtime_metrics:
-                                value = dp.get("asInt") or dp.get("asDouble") or 0
-                                if value:
+                                if dp_value:
                                     unit = self._runtime_metrics[name]
                                     if unit == "milliseconds":
-                                        tel["run_time_seconds"] = int(value / 1000)
+                                        tel["run_time_seconds"] = int(dp_value / 1000)
                                     else:
-                                        tel["run_time_seconds"] = int(value)
+                                        tel["run_time_seconds"] = int(dp_value)
                                     changed = True
 
                 if changed:
@@ -1461,7 +1566,12 @@ class HostDaemon:
                             namespace="/terminal",
                         )
 
-            return web.Response(status=200)
+            return web.Response(
+                status=200,
+                text="{}",
+                content_type="application/json",
+                headers={"Connection": "close"},
+            )
         except Exception as e:
             log.info(f"OTLP Error: {e}")
             return web.Response(status=400)
@@ -1472,11 +1582,19 @@ class HostDaemon:
         app.router.add_post("/v1/logs", self.handle_otlp)
         app.router.add_post("/v1/traces", self.handle_otlp)
         app.router.add_post("/v1/metrics", self.handle_otlp)
+        # Compatibility route: accept OTLP payloads on the
+        # root path for clients that send to the endpoint URL
+        # directly instead of appending /v1/{signal}.  This is
+        # harmless and keeps the receiver resilient regardless
+        # of client implementation details.
+        # History: https://github.com/NikiforovAll/pi-otel/issues/4
+        app.router.add_post("/", self.handle_otlp)
         self.otlp_runner = web.AppRunner(app)
         await self.otlp_runner.setup()
         site = web.TCPSite(self.otlp_runner, "127.0.0.1", self.otlp_port)
-        log.info(f"OTLP Receiver listening on " f"http://127.0.0.1:{self.otlp_port}")
         await site.start()
+        self._otlp_ready.set()
+        log.info(f"OTLP Receiver listening on " f"http://127.0.0.1:{self.otlp_port}")
 
     async def update_agent_status(self):
         """Periodically derives agent_status from OTLP and output activity.

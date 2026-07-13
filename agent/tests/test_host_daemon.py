@@ -301,6 +301,57 @@ class TestResolveAgentId:
         result = daemon._resolve_agent_id({"service.name": "unknown"})
         assert result is None
 
+    def test_pi_fallback_service_name_pi(self, daemon):
+        """Pi tool hint when service.name is exactly 'pi'.
+
+        pi-otel defaults service.name to 'pi' when
+        OTEL_SERVICE_NAME is not set. The daemon's
+        fallback logic must still route telemetry to
+        the correct Pi agent session.
+        """
+        daemon.agents["pi-1"] = {
+            "tool": "pi",
+            "last_output_time": 1.0,
+        }
+        result = daemon._resolve_agent_id({"service.name": "pi"})
+        assert result == "pi-1"
+
+    def test_pi_fallback_pi_otel_in_values(self, daemon):
+        """Pi tool hint from 'pi-otel' in resource attribute
+        values (e.g. telemetry.sdk.name or similar)."""
+        daemon.agents["pi-2"] = {
+            "tool": "pi",
+            "last_output_time": 1.0,
+        }
+        result = daemon._resolve_agent_id(
+            {"service.name": "unknown", "telemetry.sdk.name": "pi-otel"}
+        )
+        assert result == "pi-2"
+
+    def test_pi_fallback_multiple_candidates(self, daemon):
+        """Multiple Pi agents: picks most recent output."""
+        daemon.agents["pi-old"] = {
+            "tool": "pi",
+            "last_output_time": 1.0,
+        }
+        daemon.agents["pi-new"] = {
+            "tool": "pi",
+            "last_output_time": 99.0,
+        }
+        result = daemon._resolve_agent_id({"service.name": "pi"})
+        assert result == "pi-new"
+
+    def test_pi_direct_match_with_otel_service_name(self, daemon):
+        """When OTEL_SERVICE_NAME is set to the agent_id,
+        pi-otel sends the agent_id as service.name and
+        the daemon matches directly without fallback."""
+        daemon.agents["pi-abc12345"] = {
+            "tool": "pi",
+            "last_output_time": 1.0,
+        }
+        result = daemon._resolve_agent_id({"service.name": "pi-abc12345"})
+        assert result == "pi-abc12345"
+
 
 # ── E. get_git_info ──────────────────────────────────────────
 
@@ -567,6 +618,75 @@ class TestAgentProfiles:
 
         # Bash has no provisioning
         assert profiles["bash"].provisioning is None
+
+    def test_pi_profile_fields(self):
+        """Pi profile has expected configuration."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+        pi = profiles["pi"]
+        assert pi.binary == "pi"
+        assert pi.display_name == "Pi"
+        assert pi.color == "green"
+        assert pi.commands.new == ["pi"]
+        assert pi.supports_resume is True
+        assert pi.auth.env_vars == []
+        assert pi.provisioning is not None
+        assert "@earendil-works/pi-coding-agent" in pi.provisioning.install.npm
+        assert pi.provisioning.verify == "pi --version"
+        assert any(m.host == "~/.pi" for m in pi.provisioning.mounts)
+
+    def test_pi_profile_otel_env_vars(self):
+        """Pi profile sets OTEL_SERVICE_NAME and
+        PI_OTEL_METRICS for correct multi-instance
+        tracking and metric emission."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+        pi = profiles["pi"]
+        # OTEL_SERVICE_NAME must use {agent_id} placeholder
+        # so pi-otel reports the agent's unique ID instead
+        # of the default "pi".
+        assert "OTEL_SERVICE_NAME" in pi.env
+        assert "{agent_id}" in pi.env["OTEL_SERVICE_NAME"]
+        # PI_OTEL_METRICS must be "1" to enable the
+        # PeriodicExportingMetricReader in pi-otel's SDK.
+        assert pi.env.get("PI_OTEL_METRICS") == "1"
+        # OTLP protocol must be http/json for the daemon's
+        # HTTP receiver.
+        assert pi.env.get("OTEL_EXPORTER_OTLP_PROTOCOL") == "http/json"
+
+    def test_pi_profile_passthrough_env(self):
+        """Pi profile passes through env vars for core
+        and additional providers."""
+        from agent.profiles import load_profiles
+
+        profiles = load_profiles()
+        penv = profiles["pi"].provisioning.passthrough_env
+        # Core providers
+        assert "ANTHROPIC_API_KEY" in penv
+        assert "OPENAI_API_KEY" in penv
+        assert "GEMINI_API_KEY" in penv
+        # Google Cloud / Vertex AI
+        assert "GOOGLE_CLOUD_PROJECT" in penv
+        assert "GOOGLE_CLOUD_LOCATION" in penv
+        # Additional providers
+        assert "XAI_API_KEY" in penv
+        assert "GROQ_API_KEY" in penv
+        assert "DEEPSEEK_API_KEY" in penv
+        assert "AZURE_OPENAI_API_KEY" in penv
+        # Amazon Bedrock
+        assert "AWS_ACCESS_KEY_ID" in penv
+        assert "AWS_SECRET_ACCESS_KEY" in penv
+        assert "AWS_REGION" in penv
+
+    def test_pi_telemetry_metrics_in_lookup_tables(self, daemon):
+        """Pi's telemetry metrics are registered in the
+        daemon's OTLP lookup tables."""
+        assert "gen_ai.client.token.usage" in daemon._token_metrics
+        assert "gen_ai.client.tool.calls" in daemon._activity_metrics
+        assert "gen_ai.client.operation.duration" in daemon._runtime_metrics
+        assert daemon._runtime_metrics["gen_ai.client.operation.duration"] == "seconds"
 
     def test_unknown_profile_returns_empty(self):
         """Loading from empty directory returns no profiles."""

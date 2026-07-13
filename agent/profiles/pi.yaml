@@ -1,0 +1,101 @@
+# Pi coding agent profile
+# Provider-agnostic terminal coding agent by
+# Mario Zechner. Supports Claude, GPT, Gemini,
+# Grok, and local models (Ollama).
+# https://pi.dev / https://github.com/badlogic/pi-mono
+name: pi
+display_name: Pi
+color: green
+binary: pi
+
+commands:
+  new: ["pi"]
+  resume: ["bash", "-c", "pi --continue || pi"]
+
+# Set OTLP HTTP/JSON protocol for pi-otel. The
+# daemon's OTLP receiver accepts HTTP/JSON on port
+# 4318 and includes a root-path compatibility route
+# for clients that don't append /v1/{signal}.
+# History: NikiforovAll/pi-otel#4, #6.
+#
+# OTEL_SERVICE_NAME must be set explicitly because
+# pi-otel reads it with higher priority than
+# OTEL_RESOURCE_ATTRIBUTES. Without it, all Pi
+# sessions report service.name="pi" (the default in
+# pi-otel's config.js) and multi-instance tracking
+# breaks — the daemon can't distinguish which Pi
+# session emitted a given metric or span.
+#
+# PI_OTEL_METRICS enables the PeriodicExporting
+# MetricReader in the OTel SDK. Metrics are disabled
+# by default in pi-otel — without this flag, the
+# token_metrics, activity_metrics, and runtime_metric
+# defined below are never emitted. Token tracking
+# partially falls back to span attributes, but the
+# activity counter and duration histogram are lost.
+env:
+  OTEL_EXPORTER_OTLP_PROTOCOL: "http/json"
+  OTEL_SERVICE_NAME: "{agent_id}"
+  PI_OTEL_METRICS: "1"
+
+# No auth gate — Pi is provider-agnostic and
+# handles its own provider selection and auth.
+# Works with API keys, Vertex AI, or local models.
+
+# No permission_patterns — Pi's design philosophy
+# is "no permission popups" by default.
+
+# No mcp section — Pi uses its own extension system.
+# See "Recommended Pi Extensions" in docs/agent-profiles.md.
+
+# Telemetry requires the pi-otel extension.
+# Install inside a Pi session:
+#   pi install npm:pi-otel
+# Metric names from pi-otel v0.1.0 source
+# (dist/otel/metrics.js). Token usage is a
+# histogram — the daemon extracts the cumulative
+# sum from histogram data points.
+telemetry:
+  token_metrics:
+    - gen_ai.client.token.usage
+  activity_metrics:
+    - gen_ai.client.tool.calls
+  runtime_metric:
+    name: gen_ai.client.operation.duration
+    unit: seconds
+
+# Build-time provisioning metadata
+provisioning:
+  install:
+    npm:
+      - "@earendil-works/pi-coding-agent"
+  config_files:
+    - path: "/root/.pi/agent"
+      mkdir: true
+  verify: "pi --version"
+  mounts:
+    - host: "~/.pi"
+      container: "/root/.pi"
+      mode: rw
+  passthrough_env:
+    # Core providers
+    - ANTHROPIC_API_KEY
+    - OPENAI_API_KEY
+    - GEMINI_API_KEY
+    # Google Cloud / Vertex AI
+    - GOOGLE_CLOUD_PROJECT
+    - GOOGLE_CLOUD_LOCATION
+    - GOOGLE_APPLICATION_CREDENTIALS
+    # Additional providers — optional, only needed
+    # when using Pi with these specific backends.
+    - XAI_API_KEY
+    - GROQ_API_KEY
+    - DEEPSEEK_API_KEY
+    - AZURE_OPENAI_API_KEY
+    - AZURE_OPENAI_BASE_URL
+    # Amazon Bedrock
+    - AWS_PROFILE
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_BEARER_TOKEN_BEDROCK
+    - AWS_REGION

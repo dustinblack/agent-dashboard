@@ -14,6 +14,7 @@ Four profiles are included out of the box:
 |---------|------|-------------|
 | Claude | `agent/profiles/claude.yaml` | Claude Code CLI with OTLP telemetry and MCP detection |
 | Antigravity | `agent/profiles/agy.yaml` | Antigravity CLI (`agy`) — Google's replacement for Gemini CLI |
+| Pi | `agent/profiles/pi.yaml` | Pi coding agent — provider-agnostic, supports Claude/GPT/Gemini/local models |
 | Gemini | `agent/profiles/gemini.yaml` | Gemini CLI (sunset June 18, 2026 — replaced by Antigravity) |
 | Bash | `agent/profiles/bash.yaml` | Bash shell with PROMPT_COMMAND sidecar telemetry |
 
@@ -463,7 +464,182 @@ After June 18, 2026, free/personal users can remove
 Containerfile to drop Gemini CLI from the container
 image.
 
+## Recommended Pi Extensions
+
+Pi uses community extensions for telemetry and MCP
+connectivity. Extensions are installed per-user inside
+a Pi session and persist via the `~/.pi` volume mount.
+They cannot be pre-installed in the container image
+because the host volume mount overlays the container's
+`/root/.pi` directory at runtime.
+
+Install the following inside a Pi session on first use:
+
+| Extension | Install Command | Purpose |
+|-----------|----------------|---------|
+| [pi-otel](https://www.npmjs.com/package/pi-otel) | `pi install npm:pi-otel` | OTLP telemetry for dashboard cards (model, tokens, cost, activity). |
+| [pi-mcp](https://github.com/0xKobold/pi-mcp) | `pi install npm:@0xkobold/pi-mcp` | MCP server connectivity. Supports stdio, SSE, HTTP, and WebSocket transports. |
+
+Or install both at once:
+
+```
+pi install npm:pi-otel npm:@0xkobold/pi-mcp
+```
+
+### Extension configuration
+
+- **pi-otel**: The Pi profile injects the essential
+  OTLP environment variables at spawn time:
+  - `OTEL_EXPORTER_OTLP_ENDPOINT` — set by the daemon
+    to `http://127.0.0.1:{otlp_port}` for all tools.
+  - `OTEL_EXPORTER_OTLP_PROTOCOL` — set to `http/json`
+    so pi-otel uses the daemon's HTTP/JSON receiver.
+  - `OTEL_SERVICE_NAME` — set to the agent's unique ID
+    so the daemon can match OTLP data to the correct
+    session. **This is required for multi-instance
+    tracking.** Pi-otel reads `OTEL_SERVICE_NAME` with
+    higher priority than `OTEL_RESOURCE_ATTRIBUTES` —
+    without it, all Pi sessions report
+    `service.name="pi"` (the default) and the daemon
+    cannot distinguish between them.
+  - `PI_OTEL_METRICS` — set to `1` to enable the
+    `PeriodicExportingMetricReader` in the OTel SDK.
+    **Metrics are disabled by default in pi-otel.** Without
+    this, the token usage histogram, tool call counter,
+    and operation duration histogram defined in the Pi
+    profile's `telemetry` section are never emitted.
+    Token tracking partially falls back to span
+    attributes, but the activity counter and runtime
+    histogram are lost.
+
+  You can optionally configure additional settings in
+  `~/.pi/agent/settings.json`:
+  ```json
+  {
+    "otel": {
+      "enabled": true,
+      "protocol": "http/json",
+      "signals": {
+        "traces": true,
+        "metrics": true,
+        "logs": true
+      }
+    }
+  }
+  ```
+  The profile's env vars take precedence over
+  settings.json for the values they set. The `logs`
+  signal can be enabled via `PI_OTEL_LOGS=1` env var
+  or in settings.json — it forwards OTel internal
+  diagnostics to the OTLP endpoint.
+
+  > **Note (pi-otel v0.1.0):** HTTP exporters may
+  > send to `POST /` instead of `/v1/{signal}` paths
+  > ([details](https://github.com/NikiforovAll/pi-otel/issues/4)).
+  > The daemon includes a permanent root-path
+  > compatibility route that auto-detects the signal
+  > type from the payload, so this is handled
+  > transparently.
+- **pi-mcp**: Reads server configs from
+  `~/.pi/agent/mcp.json`. Can import configs from
+  Claude Code, Cursor, and VS Code.
+
+### Using Pi with Vertex AI
+
+Pi supports Claude and Gemini models via Google Cloud
+Vertex AI through the `@ssweens/pi-vertex` extension.
+
+**1. Install the extension** inside a Pi session:
+
+```
+pi install npm:@ssweens/pi-vertex
+```
+
+**2. Set the default provider** in
+`~/.pi/agent/settings.json`:
+
+```json
+{
+  "defaultProvider": "vertex",
+  "defaultModel": "claude-sonnet-4-6"
+}
+```
+
+This avoids needing `--provider vertex` on the command
+line — Pi will use Vertex AI by default for all
+sessions. You can also set `defaultModel` to your
+preferred model.
+
+**3. Add Vertex env vars** to your daemon quadlet or
+`podman run` command. Pi-vertex uses different env var
+names than Claude Code:
+
+```ini
+# If you already have ANTHROPIC_VERTEX_PROJECT_ID and
+# CLOUD_ML_REGION for Claude Code, add these with the
+# same values:
+Environment=GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+Environment=GOOGLE_CLOUD_LOCATION=us-east5
+```
+
+| Claude Code env var | Pi-vertex equivalent |
+|---|---|
+| `ANTHROPIC_VERTEX_PROJECT_ID` | `GOOGLE_CLOUD_PROJECT` |
+| `CLOUD_ML_REGION` | `GOOGLE_CLOUD_LOCATION` |
+| `CLAUDE_CODE_USE_VERTEX` | (not used by Pi) |
+
+The gcloud ADC credentials (`~/.config/gcloud` mount)
+handle authentication for both Claude Code and Pi — no
+additional credential setup needed.
+
+> **Note:** A built-in Vertex AI provider for Pi is
+> [proposed upstream](https://github.com/earendil-works/pi/issues/5082),
+> which would eliminate the need for this extension.
+
+### Replacing an extension
+
+These are community-maintained packages. If a better
+alternative emerges or one becomes unmaintained, swap
+it with `pi uninstall <old>` and `pi install <new>`.
+Update this documentation when replacing a recommended
+extension.
+
 ## Known Limitations
+
+### Self-signed TLS certificates
+
+Pi (and other Node.js-based agents like Claude Code and
+Gemini CLI) will reject connections to MCP servers or
+other services that use self-signed TLS certificates.
+If you need to connect to such services, set
+`NODE_TLS_REJECT_UNAUTHORIZED=0` in the agent's
+environment.
+
+The recommended approach is a [local override](#local-overrides)
+so you don't modify the tracked profile:
+
+```yaml
+# agent/profiles/pi.local.yaml
+name: pi
+env:
+  NODE_TLS_REJECT_UNAUTHORIZED: "0"
+```
+
+Alternatively, pass it through to the container at
+runtime:
+
+```bash
+-e NODE_TLS_REJECT_UNAUTHORIZED=0    # podman run
+Environment=NODE_TLS_REJECT_UNAUTHORIZED=0  # quadlet
+```
+
+> **Security note:** This disables TLS certificate
+> verification for all outbound HTTPS connections in
+> that agent process, not just the MCP server. Only
+> use this in environments where you trust the network
+> (e.g., internal development networks with a private
+> CA). The preferred solution is to install your CA
+> certificate in the container's trust store.
 
 ### Session resume path mismatch
 
@@ -486,6 +662,11 @@ so the CWD is identical in both environments.
 - The standard OTLP endpoint and resource attributes
   (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_RESOURCE_ATTRIBUTES`)
   are always injected by the daemon regardless of profile.
+- Some OTel SDKs (notably pi-otel) read `OTEL_SERVICE_NAME`
+  with higher priority than the `service.name` key in
+  `OTEL_RESOURCE_ATTRIBUTES`. Profiles for such tools
+  should set `OTEL_SERVICE_NAME: "{agent_id}"` in their
+  `env` section to ensure correct multi-instance tracking.
 - Generic permission patterns (Y/n, yes/no, Continue?, etc.)
   are always active. Profile patterns are merged in addition.
 - Profile changes require a daemon restart to take effect.

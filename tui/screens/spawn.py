@@ -5,6 +5,8 @@ The user selects host, tool, project, session mode,
 worktree isolation, and optionally a task description.
 """
 
+from __future__ import annotations
+
 from typing import Dict, List
 
 from textual.app import ComposeResult
