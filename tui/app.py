@@ -9,6 +9,8 @@ Usage:
     python -m tui.app [--url URL]
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 import subprocess

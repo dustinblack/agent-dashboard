@@ -11,6 +11,8 @@ Can be run standalone or invoked by the dashboard TUI
 when attaching to an agent via tmux.
 """
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import os

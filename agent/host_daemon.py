@@ -493,7 +493,7 @@ class HostDaemon:
             )
 
     @staticmethod
-    def _remote_to_web_url(remote_url: str) -> str | None:
+    def _remote_to_web_url(remote_url: str) -> Optional[str]:
         """Converts a git remote URL to an HTTPS web URL.
 
         Handles SSH and HTTPS formats:
