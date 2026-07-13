@@ -27,7 +27,7 @@ export const CONTEXT_TIERS = [
  * suffix they default to 200k. The suffix is parsed in
  * `getContextWindow()` before consulting this map.
  *
- * Last verified: 2026-04-15
+ * Last verified: 2026-05-28
  */
 export const CONTEXT_WINDOWS: Record<string, number> = {
   // Claude — all default to 200k; 1M via [1m] suffix
@@ -42,6 +42,7 @@ export const CONTEXT_WINDOWS: Record<string, number> = {
   'claude-3-5': 200000,
   'claude-3': 200000,
   // Gemini — all 1,048,576 input tokens
+  'gemini-3.5-flash': 1048576,
   'gemini-3.1-pro': 1048576,
   'gemini-3.1-flash': 1048576,
   'gemini-3-flash': 1048576,
@@ -262,7 +263,7 @@ export const getProgressColor = (pct: number): string => {
  * - Anthropic: https://docs.anthropic.com/en/docs/about-claude/pricing
  * - Google: https://ai.google.dev/pricing
  *
- * Last verified: 2026-04-15
+ * Last verified: 2026-05-28
  */
 export interface ModelPricing {
   /** Dollars per million input tokens. */
@@ -328,6 +329,7 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     cacheWrite: 1,
   },
   // Gemini
+  'gemini-3.5-flash': { input: 0.15, output: 0.6 },
   'gemini-3.1-pro': { input: 2, output: 12 },
   'gemini-3.1-flash': { input: 0.25, output: 1.5 },
   'gemini-3-flash': { input: 0.5, output: 3 },

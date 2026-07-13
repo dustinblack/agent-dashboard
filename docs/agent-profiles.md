@@ -8,12 +8,13 @@ startup.
 
 ## Bundled Profiles
 
-Three profiles are included out of the box:
+Four profiles are included out of the box:
 
 | Profile | File | Description |
 |---------|------|-------------|
 | Claude | `agent/profiles/claude.yaml` | Claude Code CLI with OTLP telemetry and MCP detection |
-| Gemini | `agent/profiles/gemini.yaml` | Gemini CLI with custom telemetry endpoints |
+| Antigravity | `agent/profiles/agy.yaml` | Antigravity CLI (`agy`) — Google's replacement for Gemini CLI |
+| Gemini | `agent/profiles/gemini.yaml` | Gemini CLI (sunset June 18, 2026 — replaced by Antigravity) |
 | Bash | `agent/profiles/bash.yaml` | Bash shell with PROMPT_COMMAND sidecar telemetry |
 
 ## Creating a Custom Profile
@@ -380,6 +381,87 @@ Restart the daemon. The new tool will automatically:
 - Have its resume toggle derived from the commands config
 
 No frontend or backend code changes are required.
+
+## Migrating from Gemini CLI to Antigravity CLI
+
+Google's Antigravity CLI (`agy`) replaces Gemini CLI,
+which sunset **June 18, 2026** for free and personal
+users. Enterprise API key users can continue using
+Gemini CLI.
+
+The Antigravity profile requires **agy >= 1.0.12**,
+which added `--add-dir` (workspace directory targeting)
+and `--continue` (session resume from the command line).
+
+### Automatic migration
+
+On first launch, `agy` auto-migrates Gemini CLI config
+(MCP servers, permissions, keybindings). Since both
+tools share the `~/.gemini` volume mount, migration
+finds existing config automatically. You can also run
+`agy plugin import gemini` manually inside a session.
+
+### Workspace targeting
+
+The profile uses `--new-project --add-dir .` to create
+a fresh project context and add the daemon's working
+directory to agy's workspace. `--new-project` prevents
+agy's implicit memory (learned from previous host-side
+sessions) from bleeding stale paths into the container
+workspace. Without it, agy may try to navigate to
+host paths like `/home/user/...` that don't exist
+inside the container.
+
+### Workspace isolation
+
+The following settings in
+`~/.gemini/antigravity-cli/settings.json` are
+recommended for dashboard use:
+
+```json
+{
+  "allowNonWorkspaceAccess": false,
+  "enableTelemetry": true
+}
+```
+
+- **`allowNonWorkspaceAccess: false`** — prevents agy
+  from reading or writing files outside the workspace.
+  If you explicitly ask agy to access an external
+  path, it will prompt for permission instead of
+  silently exploring.
+- **`enableTelemetry: true`** — required for OTLP
+  telemetry export. Without this, `settings.json`
+  overrides the profile’s `GEMINI_CLI_TELEMETRY_ENABLED`
+  env var and telemetry is silently disabled.
+
+The profile provisions these as defaults for fresh
+installs, but the host `~/.gemini` volume mount
+overlays them at runtime — set them on your host
+machine to ensure they take effect.
+
+### Session resume
+
+The resume command uses `--continue` to pick up the
+most recent conversation. If no prior session exists,
+it falls back to starting a new conversation. The
+`--conversation <id>` flag is also available for
+resuming a specific conversation, but the profile
+defaults to the simpler `--continue` behavior.
+
+### Coexistence
+
+Both profiles can be active simultaneously during the
+transition period — Gemini and Antigravity appear as
+separate spawn buttons in the dashboard. This allows
+testing `agy` while keeping Gemini sessions running.
+
+### Post-sunset cleanup
+
+After June 18, 2026, free/personal users can remove
+`agent/profiles/gemini.yaml` and regenerate the
+Containerfile to drop Gemini CLI from the container
+image.
 
 ## Known Limitations
 
