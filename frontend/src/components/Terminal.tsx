@@ -391,14 +391,19 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       performFit();
 
       // Detect stale sessions: if history never completes
-      // within 5s, the daemon likely no longer has this agent
+      // within 15s, the daemon likely no longer has this
+      // agent.  The timeout must be long enough to cover
+      // daemon restarts — the backend re-requests history
+      // when a daemon joins a room that already has a UI
+      // client, but the daemon needs time to reconnect,
+      // spawn the agent, and join the room first.
       if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
       historyTimeoutRef.current = setTimeout(() => {
         if (isReplaying.current) {
           setSessionLost(true);
           isReplaying.current = false;
         }
-      }, 5000);
+      }, 15000);
     });
 
     socket.on('history_complete', (data: { agent_id: string }) => {
