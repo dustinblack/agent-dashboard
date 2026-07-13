@@ -451,14 +451,13 @@ pi install npm:pi-otel npm:@0xkobold/pi-mcp
   or in settings.json — it forwards OTel internal
   diagnostics to the OTLP endpoint.
 
-  > **Known issue (pi-otel v0.1.0):** HTTP exporters
+  > **Note (pi-otel v0.1.0):** HTTP exporters may
   > send to `POST /` instead of `/v1/{signal}` paths
-  > due to a
-  > [URL construction bug](https://github.com/NikiforovAll/pi-otel/issues/4).
-  > A [fix has been submitted](https://github.com/NikiforovAll/pi-otel/pull/6)
-  > upstream. The daemon includes a root-path
-  > workaround that auto-detects the signal type from
-  > the payload — remove it once the fix is released.
+  > ([details](https://github.com/NikiforovAll/pi-otel/issues/4)).
+  > The daemon includes a permanent root-path
+  > compatibility route that auto-detects the signal
+  > type from the payload, so this is handled
+  > transparently.
 - **pi-mcp**: Reads server configs from
   `~/.pi/agent/mcp.json`. Can import configs from
   Claude Code, Cursor, and VS Code.
