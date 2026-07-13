@@ -1290,9 +1290,7 @@ class HostDaemon:
             data = await request.json()
             # Identify signal types present in the payload
             # for clearer logging (especially when requests
-            # arrive on the root-path workaround route).
-            # Signal-sniffing helps when payloads arrive on
-            # the root-path compatibility route.
+            # arrive on the root-path compatibility route).
             signals = [
                 k.replace("resource", "").lower()
                 for k in data
