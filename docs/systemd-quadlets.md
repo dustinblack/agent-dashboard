@@ -32,6 +32,12 @@ Volume=agent-dashboard-data.volume:/app/data
 Environment=DATABASE_URL=sqlite:////app/data/agent_dashboard.db
 Environment=BYPASS_AUTH=true
 
+[Service]
+# Restart on failure, e.g. if the database or network
+# is not fully ready at boot.
+Restart=on-failure
+RestartSec=5s
+
 [Install]
 WantedBy=multi-user.target
 ```
@@ -45,6 +51,12 @@ After=network-online.target agent-dashboard-backend.service
 [Container]
 Image=localhost/agent-dashboard_frontend:latest
 PublishPort=8080:80
+
+[Service]
+# Restart on failure, e.g. if the backend is not yet
+# accepting connections at boot.
+Restart=on-failure
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
@@ -96,6 +108,12 @@ Volume=%h/.claude/:/root/.claude
 Volume=%h/.config/gcloud:/root/.config/gcloud:ro
 Volume=%h/.config/gh:/root/.config/gh:ro
 Volume=%h/.config/glab-cli:/root/.config/glab-cli:ro
+
+[Service]
+# Restart on failure, e.g. if the dashboard host or
+# network is not fully ready at boot.
+Restart=on-failure
+RestartSec=5s
 
 [Install]
 WantedBy=default.target
