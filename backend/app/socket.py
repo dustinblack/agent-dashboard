@@ -127,6 +127,39 @@ async def handle_join_room(sid, data):
                 {"agent_id": agent_id},
                 namespace="/terminal",
             )
+        else:
+            # A daemon just joined an agent room.  If a UI
+            # client is already in the room (e.g. a browser
+            # tab that refreshed while the daemon was
+            # restarting), re-request history so the
+            # terminal gets populated.  Without this, the
+            # UI's initial request_history fires before the
+            # daemon is ready, history never arrives, and
+            # the frontend declares the session lost.
+            room_sids = sio.manager.get_participants(
+                namespace="/terminal", room=agent_id
+            )
+            for room_sid, _ in room_sids:
+                if room_sid == sid:
+                    continue
+                room_session = await sio.get_session(room_sid, namespace="/terminal")
+                is_room_host = (
+                    room_session.get("is_host", False) if room_session else False
+                )
+                if not is_room_host:
+                    # At least one UI client is waiting —
+                    # request history replay from the daemon.
+                    print(
+                        f"Re-requesting history for "
+                        f"{agent_id} (daemon joined "
+                        f"after UI client)"
+                    )
+                    await sio.emit(
+                        "request_history",
+                        {"agent_id": agent_id},
+                        namespace="/terminal",
+                    )
+                    break
 
 
 @sio.on("request_projects", namespace="/terminal")
