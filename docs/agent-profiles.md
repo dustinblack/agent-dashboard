@@ -14,7 +14,7 @@ Four profiles are included out of the box:
 |---------|------|-------------|
 | Claude | `agent/profiles/claude.yaml` | Claude Code CLI with OTLP telemetry and MCP detection |
 | Antigravity | `agent/profiles/agy.yaml` | Antigravity CLI (`agy`) — Google's replacement for Gemini CLI |
-| Gemini | `agent/profiles/gemini.yaml` | Gemini CLI (sunsets June 18, 2026 for free/personal users) |
+| Gemini | `agent/profiles/gemini.yaml` | Gemini CLI (sunset June 18, 2026 — replaced by Antigravity) |
 | Bash | `agent/profiles/bash.yaml` | Bash shell with PROMPT_COMMAND sidecar telemetry |
 
 ## Creating a Custom Profile
@@ -385,9 +385,9 @@ No frontend or backend code changes are required.
 ## Migrating from Gemini CLI to Antigravity CLI
 
 Google's Antigravity CLI (`agy`) replaces Gemini CLI,
-which sunsets **June 18, 2026** for free and personal
+which sunset **June 18, 2026** for free and personal
 users. Enterprise API key users can continue using
-Gemini CLI indefinitely.
+Gemini CLI.
 
 The Antigravity profile requires **agy >= 1.0.12**,
 which added `--add-dir` (workspace directory targeting)
@@ -414,24 +414,31 @@ inside the container.
 
 ### Workspace isolation
 
-Set `allowNonWorkspaceAccess` to `false` in
-`~/.gemini/antigravity-cli/settings.json`:
+The following settings in
+`~/.gemini/antigravity-cli/settings.json` are
+recommended for dashboard use:
 
 ```json
 {
-  "allowNonWorkspaceAccess": false
+  "allowNonWorkspaceAccess": false,
+  "enableTelemetry": true
 }
 ```
 
-This prevents agy from reading or writing files
-outside the workspace directories. If you explicitly
-ask agy to access an external path, it will prompt
-for permission instead of silently exploring.
+- **`allowNonWorkspaceAccess: false`** — prevents agy
+  from reading or writing files outside the workspace.
+  If you explicitly ask agy to access an external
+  path, it will prompt for permission instead of
+  silently exploring.
+- **`enableTelemetry: true`** — required for OTLP
+  telemetry export. Without this, `settings.json`
+  overrides the profile’s `GEMINI_CLI_TELEMETRY_ENABLED`
+  env var and telemetry is silently disabled.
 
-The profile provisions this as the default for fresh
+The profile provisions these as defaults for fresh
 installs, but the host `~/.gemini` volume mount
-overlays it at runtime — set it on your host machine
-to ensure it takes effect.
+overlays them at runtime — set them on your host
+machine to ensure they take effect.
 
 ### Session resume
 
