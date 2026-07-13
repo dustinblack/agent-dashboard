@@ -102,7 +102,7 @@ recovers automatically from unexpected exits:
 ```ini
 [Service]
 Restart=on-failure
-RestartSec=5
+RestartSec=5s
 ```
 
 ## Telemetry
