@@ -64,14 +64,19 @@ provisioning:
   config_files:
     - path: "/root/.gemini/antigravity-cli"
       mkdir: true
-    # Default settings: disable non-workspace access so
-    # agy stays scoped to the project directory and
-    # prompts before exploring outside it.  The host
-    # volume mount overlays this at runtime, so users
-    # must also set allowNonWorkspaceAccess=false in
-    # their host-side settings.json.
+    # Default settings:
+    # - allowNonWorkspaceAccess=false: keeps agy scoped
+    #   to the project workspace; prompts before
+    #   accessing external paths.
+    # - enableTelemetry=true: required for OTLP export.
+    #   Without this, settings.json overrides the
+    #   GEMINI_CLI_TELEMETRY_ENABLED env var and
+    #   telemetry is silently disabled.
+    # The host volume mount overlays this at runtime,
+    # so users must also set these in their host-side
+    # ~/.gemini/antigravity-cli/settings.json.
     - path: "/root/.gemini/antigravity-cli/settings.json"
-      content: '{"allowNonWorkspaceAccess": false}'
+      content: '{"allowNonWorkspaceAccess": false, "enableTelemetry": true}'
   verify: "agy --version"
   mounts:
     - host: "~/.gemini"
