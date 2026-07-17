@@ -874,10 +874,13 @@ class HostDaemon:
             # SIGWINCH natively, and persists across daemon
             # restarts (Phase 3).  The session name is the
             # agent_id so we can target it for resize and
-            # cleanup.  remain-on-exit keeps the tmux
-            # session alive after the agent process exits
-            # so the daemon's PTY read loop sees EOF and
-            # triggers close_agent cleanly.
+            # cleanup.
+            #
+            # The tmux client must run ATTACHED (no -d
+            # flag).  With -d, tmux forks a server and
+            # the client exits immediately — the PTY
+            # closes, the daemon sees EOF, and the agent
+            # enters a crash/respawn loop.
             #
             # Environment variables are exported before
             # exec because tmux new-session does not
@@ -888,7 +891,6 @@ class HostDaemon:
             tmux_cmd = [
                 "tmux",
                 "new-session",
-                "-d",
                 "-s",
                 tmux_session,
                 "-x",
