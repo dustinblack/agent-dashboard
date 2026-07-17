@@ -5,7 +5,7 @@
 <h1 align="center">Agent Dashboard</h1>
 
 <p align="center">
-A multi-host orchestration platform for AI coding agents — spawn, monitor, and interact with Gemini CLI and Claude Code sessions across multiple machines from a single web dashboard.
+A multi-host orchestration platform for AI coding agents — spawn, monitor, and interact with Claude Code, Pi, Antigravity, Gemini, and Bash sessions across multiple machines from a single web dashboard.
 </p>
 
 <p align="center">
@@ -25,9 +25,11 @@ A multi-host orchestration platform for AI coding agents — spawn, monitor, and
 
 Agent Dashboard is a **multi-host orchestration platform** for
 AI coding agents. It remotely spawns, monitors, and provides
-interactive terminal access to Gemini CLI and Claude Code
-sessions running across multiple development machines — all
-from a single web interface.
+interactive terminal access to AI coding agent sessions
+running across multiple development machines — all from a
+single web interface. Supports Claude Code, Pi, Antigravity
+(agy), Gemini CLI, and Bash out of the box, with new agents
+added via YAML profiles.
 
 > [!TIP]
 > **How it works:** Install the hub (backend + frontend) on any
@@ -41,9 +43,9 @@ The platform consists of three layers: a **React frontend**
 served by Nginx, a **FastAPI + Socket.IO backend hub** that
 coordinates sessions, and **containerized host daemons** deployed
 on each development machine. The daemons spawn agent processes
-in pseudo-terminals, relay I/O over Socket.IO, and collect
-OpenTelemetry telemetry including token usage, model info, and
-session cost.
+inside tmux sessions for terminal stability, relay I/O over
+Socket.IO, and collect OpenTelemetry telemetry including token
+usage, model info, and session cost.
 
 > **Browser support:** Modern browsers (Chrome, Firefox, Edge,
 > Safari 15+). Touch scrolling supported on tablets. The layout
@@ -54,9 +56,9 @@ session cost.
 
 ### Core Architecture
 - **Multi-host orchestration** — Deploy containerized daemons on
-  any number of development machines. Spawn and manage Gemini,
-  Claude, and Bash sessions across all hosts from a single
-  dashboard.
+  any number of development machines. Spawn and manage Claude,
+  Pi, Antigravity, Gemini, and Bash sessions across all hosts
+  from a single dashboard.
 - **Extensible agent profiles** — Agent tools are defined by
   YAML/JSON [profile configs](docs/agent-profiles.md) rather
   than hardcoded logic. Each profile declares runtime behavior
@@ -73,7 +75,7 @@ session cost.
   (input/output/cache breakdown), and session cost directly from
   agent CLI tools — no screen-scraping or terminal interference.
 - **Cost tracking** — Real session cost from Claude Code's OTLP
-  metrics; estimated cost for Gemini from built-in pricing
+  metrics; estimated cost for other agents from built-in pricing
   tables. Displayed per-session on each agent card.
 - **TUI frontend (experimental)** — Terminal-based dashboard
   alternative to the web UI, built with Python Textual. Manage
@@ -86,7 +88,7 @@ session cost.
   repositories (configurable depth); select a project directory
   from the dropdown when spawning an agent.
 - **Session resume** — The spawn modal includes a session mode
-  toggle (Resume / New) for Claude and Gemini agents. Resume
+  toggle (Resume / New) for supported agents. Resume
   continues the most recent conversation in the selected project
   directory or worktree, preserving context across daemon
   restarts. New
@@ -96,8 +98,8 @@ session cost.
   so multiple agents can work on the same repository without
   conflicts. Smart defaults enable isolation when another agent
   is already active on the project.
-- **Companion sessions** — Open a Bash shell alongside a Claude
-  or Gemini session in the same project directory. Companions
+- **Companion sessions** — Open a Bash shell alongside any
+  agent session in the same project directory. Companions
   inherit the parent's working context (worktree or original).
 - **Host management** — Register, monitor, and delete hosts with
   cascading cleanup of associated sessions.
@@ -277,7 +279,8 @@ podman run -d --name host-daemon --network=host --privileged \
 
 1. Open `http://your-server-ip:8080`
 2. Your registered hosts appear on the dashboard
-3. Click **Spawn Gemini**, **Spawn Claude**, or **Spawn Bash**
+3. Click **Spawn Claude**, **Spawn Pi**, **Spawn Antigravity**,
+   **Spawn Gemini**, or **Spawn Bash**
 4. Select a project directory from the dropdown
 5. Click a running session to attach in a terminal popup
 6. Delete retired hosts via the trash icon
@@ -297,9 +300,9 @@ graph LR
     subgraph Host Machine 1
         HD1["Host Daemon"]
         OTLP1["OTLP Receiver<br/>:4318"]
-        subgraph PTY Sessions
-            A1["Claude<br/>(PTY)"]
-            A2["Gemini<br/>(PTY)"]
+        subgraph tmux Sessions
+            A1["Claude<br/>(tmux)"]
+            A2["Pi / agy<br/>(tmux)"]
         end
     end
 
@@ -345,7 +348,7 @@ sequenceDiagram
     participant HD as Host Daemon
     participant PTY as Agent (PTY)
 
-    User->>FE: Click "Spawn Claude"
+    User->>FE: Click "Spawn Agent"
     FE->>API: POST /agents/spawn<br/>{host_id, tool, project_dir,<br/>task_description, session_mode,<br/>use_worktree, cols, rows}
     API->>DB: INSERT agent record
     API->>SIO: emit("spawn_agent", {...})
@@ -399,7 +402,7 @@ and host, the toggle automatically switches on as a **smart
 default** to prevent conflicts. You can always override the
 toggle in either direction before spawning.
 
-Companion sessions (e.g. a Bash shell opened from a Claude
+Companion sessions (e.g. a Bash shell opened from an agent
 session) always inherit the parent's working directory —
 whether that's the original repo or a worktree. No additional
 worktree is created for companions.
@@ -421,12 +424,12 @@ graph LR
     end
 
     subgraph WT1 ["Worktree A"]
-        C2["Claude Agent"]
+        C2["Pi Agent"]
         B1["Bash Companion"]
     end
 
     subgraph WT2 ["Worktree B"]
-        G1["Gemini Agent"]
+        G1["Antigravity Agent"]
     end
 
     GIT -.->|"creates"| WT1
@@ -434,9 +437,9 @@ graph LR
 
     style GIT fill:#374151,color:#fff
     style C1 fill:#2d1f4e,color:#fff
-    style C2 fill:#2d1f4e,color:#fff
+    style C2 fill:#1a3326,color:#fff
     style B1 fill:#374151,color:#fff
-    style G1 fill:#1e3a5f,color:#fff
+    style G1 fill:#164e63,color:#fff
     style REPO fill:#1a3326,color:#fff
     style WT1 fill:#3b2e1a,color:#fff
     style WT2 fill:#3b2e1a,color:#fff
@@ -444,7 +447,7 @@ graph LR
 
 In this example, three agents work on the same project without
 conflicts: one Claude agent works directly in the original repo,
-while a second Claude (with a Bash companion) and a Gemini agent
+while a Pi agent (with a Bash companion) and an Antigravity agent
 each have their own isolated worktree with a separate branch.
 
 ## Troubleshooting
