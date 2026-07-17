@@ -32,3 +32,4 @@ agent/Containerfile
 
 # Local Agent Configs
 .claude/settings.local.json
+.coverage

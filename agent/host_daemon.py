@@ -209,12 +209,33 @@ class HostDaemon:
             cols = data.get("cols")
             rows = data.get("rows")
             if agent_id in self.agents and cols and rows:
+                # Resize the tmux window so the agent TUI
+                # redraws at the new dimensions.  Also
+                # resize the outer PTY so the kernel's
+                # line discipline matches.
                 master_fd = self.agents[agent_id]["master_fd"]
                 size = struct.pack("HHHH", rows, cols, 0, 0)
                 try:
                     fcntl.ioctl(master_fd, termios.TIOCSWINSZ, size)
                 except Exception as e:
-                    log.info(f"Failed to resize terminal {agent_id}: {e}")
+                    log.info(f"Failed to resize PTY {agent_id}: {e}")
+                try:
+                    subprocess.run(
+                        [
+                            "tmux",
+                            "resize-window",
+                            "-t",
+                            agent_id,
+                            "-x",
+                            str(cols),
+                            "-y",
+                            str(rows),
+                        ],
+                        capture_output=True,
+                        check=False,
+                    )
+                except Exception as e:
+                    log.info(f"Failed to resize tmux window" f" {agent_id}: {e}")
 
         @self.sio.on("spawn_agent", namespace="/terminal")
         async def on_spawn_agent(data):
@@ -848,16 +869,52 @@ class HostDaemon:
                     f"{profile.sidecar.prompt_command} > {sidecar_path}"
                 )
 
+            # Wrap the agent command in a tmux session.
+            # tmux manages the terminal buffer, handles
+            # SIGWINCH natively, and persists across daemon
+            # restarts (Phase 3).  The session name is the
+            # agent_id so we can target it for resize and
+            # cleanup.
+            #
+            # The tmux client must run ATTACHED (no -d
+            # flag).  With -d, tmux forks a server and
+            # the client exits immediately — the PTY
+            # closes, the daemon sees EOF, and the agent
+            # enters a crash/respawn loop.
+            #
+            # Environment variables are exported before
+            # exec because tmux new-session does not
+            # forward the child's env to the spawned
+            # command — it inherits from the tmux server.
+            # We use env(1) to inject them explicitly.
+            tmux_session = agent_id
+            tmux_cmd = [
+                "tmux",
+                "new-session",
+                "-s",
+                tmux_session,
+                "-x",
+                str(cols),
+                "-y",
+                str(rows),
+                "env",
+            ]
+            # Pass all env vars through env(1) so the
+            # agent process inherits them inside tmux.
+            for k, v in env.items():
+                tmux_cmd.append(f"{k}={v}")
+            tmux_cmd.extend(cmd)
+
             try:
-                os.execvpe(cmd[0], cmd, env)
+                os.execvpe(tmux_cmd[0], tmux_cmd, env)
             except Exception as e:
-                log.info(f"Failed to execute {cmd}: {e}")
+                log.info(f"Failed to execute {tmux_cmd}: {e}")
                 os._exit(1)
         else:  # Parent process
-            # Set initial PTY dimensions before the agent
-            # starts producing output. This avoids the brief
-            # period where the PTY defaults to 80x24 while the
-            # frontend sends a resize after connecting.
+            # Set initial PTY dimensions.  The tmux
+            # new-session -x/-y flags set the window size,
+            # but we also set the outer PTY so the first
+            # output frame renders at the correct size.
             try:
                 size = struct.pack("HHHH", rows, cols, 0, 0)
                 fcntl.ioctl(fd, termios.TIOCSWINSZ, size)
@@ -992,13 +1049,24 @@ class HostDaemon:
             await asyncio.sleep(0.01)
 
     def close_agent(self, agent_id: str):
-        """Closes the PTY fd and removes an agent from tracking."""
+        """Closes the PTY fd, kills the tmux session, and
+        removes an agent from tracking."""
         if agent_id in self.agents:
             log.info(f"Closing agent {agent_id}")
             fd = self.agents[agent_id]["master_fd"]
             try:
                 os.close(fd)
             except OSError:
+                pass
+            # Kill the tmux session to clean up the
+            # server-side window and processes.
+            try:
+                subprocess.run(
+                    ["tmux", "kill-session", "-t", agent_id],
+                    capture_output=True,
+                    check=False,
+                )
+            except Exception:
                 pass
             # Clean up sidecar telemetry file if the
             # profile defines one
