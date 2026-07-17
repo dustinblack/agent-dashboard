@@ -2,8 +2,8 @@
 
 The host daemon runs on each development machine as a
 containerized service. It connects to the hub, spawns AI agent
-sessions in pseudo-terminals, relays I/O, and collects
-OpenTelemetry telemetry.
+sessions in pseudo-terminals (via tmux), relays I/O, and
+collects OpenTelemetry telemetry.
 
 For basic setup, see the [Getting Started](../README.md#4-deploy-the-host-daemon)
 section of the main README.
@@ -176,6 +176,31 @@ services:
 > automatically. The version is displayed in the dashboard
 > header and used for upgrade notifications.
 
+## Agent Process Architecture
+
+Each agent runs inside a **tmux session** rather than
+directly in a PTY. The daemon forks a child process that
+executes `tmux new-session -s {agent_id}`, and the agent
+command runs inside the tmux window. The daemon reads
+and writes the tmux session's outer PTY, so the I/O
+relay is transparent.
+
+Benefits:
+- **Resize stability** — tmux handles `SIGWINCH`
+  natively, reducing resize race conditions.
+- **Terminal query isolation** — tmux answers DA/CPR
+  escape sequence queries locally instead of routing
+  them through the Socket.IO path.
+- **Foundation for persistence** — future phases will
+  use tmux's scrollback buffer for history replay and
+  reattach to surviving tmux sessions after daemon
+  restarts (see [#83](https://github.com/dustinblack/agent-dashboard/issues/83)).
+
+The tmux session name is the agent's UUID, used for
+targeted resize (`tmux resize-window`) and cleanup
+(`tmux kill-session`). tmux is included in the
+container image.
+
 ## Included Tools
 
 The daemon container bundles the following tools:
@@ -187,6 +212,7 @@ The daemon container bundles the following tools:
 | **Google Cloud CLI** (`gcloud`) | GCP authentication for Claude via Vertex AI |
 | **GitHub CLI** (`gh`) | GitHub interaction (PRs, issues, etc.) |
 | **GitLab CLI** (`glab`) | GitLab interaction (MRs, issues, etc.) |
+| **tmux** | Terminal multiplexer for agent session management |
 | **Git** | Version control |
 | **Podman** | Container builds and runtimes (podman-in-podman) |
 | **Go** (`golang`) | Go builds and tests |

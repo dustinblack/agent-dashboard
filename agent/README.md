@@ -1,6 +1,6 @@
 # Agent Dashboard Host Daemon
 
-The Host Daemon runs on remote development machines and manages AI agent sessions for the Agent Dashboard. It listens for spawn commands from the Hub, multiplexes agent I/O through pseudo-terminals, and relays output to the frontend via Socket.IO.
+The Host Daemon runs on remote development machines and manages AI agent sessions for the Agent Dashboard. It listens for spawn commands from the Hub, spawns agents inside tmux sessions for terminal stability, and relays I/O to the frontend via Socket.IO.
 
 ## Prerequisites
 - Python 3.9+
