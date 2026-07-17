@@ -26,6 +26,12 @@ dist-ssr/
 # Coverage reports
 coverage/
 htmlcov/
+.coverage
+
+# Pi runtime state (persisted via host volume mount)
+.pi/artifacts/
+.pi/task-registry.json
+.pi/task-session-history.json
 
 # Generated files
 agent/Containerfile
