@@ -891,6 +891,7 @@ class HostDaemon:
             tmux_cmd = [
                 "tmux",
                 "new-session",
+
                 "-s",
                 tmux_session,
                 "-x",
