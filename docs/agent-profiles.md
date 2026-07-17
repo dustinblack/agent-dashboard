@@ -479,12 +479,17 @@ Install the following inside a Pi session on first use:
 |-----------|----------------|---------|
 | [pi-otel](https://www.npmjs.com/package/pi-otel) | `pi install npm:pi-otel` | OTLP telemetry for dashboard cards (model, tokens, cost, activity). |
 | [pi-mcp](https://github.com/0xKobold/pi-mcp) | `pi install npm:@0xkobold/pi-mcp` | MCP server connectivity. Supports stdio, SSE, HTTP, and WebSocket transports. |
+| [pi-task](https://github.com/heyhuynhgiabuu/pi-task) | `pi install npm:@heyhuynhgiabuu/pi-task` | Sub-agent delegation with tmux pane visibility. Proactive agents explore, research, and review in parallel. |
 
-Or install both at once:
+Install all at once:
 
 ```
-pi install npm:pi-otel npm:@0xkobold/pi-mcp
+pi install npm:pi-otel npm:@0xkobold/pi-mcp npm:@heyhuynhgiabuu/pi-task
 ```
+
+> **Note:** Extensions persist via the `~/.pi` volume
+> mount. Install once per host — they survive container
+> restarts.
 
 ### Extension configuration
 
@@ -543,6 +548,69 @@ pi install npm:pi-otel npm:@0xkobold/pi-mcp
 - **pi-mcp**: Reads server configs from
   `~/.pi/agent/mcp.json`. Can import configs from
   Claude Code, Cursor, and VS Code.
+- **pi-task**: Spawns sub-agents in tmux panes
+  (visible in the dashboard terminal) or falls back
+  to the Pi SDK when tmux is unavailable. Includes
+  four built-in agent types:
+  - **explore** (proactive) — read-only codebase
+    mapping with `path:line` evidence.
+  - **scout** (proactive) — web/docs research for
+    answers not found in the repo.
+  - **general** (proactive) — multi-step tasks:
+    research, implementation, or mixed.
+  - **reviewer** (proactive) — code review after
+    non-trivial edits.
+
+  **Important:** pi-task's bundled agents default to
+  `opencode-go/deepseek-v4-flash`, which fails if
+  that provider isn't configured. Copy the dashboard's
+  agent overrides (which remove the hardcoded model so
+  sub-agents inherit from `settings.json`) to your Pi
+  user config:
+
+  ```bash
+  cp -r agent/pi-defaults/agents/ ~/.pi/agents/
+  ```
+
+  Set `PI_TASK_CHILD_NO_EXTENSIONS=1` in the Pi
+  profile's env if sub-agents crash on startup due to
+  extension load errors (e.g. pi-vertex `baseUrl`
+  bug, see [#94](https://github.com/dustinblack/agent-dashboard/issues/94)).
+
+  When running inside the dashboard's tmux-wrapped
+  sessions (#83), pi-task automatically detects tmux
+  and creates split panes for sub-agents. The parent
+  and sub-agent panes are both visible in the
+  dashboard terminal.
+
+### Alternative: pi-subagents
+
+[pi-subagents](https://www.npmjs.com/package/@tintinweb/pi-subagents)
+(by tintinweb) is a popular alternative sub-agent
+extension that uses Pi's in-process SDK instead of
+tmux. It provides Claude Code-style tool names
+(`Agent`, `get_subagent_result`, `steer_subagent`),
+a live widget UI, FleetView, and scheduled agents.
+
+Install as a replacement or alongside pi-task:
+
+```
+pi install npm:@tintinweb/pi-subagents
+```
+
+| Feature | pi-task | pi-subagents |
+|---------|---------|-------------|
+| Execution | tmux panes (visible) | In-process (invisible) |
+| tmux required | No (SDK fallback) | No |
+| Proactive delegation | Yes | Yes |
+| Steering mid-run | No | Yes |
+| Session resume | Yes (tmux) | Yes |
+| Dashboard visibility | Sub-agent panes visible | No — runs inside parent |
+
+pi-task is recommended for dashboard use because
+sub-agent activity is visible in the terminal. Both
+extensions can coexist but will register competing
+`task`/`Agent` tools — install only one at a time.
 
 ### Using Pi with Vertex AI
 
