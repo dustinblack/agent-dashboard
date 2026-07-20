@@ -57,6 +57,28 @@ PERMISSION_IDLE_SECONDS = 2
 # output before pattern matching.
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
+# Terminal capability queries that tmux sends on startup.
+# These trigger round-trip responses through Socket.IO →
+# xterm.js → Socket.IO → daemon → PTY, causing visible
+# jitter as tmux redraws after each response.  Stripping
+# them from the output stream prevents the round-trip
+# without affecting tmux functionality (it falls back to
+# defaults for unresponded queries).
+_TMUX_QUERIES = re.compile(
+    rb"\x1b\[c"  # DA1 (Device Attributes)
+    rb"|\x1b\[>c"  # DA2 (Secondary Device Attributes)
+    rb"|\x1b\[>q"  # Terminal name query (XTVERSION)
+    rb"|\x1b\]10;\?\x1b\\"  # Foreground color query
+    rb"|\x1b\]11;\?\x1b\\"  # Background color query
+)
+
+# Seconds to buffer output after agent spawn before
+# relaying to the frontend.  tmux emits several bursts
+# of startup escape sequences over ~300 ms; buffering
+# coalesces them into a single Socket.IO emit, which
+# eliminates visible terminal jitter on connect.
+_STARTUP_BUFFER_SECS = 0.5
+
 
 def _split_utf8(data: bytes) -> tuple:
     """Splits a byte string at the last complete UTF-8 character boundary.
@@ -932,6 +954,8 @@ class HostDaemon:
                 "permission_waiting": False,
                 "permission_candidate": 0,
                 "utf8_buffer": b"",
+                "startup_buffer": b"",
+                "spawn_time": time.monotonic(),
                 "worktree_path": worktree_path,
                 "worktree_branch": worktree_branch,
                 "original_project_dir": original_project_dir,
@@ -1003,6 +1027,25 @@ class HostDaemon:
                         if not chunk:
                             break
                         raw += chunk
+
+                    # Strip tmux terminal capability queries
+                    # to prevent round-trip jitter.
+                    raw = _TMUX_QUERIES.sub(b"", raw)
+                    if not raw:
+                        continue
+
+                    # Buffer output during the startup
+                    # window so tmux's initialization bursts
+                    # are coalesced into one emit.
+                    elapsed = time.monotonic() - info.get("spawn_time", 0)
+                    if elapsed < _STARTUP_BUFFER_SECS:
+                        info["startup_buffer"] += raw
+                        continue
+
+                    # Flush any buffered startup output.
+                    if info.get("startup_buffer"):
+                        raw = info.pop("startup_buffer") + raw
+
                     if self.sio.connected:
                         # Prepend any leftover bytes from a
                         # previously split UTF-8 character.
