@@ -126,6 +126,9 @@ RUN pip3 install --no-cache-dir black flake8 pylint
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
+# Default tmux configuration for agent sessions
+COPY tmux.conf /root/.tmux.conf
+
 # Copy the daemon as a Python package so imports
 # (e.g. from agent.profiles) work correctly.
 COPY __init__.py agent/
