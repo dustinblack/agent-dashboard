@@ -872,6 +872,38 @@ class HostDaemon:
         else:
             cmd = [tool]
 
+        # Patch spawn-time settings files before forking.
+        # Some agent tools (e.g. agy) read settings from
+        # JSON config files at startup, and those files
+        # may be on host volume mounts that override the
+        # container's built-in defaults.  spawn_settings
+        # ensures required keys are present without
+        # overwriting user customizations.
+        if profile and profile.spawn_settings:
+            for filepath, required_keys in profile.spawn_settings.items():
+                filepath = os.path.expanduser(filepath)
+                try:
+                    existing = {}
+                    if os.path.exists(filepath):
+                        with open(filepath, "r", encoding="utf-8") as f:
+                            existing = json.load(f)
+                    changed = False
+                    for key, value in required_keys.items():
+                        if key not in existing:
+                            existing[key] = value
+                            changed = True
+                    if changed:
+                        os.makedirs(
+                            os.path.dirname(filepath),
+                            exist_ok=True,
+                        )
+                        with open(filepath, "w", encoding="utf-8") as f:
+                            json.dump(existing, f, indent=2)
+                            f.write("\n")
+                        log.info(f"Patched spawn settings: " f"{filepath}")
+                except Exception as e:
+                    log.info(f"Failed to patch spawn settings " f"{filepath}: {e}")
+
         pid, fd = pty.fork()
         if pid == 0:  # Child process
             if full_path and os.path.exists(full_path):
