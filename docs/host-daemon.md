@@ -12,7 +12,6 @@ section of the main README.
 
 ```bash
 podman run -d --name host-daemon --network=host \
-  --privileged \
   -e DASHBOARD_URL="http://your-server-ip:8000" \
   -e HOST_TOKEN="secret-token-123" \
   -e PROJECTS_ROOT="/git" \
@@ -35,10 +34,30 @@ podman run -d --name host-daemon --network=host \
 ```
 
 > [!WARNING]
-> `--privileged` is required for container-in-container support
-> (e.g., agents building and running containers during
-> development sessions). This also implicitly disables SELinux
-> label confinement.
+> **Do not use `--privileged` with rootless Podman.** In
+> rootless mode, `--privileged` causes `crun` to attempt
+> privileged mount operations that the unprivileged user
+> namespace cannot perform, resulting in exit code 126
+> (permission denied). Standard agent operations do not
+> require `--privileged`.
+
+> [!TIP]
+> **Nested containers (podman-in-podman):** If agents need
+> to build or run containers inside the daemon container,
+> mount the host sub-ID mapping files instead of using
+> `--privileged`:
+> ```bash
+> -v /etc/subuid:/etc/subuid:ro \
+> -v /etc/subgid:/etc/subgid:ro
+> ```
+> For Quadlet configurations, add:
+> ```ini
+> Volume=/etc/subuid:/etc/subuid:ro
+> Volume=/etc/subgid:/etc/subgid:ro
+> ```
+> This gives the container access to user namespace
+> sub-ID ranges needed for rootless container image
+> layer unpacking without requiring host root privileges.
 
 > [!TIP]
 > **Missing config directories:** Volume mounts will fail

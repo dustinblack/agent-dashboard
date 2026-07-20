@@ -83,7 +83,6 @@ After=network-online.target
 [Container]
 Image=localhost/agent-dashboard-daemon:latest
 Network=host
-PodmanArgs=--privileged
 
 # Environment Variables
 Environment=DASHBOARD_URL=http://your-server-ip:8000
@@ -108,6 +107,13 @@ Volume=%h/.claude/:/root/.claude
 Volume=%h/.config/gcloud:/root/.config/gcloud:ro
 Volume=%h/.config/gh:/root/.config/gh:ro
 Volume=%h/.config/glab-cli:/root/.config/glab-cli:ro
+
+# Nested container support (optional)
+# Uncomment these lines if agents need to run podman-in-podman
+# for container builds. Do NOT use --privileged — it causes
+# exit code 126 in rootless mode.
+#Volume=/etc/subuid:/etc/subuid:ro
+#Volume=/etc/subgid:/etc/subgid:ro
 
 [Service]
 # Restart on failure, e.g. if the dashboard host or

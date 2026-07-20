@@ -238,7 +238,7 @@ podman build -t agent-dashboard-daemon -f Containerfile .
 Run with minimum required configuration:
 
 ```bash
-podman run -d --name host-daemon --network=host --privileged \
+podman run -d --name host-daemon --network=host \
   -e DASHBOARD_URL="http://your-server-ip:8000" \
   -e HOST_TOKEN="secret-token-123" \
   -e PROJECTS_ROOT="/git" \
