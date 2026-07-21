@@ -39,20 +39,18 @@ Installs `~/.pi/agent/AGENTS.md` with task delegation
 guidance that tells the model when and how to use
 sub-agents proactively.
 
-### pi-task Tool Rename (`task` → `Agent`)
+### pi-task Tool Name (`task` → `Agent`)
 
 Claude (the model) is trained to proactively delegate
 to a tool called `Agent` (Claude Code's built-in
-sub-agent tool name). pi-task registers its tool as
-`task`, which the model treats as a generic tool and
-only uses when explicitly asked.
+sub-agent tool name). pi-task defaults to `task`,
+which the model treats as a generic tool and only uses
+when explicitly asked.
 
-The setup script renames the tool from `task` to
-`Agent` via a sed patch, causing the model to delegate
-autonomously. This is a workaround pending an upstream
-configuration option
-([heyhuynhgiabuu/pi-task#11](https://github.com/heyhuynhgiabuu/pi-task/issues/11)).
+The Pi profile sets `PI_TASK_TOOL_NAME=Agent` in its
+env vars, which pi-task (>= 0.3.5) reads at startup.
+This causes the model to delegate autonomously,
+matching Claude Code's native sub-agent behavior.
 
-> **Note:** The patch must be reapplied after upgrading
-> pi-task (`pi install npm:@heyhuynhgiabuu/pi-task`).
-> Run `setup.sh` again after upgrades.
+No manual patching is needed — the env var is injected
+automatically by the daemon at spawn time.

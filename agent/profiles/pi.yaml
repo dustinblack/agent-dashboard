@@ -37,6 +37,11 @@ env:
   OTEL_EXPORTER_OTLP_PROTOCOL: "http/json"
   OTEL_SERVICE_NAME: "{agent_id}"
   PI_OTEL_METRICS: "1"
+  # Rename pi-task's tool from 'task' to 'Agent' so
+  # the model delegates proactively (Claude is trained
+  # to use a tool called 'Agent' for sub-agents).
+  # Requires pi-task >= 0.3.5.
+  PI_TASK_TOOL_NAME: "Agent"
 
 # No auth gate — Pi is provider-agnostic and
 # handles its own provider selection and auth.
