@@ -138,6 +138,7 @@ class AgentProfile:
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     sidecar: Optional[SidecarConfig] = None
     permission_patterns: List[str] = field(default_factory=list)
+    spawn_settings: Dict[str, Dict[str, object]] = field(default_factory=dict)
     provisioning: Optional[ProvisioningConfig] = None
 
     @property
@@ -250,6 +251,9 @@ def _parse_profile(data: dict) -> AgentProfile:
             ],
             passthrough_env=prov.get("passthrough_env", []),
         )
+
+    # Spawn settings — JSON files to patch at spawn time
+    profile.spawn_settings = data.get("spawn_settings", {})
 
     return profile
 

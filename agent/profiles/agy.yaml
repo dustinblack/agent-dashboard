@@ -36,6 +36,18 @@ env:
 # No auth gate — agy supports Google OAuth and API
 # keys. The CLI handles its own auth prompts.
 
+# Spawn-time settings — patch the host-mounted
+# settings.json to ensure required keys are present.
+# agy reads enableTelemetry from settings.json and
+# ignores the GEMINI_CLI_TELEMETRY_ENABLED env var.
+# allowNonWorkspaceAccess=false keeps agents scoped
+# to the project directory.  Only missing keys are
+# added — existing user values are preserved.
+spawn_settings:
+  ~/.gemini/antigravity-cli/settings.json:
+    enableTelemetry: true
+    allowNonWorkspaceAccess: false
+
 mcp:
   user_files:
     - ~/.gemini/antigravity-cli/settings.json
