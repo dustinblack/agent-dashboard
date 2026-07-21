@@ -561,16 +561,20 @@ pi install npm:pi-otel npm:@0xkobold/pi-mcp npm:@heyhuynhgiabuu/pi-task
   - **reviewer** (proactive) — code review after
     non-trivial edits.
 
-  **Important:** pi-task's bundled agents default to
-  `opencode-go/deepseek-v4-flash`, which fails if
-  that provider isn't configured. Copy the dashboard's
-  agent overrides (which remove the hardcoded model so
-  sub-agents inherit from `settings.json`) to your Pi
-  user config:
+  **Setup required:** Run the setup script after
+  installing pi-task:
 
   ```bash
-  cp -r agent/pi-defaults/agents/ ~/.pi/agents/
+  ./agent/pi-defaults/setup.sh
   ```
+
+  This installs agent overrides (removes the hardcoded
+  `opencode-go` model so sub-agents inherit from
+  `settings.json`), a global `AGENTS.md` with
+  delegation guidance, and renames pi-task's tool from
+  `task` to `Agent` so the model delegates proactively
+  (see [heyhuynhgiabuu/pi-task#11](https://github.com/heyhuynhgiabuu/pi-task/issues/11)).
+  Re-run after pi-task upgrades.
 
   Set `PI_TASK_CHILD_NO_EXTENSIONS=1` in the Pi
   profile's env if sub-agents crash on startup due to
