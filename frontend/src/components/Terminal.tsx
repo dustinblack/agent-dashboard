@@ -357,6 +357,28 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       });
     }
 
+    // --- Mouse wheel scrolling ---
+    // tmux mouse mode is OFF so that xterm.js handles
+    // text selection and right-click natively (browser
+    // behavior).  Without mouse mode, scroll events
+    // pass through to the agent process which interprets
+    // them as input history navigation.  Intercept wheel
+    // events on the terminal container and convert them
+    // to xterm.js scrollLines() calls so trackpad/mouse
+    // scrolling navigates the terminal scrollback buffer.
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const lines = Math.round(e.deltaY / LINE_HEIGHT_PX);
+      if (lines !== 0) {
+        term.scrollLines(lines);
+      }
+    };
+    if (screenEl) {
+      screenEl.addEventListener('wheel', onWheel, {
+        passive: false,
+      });
+    }
+
     // --- Output batching ---
     // Buffer rapid successive terminal_output events and
     // flush them in a single term.write() per animation
@@ -498,6 +520,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         screenEl.removeEventListener('touchstart', onTouchStart);
         screenEl.removeEventListener('touchmove', onTouchMove);
         screenEl.removeEventListener('touchend', onTouchEnd);
+        screenEl.removeEventListener('wheel', onWheel);
       }
       socket.disconnect();
       term.dispose();
