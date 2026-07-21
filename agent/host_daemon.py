@@ -1138,7 +1138,13 @@ class HostDaemon:
                             pass
                 except OSError:
                     self.close_agent(agent_id)
-            await asyncio.sleep(0.01)
+            # When data was relayed, yield to the event
+            # loop without wall-clock delay so other
+            # coroutines run but the next read starts
+            # immediately.  On idle cycles (select returned
+            # nothing) we still fall through quickly since
+            # select itself already waited up to 0.1 s.
+            await asyncio.sleep(0)
 
     def close_agent(self, agent_id: str):
         """Closes the PTY fd, kills the tmux session, and
