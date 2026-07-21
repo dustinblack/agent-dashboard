@@ -362,16 +362,28 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     // text selection and right-click natively (browser
     // behavior).  Without mouse mode, scroll events
     // pass through to the agent process which interprets
-    // them as input history navigation.  Intercept wheel
-    // events on the terminal container and convert them
-    // to xterm.js scrollLines() calls so trackpad/mouse
-    // scrolling navigates the terminal scrollback buffer.
+    // them as input history navigation.
+    //
+    // xterm.js scrollLines() doesn't work here because
+    // tmux runs in the alternate screen buffer, which
+    // has no xterm.js scrollback.  Instead, intercept
+    // wheel events and send them as terminal input via
+    // the Socket.IO channel — the daemon writes them
+    // to the PTY, and tmux/the agent process handles
+    // them as arrow key presses.
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      if (!socketRef.current?.connected) return;
       const lines = Math.round(e.deltaY / LINE_HEIGHT_PX);
-      if (lines !== 0) {
-        term.scrollLines(lines);
-      }
+      if (lines === 0) return;
+      // Send arrow up/down key sequences for each line
+      const key = lines > 0 ? '\x1b[B' : '\x1b[A'; // down : up
+      const count = Math.abs(lines);
+      const input = key.repeat(Math.min(count, 10)); // cap to avoid flooding
+      socketRef.current.emit('terminal_input', {
+        target_sid: agentId,
+        input,
+      });
     };
     if (screenEl) {
       screenEl.addEventListener('wheel', onWheel, {
