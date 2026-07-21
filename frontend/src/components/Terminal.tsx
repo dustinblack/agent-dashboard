@@ -357,6 +357,46 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       });
     }
 
+    // --- Mouse wheel scrolling ---
+    // tmux has mouse mode ON for scroll handling, but
+    // the daemon strips mouse tracking escape sequences
+    // from the output stream so xterm.js never enters
+    // application mouse mode.  This means the browser
+    // handles text selection and right-click natively.
+    //
+    // Since xterm.js doesn't know about mouse tracking,
+    // wheel events stay in the browser.  We intercept
+    // them and send synthesized SGR mouse wheel escape
+    // sequences to tmux via Socket.IO.  tmux processes
+    // these as scroll events in its scrollback buffer.
+    //
+    // SGR (mode 1006) mouse wheel format:
+    //   \x1b[<64;col;rowM  = wheel up
+    //   \x1b[<65;col;rowM  = wheel down
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (!socketRef.current?.connected) return;
+      const lines = Math.round(e.deltaY / LINE_HEIGHT_PX);
+      if (lines === 0) return;
+      // Send SGR mouse wheel sequences — one per line,
+      // capped to avoid flooding the PTY.
+      const button = lines > 0 ? 65 : 64; // down : up
+      const count = Math.min(Math.abs(lines), 10);
+      let input = '';
+      for (let i = 0; i < count; i++) {
+        input += `\x1b[<${button};1;1M`;
+      }
+      socketRef.current.emit('terminal_input', {
+        target_sid: agentId,
+        input,
+      });
+    };
+    if (screenEl) {
+      screenEl.addEventListener('wheel', onWheel, {
+        passive: false,
+      });
+    }
+
     // --- Output batching ---
     // Buffer rapid successive terminal_output events and
     // flush them in a single term.write() per animation
@@ -498,6 +538,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         screenEl.removeEventListener('touchstart', onTouchStart);
         screenEl.removeEventListener('touchmove', onTouchMove);
         screenEl.removeEventListener('touchend', onTouchEnd);
+        screenEl.removeEventListener('wheel', onWheel);
       }
       socket.disconnect();
       term.dispose();

@@ -72,6 +72,17 @@ _TMUX_QUERIES = re.compile(
     rb"|\x1b\]11;\?\x1b\\"  # Background color query
 )
 
+# Mouse tracking escape sequences that tmux sends when
+# mouse mode is enabled.  Stripping these from the
+# output prevents xterm.js from entering application
+# mouse mode, so the browser handles text selection,
+# right-click, and copy/paste natively.  The frontend
+# sends synthesized SGR mouse wheel sequences for
+# scroll, which tmux processes normally.
+_MOUSE_TRACKING = re.compile(
+    rb"\x1b\[\?(?:1000|1002|1003|1004|1005|1006|1015|1016)[hl]"
+)
+
 # Seconds to buffer output after agent spawn before
 # relaying to the frontend.  tmux emits several bursts
 # of startup escape sequences over ~300 ms; buffering
@@ -1080,6 +1091,10 @@ class HostDaemon:
                     # Strip tmux terminal capability queries
                     # to prevent round-trip jitter.
                     raw = _TMUX_QUERIES.sub(b"", raw)
+                    # Strip mouse tracking sequences so
+                    # xterm.js stays in normal mouse mode
+                    # (browser-native text selection).
+                    raw = _MOUSE_TRACKING.sub(b"", raw)
                     if not raw:
                         continue
 
@@ -1138,7 +1153,13 @@ class HostDaemon:
                             pass
                 except OSError:
                     self.close_agent(agent_id)
-            await asyncio.sleep(0.01)
+            # When data was relayed, yield to the event
+            # loop without wall-clock delay so other
+            # coroutines run but the next read starts
+            # immediately.  On idle cycles (select returned
+            # nothing) we still fall through quickly since
+            # select itself already waited up to 0.1 s.
+            await asyncio.sleep(0)
 
     def close_agent(self, agent_id: str):
         """Closes the PTY fd, kills the tmux session, and
