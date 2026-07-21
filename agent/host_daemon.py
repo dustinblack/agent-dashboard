@@ -326,10 +326,27 @@ class HostDaemon:
             agent_id = data.get("agent_id")
             if agent_id in self.agents and self.sio.connected:
                 log.info(f"Replaying history for agent: {agent_id}")
+                # Concatenate history into batches to reduce
+                # the number of Socket.IO emits.  Sending
+                # 1000 individual chunks takes several seconds
+                # due to per-emit async overhead; batching
+                # into ~64 KB payloads cuts the replay to a
+                # handful of emits.
+                batch = ""
+                batch_limit = 65536
                 for chunk in self.agents[agent_id]["history"]:
+                    batch += chunk
+                    if len(batch) >= batch_limit:
+                        await self.sio.emit(
+                            "terminal_output",
+                            {"sid": agent_id, "output": batch},
+                            namespace="/terminal",
+                        )
+                        batch = ""
+                if batch:
                     await self.sio.emit(
                         "terminal_output",
-                        {"sid": agent_id, "output": chunk},
+                        {"sid": agent_id, "output": batch},
                         namespace="/terminal",
                     )
                 await self.sio.emit(
