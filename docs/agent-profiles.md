@@ -570,11 +570,14 @@ pi install npm:pi-otel npm:@0xkobold/pi-mcp npm:@heyhuynhgiabuu/pi-task
 
   This installs agent overrides (removes the hardcoded
   `opencode-go` model so sub-agents inherit from
-  `settings.json`), a global `AGENTS.md` with
-  delegation guidance, and renames pi-task's tool from
-  `task` to `Agent` so the model delegates proactively
-  (see [heyhuynhgiabuu/pi-task#11](https://github.com/heyhuynhgiabuu/pi-task/issues/11)).
-  Re-run after pi-task upgrades.
+  `settings.json`) and a global `AGENTS.md` with
+  delegation guidance. Re-run after pi-task upgrades.
+
+  The Pi profile also sets `PI_TASK_TOOL_NAME=Agent`
+  to rename the tool from `task` to `Agent`, which
+  causes the model to delegate proactively (requires
+  pi-task >= 0.3.5). This is automatic — no manual
+  configuration needed.
 
   Set `PI_TASK_CHILD_NO_EXTENSIONS=1` in the Pi
   profile's env if sub-agents crash on startup due to
