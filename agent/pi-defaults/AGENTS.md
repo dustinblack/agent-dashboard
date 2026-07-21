@@ -2,8 +2,8 @@
 
 ## Task Delegation
 
-When a `task` tool is available, use it proactively to
-delegate work to specialist sub-agents:
+When an `Agent` tool is available, use it proactively
+to delegate work to specialist sub-agents:
 
 - **explore** — use when you need to map unfamiliar
   parts of the codebase, find symbols across modules,
