@@ -34,6 +34,29 @@ mkdir -p "${PI_DIR}"
 cp "${SCRIPT_DIR}/AGENTS.md" "${PI_DIR}/AGENTS.md"
 echo "  ✓ Installed task delegation guidance"
 
+# 3. Patch pi-task v0.3.5 getAllTools() crash
+# pi-task v0.3.5 calls pi.getAllTools() during
+# extension loading, before the runtime is
+# initialized. Pi rejects this with "Action methods
+# cannot be called during extension loading".
+# Patch out the collision check until upstream fixes
+# this. Tracking: heyhuynhgiabuu/pi-task#13
+PI_TASK_INDEX="${PI_DIR}/npm/node_modules/@heyhuynhgiabuu/pi-task/dist/index.js"
+if [ -f "${PI_TASK_INDEX}" ]; then
+    if grep -q 'pi.getAllTools' "${PI_TASK_INDEX}"; then
+        sed -i '/pi\.getAllTools/,/^[[:space:]]*}/s/^/\/\//' \
+            "${PI_TASK_INDEX}"
+        echo "  ✓ Patched out getAllTools() collision" \
+            "check (pi-task#13)"
+    else
+        echo "  ✓ pi-task getAllTools() already patched"
+    fi
+else
+    echo "  ⚠ pi-task not installed — skipping patch"
+    echo "    Install with:" \
+        "pi install npm:@heyhuynhgiabuu/pi-task"
+fi
+
 echo ""
 echo "Done. Restart Pi or run /reload to apply changes."
 echo ""
