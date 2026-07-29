@@ -2001,6 +2001,27 @@ class HostDaemon:
             self.status_task.cancel()
 
 
+def _reap_zombies():
+    """Reap zombie child processes.
+
+    The daemon runs as PID 1 inside the container, which
+    makes it the init process responsible for reaping
+    orphaned children.  Agent tools (git, bash, compilers)
+    spawn child processes that may outlive their parent
+    and get reparented to PID 1.  Without reaping, these
+    accumulate as zombies and eventually exhaust the
+    container's PID limit (typically 2048 in rootless
+    Podman).
+    """
+    while True:
+        try:
+            pid, _ = os.waitpid(-1, os.WNOHANG)
+            if pid == 0:
+                break
+        except ChildProcessError:
+            break
+
+
 async def main():
     """Entry point: reads config from env vars and runs the daemon."""
     server_url = os.getenv("DASHBOARD_URL", "http://localhost:8000")
@@ -2012,6 +2033,10 @@ async def main():
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, daemon.stop)
+    # Reap zombie children automatically.  SIGCHLD fires
+    # whenever a child process exits; the handler calls
+    # waitpid() in a loop to collect all finished children.
+    loop.add_signal_handler(signal.SIGCHLD, _reap_zombies)
     await daemon.run()
 
 
