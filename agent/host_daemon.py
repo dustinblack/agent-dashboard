@@ -242,33 +242,18 @@ class HostDaemon:
             cols = data.get("cols")
             rows = data.get("rows")
             if agent_id in self.agents and cols and rows:
-                # Resize the tmux window so the agent TUI
-                # redraws at the new dimensions.  Also
-                # resize the outer PTY so the kernel's
-                # line discipline matches.
+                # Resize the outer PTY only.  TIOCSWINSZ
+                # sends SIGWINCH to the tmux client, which
+                # forwards the size change to the tmux
+                # server automatically.  Do NOT also call
+                # tmux resize-window — that causes a
+                # redundant second full-screen redraw.
                 master_fd = self.agents[agent_id]["master_fd"]
                 size = struct.pack("HHHH", rows, cols, 0, 0)
                 try:
                     fcntl.ioctl(master_fd, termios.TIOCSWINSZ, size)
                 except Exception as e:
                     log.info(f"Failed to resize PTY {agent_id}: {e}")
-                try:
-                    subprocess.run(
-                        [
-                            "tmux",
-                            "resize-window",
-                            "-t",
-                            agent_id,
-                            "-x",
-                            str(cols),
-                            "-y",
-                            str(rows),
-                        ],
-                        capture_output=True,
-                        check=False,
-                    )
-                except Exception as e:
-                    log.info(f"Failed to resize tmux window" f" {agent_id}: {e}")
 
         @self.sio.on("spawn_agent", namespace="/terminal")
         async def on_spawn_agent(data):
