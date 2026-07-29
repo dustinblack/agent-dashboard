@@ -1049,7 +1049,7 @@ class HostDaemon:
             fds = [a["master_fd"] for a in self.agents.values()]
             try:
                 r, _, _ = await loop.run_in_executor(
-                    None, select.select, fds, [], [], 0.1
+                    None, select.select, fds, [], [], 0.02
                 )
             except ValueError:
                 self.cleanup_closed_agents()
@@ -1089,14 +1089,14 @@ class HostDaemon:
                         raw += chunk
 
                     # Strip tmux terminal capability queries
-                    # to prevent round-trip jitter.
-                    raw = _TMUX_QUERIES.sub(b"", raw)
-                    # Strip mouse tracking sequences so
-                    # xterm.js stays in normal mouse mode
-                    # (browser-native text selection).
-                    raw = _MOUSE_TRACKING.sub(b"", raw)
-                    if not raw:
-                        continue
+                    # and mouse tracking sequences.  Use a
+                    # fast byte scan before running the regex
+                    # to skip chunks that can't match.
+                    if b"\x1b[" in raw or b"\x1b]" in raw:
+                        raw = _TMUX_QUERIES.sub(b"", raw)
+                        raw = _MOUSE_TRACKING.sub(b"", raw)
+                        if not raw:
+                            continue
 
                     # Buffer output during the startup
                     # window so tmux's initialization bursts
@@ -1126,31 +1126,30 @@ class HostDaemon:
                         # Check for permission prompts.
                         # Strip ANSI escapes before matching to
                         # avoid false positives on escape codes.
-                        # A match sets a candidate timestamp;
-                        # the status poll promotes it to
-                        # permission_waiting after the agent
-                        # has been idle for PERMISSION_IDLE_SECONDS.
-                        stripped = _ANSI_ESCAPE.sub("", decoded_data)
+                        # Only run the expensive regex+search
+                        # when the chunk contains a newline
+                        # (prompts always end with one).
                         now = time.monotonic()
-                        if any(p.search(stripped) for p in self.permission_patterns):
-                            info["permission_candidate"] = now
+                        if "\n" in decoded_data or "?" in decoded_data:
+                            stripped = _ANSI_ESCAPE.sub("", decoded_data)
+                            if any(
+                                p.search(stripped) for p in self.permission_patterns
+                            ):
+                                info["permission_candidate"] = now
                         # New output clears permission_waiting
                         # since the agent is actively producing
                         # output (not waiting for input).
                         if info.get("permission_waiting"):
                             info["permission_waiting"] = False
 
-                        try:
-                            await self.sio.emit(
-                                "terminal_output",
-                                {
-                                    "sid": agent_id,
-                                    "output": decoded_data,
-                                },
-                                namespace="/terminal",
-                            )
-                        except Exception:
-                            pass
+                        # Accumulate output in a per-agent
+                        # buffer.  A separate flush coroutine
+                        # sends it periodically, avoiding both
+                        # per-chunk await latency (slow
+                        # streaming) and unbounded create_task
+                        # accumulation (resize starvation).
+                        ob = info.get("output_buf", "")
+                        info["output_buf"] = ob + decoded_data
                 except OSError:
                     self.close_agent(agent_id)
             # When data was relayed, yield to the event
@@ -1160,6 +1159,37 @@ class HostDaemon:
             # nothing) we still fall through quickly since
             # select itself already waited up to 0.1 s.
             await asyncio.sleep(0)
+
+    async def flush_output(self):
+        """Periodically flushes per-agent output buffers.
+
+        Runs as a separate task alongside watch_agents.
+        Output is accumulated in info['output_buf'] by the
+        read loop and flushed here every 15ms.  This avoids
+        both per-chunk await latency (slow streaming) and
+        unbounded create_task accumulation (event loop
+        starvation during resize).
+        """
+        while self.running:
+            if not self.agents or not self.sio.connected:
+                await asyncio.sleep(0.05)
+                continue
+            for agent_id, info in list(self.agents.items()):
+                buf = info.get("output_buf", "")
+                if buf:
+                    info["output_buf"] = ""
+                    try:
+                        await self.sio.emit(
+                            "terminal_output",
+                            {
+                                "sid": agent_id,
+                                "output": buf,
+                            },
+                            namespace="/terminal",
+                        )
+                    except Exception:
+                        pass
+            await asyncio.sleep(0.015)
 
     def close_agent(self, agent_id: str):
         """Closes the PTY fd, kills the tmux session, and
@@ -1946,6 +1976,9 @@ class HostDaemon:
             self.status_task = asyncio.create_task(
                 self._run_task("status", self.update_agent_status)
             )
+            self.flush_task = asyncio.create_task(
+                self._run_task("flush", self.flush_output)
+            )
 
             await asyncio.gather(
                 self.watcher_task,
@@ -1953,6 +1986,7 @@ class HostDaemon:
                 self.otlp_task,
                 self.git_task,
                 self.status_task,
+                self.flush_task,
             )
         except asyncio.CancelledError:
             pass
