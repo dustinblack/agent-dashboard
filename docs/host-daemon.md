@@ -220,6 +220,17 @@ targeted resize (`tmux resize-window`) and cleanup
 (`tmux kill-session`). tmux is included in the
 container image.
 
+### Process Management
+
+The daemon runs as **PID 1** inside the container,
+making it the init process. Agent tools (git, bash,
+compilers, subagents) spawn child processes that may
+outlive their parent and get reparented to PID 1.
+The daemon registers a `SIGCHLD` handler that reaps
+these orphaned processes automatically, preventing
+zombie accumulation that would otherwise exhaust the
+container's PID limit.
+
 ## Included Tools
 
 The daemon container bundles the following tools:

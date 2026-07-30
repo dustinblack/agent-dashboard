@@ -11,11 +11,21 @@ FROM registry.fedoraproject.org/fedora:42
 
 WORKDIR /app
 
-# Install base system packages and development tools
-RUN dnf install --setopt=install_weak_deps=False --setopt=retries=3 -y \
+# Add GitHub CLI repository configuration
+RUN printf '[gh-cli]\nname=GitHub CLI\nbaseurl=https://cli.github.com/packages/rpm\nenabled=1\ngpgcheck=1\ngpgkey=https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x23F3D4EA75716059\n' \
+    > /etc/yum.repos.d/gh-cli.repo
+
+# Install base system packages and development tools in a single DNF transaction.
+# Uses max_parallel_downloads=10 for faster RPM downloads and tsflags=nodocs to
+# skip documentation extraction during package installation.
+RUN dnf install --setopt=install_weak_deps=False \
+    --setopt=max_parallel_downloads=10 \
+    --setopt=tsflags=nodocs \
+    --setopt=retries=3 -y \
     bash \
     bash-completion \
     curl \
+    gh \
     nodejs \
     nodejs-full-i18n \
     npm \
@@ -68,12 +78,6 @@ RUN mkdir -p /etc/containers \
     && printf '[network]\ndefault_rootless_network_cmd = "slirp4netns"\n' \
        >> /etc/containers/containers.conf
 
-# Install GitHub CLI
-RUN printf '[gh-cli]\nname=GitHub CLI\nbaseurl=https://cli.github.com/packages/rpm\nenabled=1\ngpgcheck=1\ngpgkey=https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x23F3D4EA75716059\n' \
-    > /etc/yum.repos.d/gh-cli.repo \
-    && dnf install --setopt=install_weak_deps=False --setopt=retries=3 -y gh \
-    && dnf clean all
-
 # Install Google Cloud CLI (required for Claude Code via Vertex AI)
 # Use direct tarball download with explicit architecture detection to avoid
 # the interactive installer script, which may modify shell profiles and
@@ -98,8 +102,9 @@ RUN curl -fsSL https://antigravity.google/cli/install.sh | bash \
 
 # ── Agent tool installations (profile-driven) ─────
 {% if npm_packages %}
-RUN npm install -g {{ npm_packages | join(' ') }}
+RUN npm install -g --no-audit --no-fund {{ npm_packages | join(' ') }}
 {% endif %}
+
 {% if pip_packages %}
 RUN pip3 install --no-cache-dir {{ pip_packages | join(' ') }}
 {% endif %}

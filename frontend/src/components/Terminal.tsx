@@ -255,6 +255,14 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     // after the debounce settles — no streaming deferral,
     // which could block fits indefinitely under high
     // latency and cause black screens.
+    // Track last-sent dimensions to deduplicate resize
+    // events.  When the browser pauses JS during a window
+    // drag, debounce timers freeze and all fire at once on
+    // resume — sending many identical resize events that
+    // each trigger a full tmux redraw.
+    let lastSentCols = 0;
+    let lastSentRows = 0;
+
     const performFit = () => {
       if (!terminalRef.current) return;
       try {
@@ -263,7 +271,12 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         if (wasAtBottom) {
           term.scrollToBottom();
         }
-        if (socketRef.current?.connected) {
+        if (
+          socketRef.current?.connected &&
+          (term.cols !== lastSentCols || term.rows !== lastSentRows)
+        ) {
+          lastSentCols = term.cols;
+          lastSentRows = term.rows;
           socketRef.current.emit('terminal_resize', {
             sid: agentId,
             cols: term.cols,
@@ -276,7 +289,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     };
 
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-    const RESIZE_DEBOUNCE_MS = 150;
+    const RESIZE_DEBOUNCE_MS = 500;
     const debouncedFit = () => {
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(performFit, RESIZE_DEBOUNCE_MS);
@@ -357,6 +370,46 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       });
     }
 
+    // --- Mouse wheel scrolling ---
+    // tmux has mouse mode ON for scroll handling, but
+    // the daemon strips mouse tracking escape sequences
+    // from the output stream so xterm.js never enters
+    // application mouse mode.  This means the browser
+    // handles text selection and right-click natively.
+    //
+    // Since xterm.js doesn't know about mouse tracking,
+    // wheel events stay in the browser.  We intercept
+    // them and send synthesized SGR mouse wheel escape
+    // sequences to tmux via Socket.IO.  tmux processes
+    // these as scroll events in its scrollback buffer.
+    //
+    // SGR (mode 1006) mouse wheel format:
+    //   \x1b[<64;col;rowM  = wheel up
+    //   \x1b[<65;col;rowM  = wheel down
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (!socketRef.current?.connected) return;
+      const lines = Math.round(e.deltaY / LINE_HEIGHT_PX);
+      if (lines === 0) return;
+      // Send SGR mouse wheel sequences — one per line,
+      // capped to avoid flooding the PTY.
+      const button = lines > 0 ? 65 : 64; // down : up
+      const count = Math.min(Math.abs(lines), 10);
+      let input = '';
+      for (let i = 0; i < count; i++) {
+        input += `\x1b[<${button};1;1M`;
+      }
+      socketRef.current.emit('terminal_input', {
+        target_sid: agentId,
+        input,
+      });
+    };
+    if (screenEl) {
+      screenEl.addEventListener('wheel', onWheel, {
+        passive: false,
+      });
+    }
+
     // --- Output batching ---
     // Buffer rapid successive terminal_output events and
     // flush them in a single term.write() per animation
@@ -386,11 +439,43 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     });
     socketRef.current = socket;
 
+    // Track disconnect time so we can detect brief
+    // interruptions (e.g. browser pausing JS during
+    // window drag-resize) vs real outages.
+    let disconnectedAt: number | null = null;
+    const BRIEF_DISCONNECT_MS = 30000;
+
+    socket.on('disconnect', () => {
+      disconnectedAt = Date.now();
+    });
+
     socket.on('connect', () => {
+      const wasBrief =
+        disconnectedAt !== null &&
+        Date.now() - disconnectedAt < BRIEF_DISCONNECT_MS;
+      disconnectedAt = null;
+
+      if (wasBrief) {
+        // Brief disconnect (e.g. browser paused JS during
+        // window drag-resize).  The terminal still has its
+        // content.  Do NOT emit join_room — that triggers
+        // request_history on the backend, and the history
+        // chunks would be written on top of existing
+        // content through the live output path.  Just send
+        // a resize so tmux adapts to any new dimensions.
+        isReplaying.current = false;
+        performFit();
+        return;
+      }
+
+      // Full reconnect — replay history.
       isReplaying.current = true;
       historyBuffer = [];
-      socket.emit('join_room', { room: agentId });
+      // Send resize BEFORE joining the room so tmux
+      // has the correct dimensions before history is
+      // replayed.
       performFit();
+      socket.emit('join_room', { room: agentId });
 
       // Detect stale sessions: if history never completes
       // within 5s, the daemon likely no longer has this agent
@@ -416,7 +501,6 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         }
         isReplaying.current = false;
         replayEndTime = Date.now();
-        performFit();
       }
     });
 
@@ -498,6 +582,7 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
         screenEl.removeEventListener('touchstart', onTouchStart);
         screenEl.removeEventListener('touchmove', onTouchMove);
         screenEl.removeEventListener('touchend', onTouchEnd);
+        screenEl.removeEventListener('wheel', onWheel);
       }
       socket.disconnect();
       term.dispose();

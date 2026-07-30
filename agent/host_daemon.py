@@ -72,6 +72,17 @@ _TMUX_QUERIES = re.compile(
     rb"|\x1b\]11;\?\x1b\\"  # Background color query
 )
 
+# Mouse tracking escape sequences that tmux sends when
+# mouse mode is enabled.  Stripping these from the
+# output prevents xterm.js from entering application
+# mouse mode, so the browser handles text selection,
+# right-click, and copy/paste natively.  The frontend
+# sends synthesized SGR mouse wheel sequences for
+# scroll, which tmux processes normally.
+_MOUSE_TRACKING = re.compile(
+    rb"\x1b\[\?(?:1000|1002|1003|1004|1005|1006|1015|1016)[hl]"
+)
+
 # Seconds to buffer output after agent spawn before
 # relaying to the frontend.  tmux emits several bursts
 # of startup escape sequences over ~300 ms; buffering
@@ -231,33 +242,18 @@ class HostDaemon:
             cols = data.get("cols")
             rows = data.get("rows")
             if agent_id in self.agents and cols and rows:
-                # Resize the tmux window so the agent TUI
-                # redraws at the new dimensions.  Also
-                # resize the outer PTY so the kernel's
-                # line discipline matches.
+                # Resize the outer PTY only.  TIOCSWINSZ
+                # sends SIGWINCH to the tmux client, which
+                # forwards the size change to the tmux
+                # server automatically.  Do NOT also call
+                # tmux resize-window — that causes a
+                # redundant second full-screen redraw.
                 master_fd = self.agents[agent_id]["master_fd"]
                 size = struct.pack("HHHH", rows, cols, 0, 0)
                 try:
                     fcntl.ioctl(master_fd, termios.TIOCSWINSZ, size)
                 except Exception as e:
                     log.info(f"Failed to resize PTY {agent_id}: {e}")
-                try:
-                    subprocess.run(
-                        [
-                            "tmux",
-                            "resize-window",
-                            "-t",
-                            agent_id,
-                            "-x",
-                            str(cols),
-                            "-y",
-                            str(rows),
-                        ],
-                        capture_output=True,
-                        check=False,
-                    )
-                except Exception as e:
-                    log.info(f"Failed to resize tmux window" f" {agent_id}: {e}")
 
         @self.sio.on("spawn_agent", namespace="/terminal")
         async def on_spawn_agent(data):
@@ -1038,7 +1034,7 @@ class HostDaemon:
             fds = [a["master_fd"] for a in self.agents.values()]
             try:
                 r, _, _ = await loop.run_in_executor(
-                    None, select.select, fds, [], [], 0.1
+                    None, select.select, fds, [], [], 0.02
                 )
             except ValueError:
                 self.cleanup_closed_agents()
@@ -1078,10 +1074,14 @@ class HostDaemon:
                         raw += chunk
 
                     # Strip tmux terminal capability queries
-                    # to prevent round-trip jitter.
-                    raw = _TMUX_QUERIES.sub(b"", raw)
-                    if not raw:
-                        continue
+                    # and mouse tracking sequences.  Use a
+                    # fast byte scan before running the regex
+                    # to skip chunks that can't match.
+                    if b"\x1b[" in raw or b"\x1b]" in raw:
+                        raw = _TMUX_QUERIES.sub(b"", raw)
+                        raw = _MOUSE_TRACKING.sub(b"", raw)
+                        if not raw:
+                            continue
 
                     # Buffer output during the startup
                     # window so tmux's initialization bursts
@@ -1111,34 +1111,70 @@ class HostDaemon:
                         # Check for permission prompts.
                         # Strip ANSI escapes before matching to
                         # avoid false positives on escape codes.
-                        # A match sets a candidate timestamp;
-                        # the status poll promotes it to
-                        # permission_waiting after the agent
-                        # has been idle for PERMISSION_IDLE_SECONDS.
-                        stripped = _ANSI_ESCAPE.sub("", decoded_data)
+                        # Only run the expensive regex+search
+                        # when the chunk contains a newline
+                        # (prompts always end with one).
                         now = time.monotonic()
-                        if any(p.search(stripped) for p in self.permission_patterns):
-                            info["permission_candidate"] = now
+                        if "\n" in decoded_data or "?" in decoded_data:
+                            stripped = _ANSI_ESCAPE.sub("", decoded_data)
+                            if any(
+                                p.search(stripped) for p in self.permission_patterns
+                            ):
+                                info["permission_candidate"] = now
                         # New output clears permission_waiting
                         # since the agent is actively producing
                         # output (not waiting for input).
                         if info.get("permission_waiting"):
                             info["permission_waiting"] = False
 
-                        try:
-                            await self.sio.emit(
-                                "terminal_output",
-                                {
-                                    "sid": agent_id,
-                                    "output": decoded_data,
-                                },
-                                namespace="/terminal",
-                            )
-                        except Exception:
-                            pass
+                        # Accumulate output in a per-agent
+                        # buffer.  A separate flush coroutine
+                        # sends it periodically, avoiding both
+                        # per-chunk await latency (slow
+                        # streaming) and unbounded create_task
+                        # accumulation (resize starvation).
+                        ob = info.get("output_buf", "")
+                        info["output_buf"] = ob + decoded_data
                 except OSError:
                     self.close_agent(agent_id)
-            await asyncio.sleep(0.01)
+            # When data was relayed, yield to the event
+            # loop without wall-clock delay so other
+            # coroutines run but the next read starts
+            # immediately.  On idle cycles (select returned
+            # nothing) we still fall through quickly since
+            # select itself already waited up to 0.1 s.
+            await asyncio.sleep(0)
+
+    async def flush_output(self):
+        """Periodically flushes per-agent output buffers.
+
+        Runs as a separate task alongside watch_agents.
+        Output is accumulated in info['output_buf'] by the
+        read loop and flushed here every 15ms.  This avoids
+        both per-chunk await latency (slow streaming) and
+        unbounded create_task accumulation (event loop
+        starvation during resize).
+        """
+        while self.running:
+            if not self.agents or not self.sio.connected:
+                await asyncio.sleep(0.05)
+                continue
+            for agent_id, info in list(self.agents.items()):
+                buf = info.get("output_buf", "")
+                if buf:
+                    info["output_buf"] = ""
+                    try:
+                        await self.sio.emit(
+                            "terminal_output",
+                            {
+                                "sid": agent_id,
+                                "output": buf,
+                            },
+                            namespace="/terminal",
+                        )
+                    except Exception:
+                        pass
+            await asyncio.sleep(0.015)
 
     def close_agent(self, agent_id: str):
         """Closes the PTY fd, kills the tmux session, and
@@ -1925,6 +1961,9 @@ class HostDaemon:
             self.status_task = asyncio.create_task(
                 self._run_task("status", self.update_agent_status)
             )
+            self.flush_task = asyncio.create_task(
+                self._run_task("flush", self.flush_output)
+            )
 
             await asyncio.gather(
                 self.watcher_task,
@@ -1932,6 +1971,7 @@ class HostDaemon:
                 self.otlp_task,
                 self.git_task,
                 self.status_task,
+                self.flush_task,
             )
         except asyncio.CancelledError:
             pass
@@ -1961,6 +2001,27 @@ class HostDaemon:
             self.status_task.cancel()
 
 
+def _reap_zombies():
+    """Reap zombie child processes.
+
+    The daemon runs as PID 1 inside the container, which
+    makes it the init process responsible for reaping
+    orphaned children.  Agent tools (git, bash, compilers)
+    spawn child processes that may outlive their parent
+    and get reparented to PID 1.  Without reaping, these
+    accumulate as zombies and eventually exhaust the
+    container's PID limit (typically 2048 in rootless
+    Podman).
+    """
+    while True:
+        try:
+            pid, _ = os.waitpid(-1, os.WNOHANG)
+            if pid == 0:
+                break
+        except ChildProcessError:
+            break
+
+
 async def main():
     """Entry point: reads config from env vars and runs the daemon."""
     server_url = os.getenv("DASHBOARD_URL", "http://localhost:8000")
@@ -1972,6 +2033,10 @@ async def main():
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, daemon.stop)
+    # Reap zombie children automatically.  SIGCHLD fires
+    # whenever a child process exits; the handler calls
+    # waitpid() in a loop to collect all finished children.
+    loop.add_signal_handler(signal.SIGCHLD, _reap_zombies)
     await daemon.run()
 
 
