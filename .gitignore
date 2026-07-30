@@ -33,6 +33,9 @@ htmlcov/
 .pi/task-registry.json
 .pi/task-session-history.json
 
+# Agent overrides (user-specific model preferences)
+.pi/agents/
+
 # Generated files
 agent/Containerfile
 
