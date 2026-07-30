@@ -191,10 +191,31 @@ class TestUpdateTelemetry:
         assert changed is True
         assert tel["tokens"] == 350
 
+    def test_span_tokens_accumulate_across_calls(self, daemon):
+        """Multiple span-level token updates accumulate
+        via _span_* tracking keys (pi-otel per-request)."""
+        tel = self._base_tel()
+        # First LLM request
+        daemon._update_telemetry_from_attrs(
+            tel, {"gen_ai.usage.input_tokens": 100, "gen_ai.usage.output_tokens": 50}
+        )
+        assert tel["tokens"] == 150
+        assert tel["_span_input_tokens"] == 100
+        assert tel["_span_output_tokens"] == 50
+        # Second LLM request
+        daemon._update_telemetry_from_attrs(
+            tel, {"gen_ai.usage.input_tokens": 200, "gen_ai.usage.output_tokens": 80}
+        )
+        assert tel["tokens"] == 430  # 300 + 130
+        assert tel["_span_input_tokens"] == 300
+        assert tel["_span_output_tokens"] == 130
+
     def test_tokens_no_decrease(self, daemon):
         """Total tokens should never decrease."""
         tel = self._base_tel()
         tel["tokens"] = 500
+        # A small span update should not decrease the total
+        # even though _span_ accumulators start at 0.
         attrs = {"input_tokens": 10, "output_tokens": 5}
         daemon._update_telemetry_from_attrs(tel, attrs)
         # 15 < 500, so tokens should stay at 500
@@ -207,6 +228,19 @@ class TestUpdateTelemetry:
         attrs = {"input_tokens": 500, "output_tokens": 100}
         daemon._update_telemetry_from_attrs(tel, attrs)
         assert tel["context_tokens"] == 500
+
+    def test_cache_write_tokens_recognized(self, daemon):
+        """gen_ai.usage.cache_write_input_tokens from
+        pi-otel is handled as cache creation tokens."""
+        tel = self._base_tel()
+        attrs = {
+            "gen_ai.usage.input_tokens": 100,
+            "gen_ai.usage.output_tokens": 50,
+            "gen_ai.usage.cache_write_input_tokens": 30,
+        }
+        changed = daemon._update_telemetry_from_attrs(tel, attrs)
+        assert changed is True
+        assert tel["tokens"] == 180  # 100 + 50 + 30
 
     def test_activity_from_function_name(self, daemon):
         """Extracts current_activity from function_name attr."""
@@ -236,6 +270,28 @@ class TestUpdateTelemetry:
         tel = self._base_tel()
         changed = daemon._update_telemetry_from_attrs(tel, {})
         assert changed is False
+
+    def test_pi_cost_accumulates(self, daemon):
+        """pi.cost.usd from pi-otel is per-request and
+        must accumulate across multiple spans."""
+        tel = self._base_tel()
+        tel["cost_usd"] = 0.0
+        # First request costs $0.05
+        daemon._update_telemetry_from_attrs(tel, {"pi.cost.usd": 0.05})
+        assert tel["cost_usd"] == pytest.approx(0.05)
+        # Second request costs $0.03
+        daemon._update_telemetry_from_attrs(tel, {"pi.cost.usd": 0.03})
+        assert tel["cost_usd"] == pytest.approx(0.08)
+        # Third request costs $0.12
+        daemon._update_telemetry_from_attrs(tel, {"pi.cost.usd": 0.12})
+        assert tel["cost_usd"] == pytest.approx(0.20)
+
+    def test_pi_cost_zero_ignored(self, daemon):
+        """Zero-value pi.cost.usd is ignored."""
+        tel = self._base_tel()
+        tel["cost_usd"] = 0.10
+        daemon._update_telemetry_from_attrs(tel, {"pi.cost.usd": 0.0})
+        assert tel["cost_usd"] == pytest.approx(0.10)
 
 
 # ── D. _resolve_agent_id ─────────────────────────────────────
@@ -351,6 +407,54 @@ class TestResolveAgentId:
         }
         result = daemon._resolve_agent_id({"service.name": "pi-abc12345"})
         assert result == "pi-abc12345"
+
+    def test_agy_fallback_gemini_resource_attrs(self, daemon):
+        """Antigravity (agy) agents are matched when OTLP
+        resource attributes contain 'gemini' — agy shares
+        Gemini CLI's telemetry namespace."""
+        daemon.agents["agy-1"] = {
+            "tool": "agy",
+            "last_output_time": 1.0,
+        }
+        result = daemon._resolve_agent_id({"service.name": "gemini-cli"})
+        assert result == "agy-1"
+
+    def test_agy_direct_match_antigravity(self, daemon):
+        """Antigravity detected via 'antigravity' in
+        service.name."""
+        daemon.agents["agy-2"] = {
+            "tool": "agy",
+            "last_output_time": 1.0,
+        }
+        result = daemon._resolve_agent_id({"service.name": "antigravity-cli"})
+        assert result == "agy-2"
+
+    def test_gemini_hint_matches_both_gemini_and_agy(self, daemon):
+        """When both gemini and agy agents are running,
+        a 'gemini' hint in resource attrs matches both
+        as candidates and picks the most recent."""
+        daemon.agents["g-1"] = {
+            "tool": "gemini",
+            "last_output_time": 1.0,
+        }
+        daemon.agents["agy-1"] = {
+            "tool": "agy",
+            "last_output_time": 99.0,
+        }
+        result = daemon._resolve_agent_id({"service.name": "gemini-cli"})
+        assert result == "agy-1"  # most recent
+
+    def test_agy_hint_does_not_match_gemini(self, daemon):
+        """An explicit 'agy' hint only matches agy agents,
+        not gemini agents."""
+        daemon.agents["g-1"] = {
+            "tool": "gemini",
+            "last_output_time": 1.0,
+        }
+        # 'agy' in resource vals but no agy agent
+        result = daemon._resolve_agent_id({"service.name": "unknown", "sdk": "agy-sdk"})
+        # Falls back to single-agent last resort
+        assert result == "g-1"
 
 
 # ── E. get_git_info ──────────────────────────────────────────

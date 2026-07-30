@@ -1344,6 +1344,8 @@ class HostDaemon:
         for key in (
             "cache_creation_tokens",
             "gen_ai.usage.cache_creation_input_tokens",
+            # pi-otel also emits cache_write_input_tokens
+            "gen_ai.usage.cache_write_input_tokens",
         ):
             val = attrs.get(key)
             if val is not None:
@@ -1354,10 +1356,29 @@ class HostDaemon:
         else:
             cache_tokens = None
 
+        # Span attributes carry per-request token counts
+        # (pi-otel) or cumulative totals (Claude Code logs).
+        # Accumulate into _span_* tracking keys so the
+        # per-request values from pi-otel sum correctly.
+        # The metric-based path (cumulative histograms)
+        # writes to input_tokens / output_tokens directly
+        # and will supersede these when active.
         if input_tokens is not None or output_tokens is not None:
-            total = (input_tokens or 0) + (output_tokens or 0) + (cache_tokens or 0)
-            if total > tel.get("tokens", 0):
-                tel["tokens"] = total
+            inp = input_tokens or 0
+            out = output_tokens or 0
+            cch = cache_tokens or 0
+            tel["_span_input_tokens"] = tel.get("_span_input_tokens", 0) + inp
+            tel["_span_output_tokens"] = tel.get("_span_output_tokens", 0) + out
+            tel["_span_cache_tokens"] = tel.get("_span_cache_tokens", 0) + cch
+            # Use span-accumulated totals as floor;
+            # metric-reported values win when higher.
+            span_total = (
+                tel["_span_input_tokens"]
+                + tel["_span_output_tokens"]
+                + tel["_span_cache_tokens"]
+            )
+            if span_total > tel.get("tokens", 0):
+                tel["tokens"] = span_total
                 changed = True
 
         # Track input_tokens as context_tokens — this is
@@ -1369,14 +1390,19 @@ class HostDaemon:
             tel["context_tokens"] = input_tokens
             changed = True
 
-        # Cost — pi-otel puts cumulative session cost on
-        # pi.llm_request span attributes as pi.cost.usd.
+        # Cost — pi-otel puts per-request cost on each
+        # pi.llm_request span as pi.cost.usd. Accumulate
+        # with += since each span represents a single API
+        # call. The _span_cost_usd tracker prevents the
+        # metric path (cumulative) from conflicting.
         cost = attrs.get("pi.cost.usd")
         if cost is not None:
             cost_f = float(cost)
-            if cost_f > tel.get("cost_usd", 0.0):
-                tel["cost_usd"] = cost_f
-                changed = True
+            if cost_f > 0:
+                tel["_span_cost_usd"] = tel.get("_span_cost_usd", 0.0) + cost_f
+                if tel["_span_cost_usd"] > tel.get("cost_usd", 0.0):
+                    tel["cost_usd"] = tel["_span_cost_usd"]
+                    changed = True
 
         # Current activity — extract the latest tool/function
         # name from span or log attributes.  Gemini uses
@@ -1442,7 +1468,13 @@ class HostDaemon:
         svc = res_attrs.get("service.name", "") or ""
         all_vals = " ".join(str(v) for v in res_attrs.values() if v).lower()
 
-        if "gemini" in svc.lower() or "gemini" in all_vals:
+        if "antigravity" in svc.lower() or "agy" in all_vals:
+            tool_hint = "agy"
+        elif "gemini" in svc.lower() or "gemini" in all_vals:
+            # Antigravity (agy) is built on Gemini CLI and
+            # shares its telemetry namespace.  Check for agy
+            # agents first so "gemini" in resource attrs
+            # can fall back to matching agy sessions.
             tool_hint = "gemini"
         elif "claude" in svc.lower() or "claude" in all_vals:
             tool_hint = "claude"
@@ -1450,10 +1482,15 @@ class HostDaemon:
             tool_hint = "pi"
 
         if tool_hint:
+            # Build candidate list.  When the hint is
+            # "gemini", also include "agy" agents since
+            # Antigravity shares Gemini's OTLP namespace
+            # and resource attributes.
+            match_tools = {"gemini", "agy"} if tool_hint == "gemini" else {tool_hint}
             candidates = [
                 (aid, info)
                 for aid, info in self.agents.items()
-                if info.get("tool") == tool_hint
+                if info.get("tool") in match_tools
             ]
             if len(candidates) == 1:
                 return candidates[0][0]
