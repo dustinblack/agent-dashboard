@@ -23,9 +23,9 @@ PI_DIR="${HOME}/.pi/agent"
 echo "=== Pi Defaults Setup ==="
 
 # 1. Copy agent overrides
-echo "Installing agent overrides to ~/.pi/agents/ ..."
-mkdir -p "${HOME}/.pi/agents"
-cp -r "${SCRIPT_DIR}/agents/"*.md "${HOME}/.pi/agents/"
+echo "Installing agent overrides to ${PI_DIR}/agents/ ..."
+mkdir -p "${PI_DIR}/agents"
+cp -r "${SCRIPT_DIR}/agents/"*.md "${PI_DIR}/agents/"
 echo "  ✓ Copied explore, scout, general, reviewer"
 
 # 2. Install global AGENTS.md
