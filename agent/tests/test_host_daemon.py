@@ -713,12 +713,8 @@ class TestAgentProfiles:
         assert any(m.host == "~/.claude" for m in claude_prov.mounts)
         assert "ANTHROPIC_API_KEY" in claude_prov.passthrough_env
 
-        # Gemini has provisioning with config seeding
-        gemini_prov = profiles["gemini"].provisioning
-        assert gemini_prov is not None
-        assert "@google/gemini-cli" in gemini_prov.install.npm
-        assert len(gemini_prov.config_files) >= 1
-        assert any("settings.json" in cf.path for cf in gemini_prov.config_files)
+        # Gemini provisioning was removed (retired profile)
+        assert profiles["gemini"].provisioning is None
 
         # Bash has no provisioning
         assert profiles["bash"].provisioning is None
