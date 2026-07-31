@@ -15,8 +15,8 @@ Four profiles are included out of the box:
 | Claude | `agent/profiles/claude.yaml` | Claude Code CLI with OTLP telemetry and MCP detection |
 | Antigravity | `agent/profiles/agy.yaml` | Antigravity CLI (`agy`) — Google's replacement for Gemini CLI |
 | Pi | `agent/profiles/pi.yaml` | Pi coding agent — provider-agnostic, supports Claude/GPT/Gemini/local models |
-| Gemini | `agent/profiles/gemini.yaml` | Gemini CLI (sunset June 18, 2026 — replaced by Antigravity) |
 | Bash | `agent/profiles/bash.yaml` | Bash shell with PROMPT_COMMAND sidecar telemetry |
+| Gemini | `agent/profiles/archive/gemini.yaml` | Gemini CLI — **retired** from default install (see below) |
 
 ## Creating a Custom Profile
 
@@ -383,18 +383,33 @@ Restart the daemon. The new tool will automatically:
 
 No frontend or backend code changes are required.
 
-## Migrating from Gemini CLI to Antigravity CLI
+## Gemini CLI (retired)
 
-Google's Antigravity CLI (`agy`) replaces Gemini CLI,
-which sunset **June 18, 2026** for free and personal
-users. Enterprise API key users can continue using
-Gemini CLI.
+Gemini CLI sunset **June 18, 2026** for free and
+personal users. Google's replacement is Antigravity
+CLI (`agy`). Starting with this release, Gemini CLI
+is no longer installed in the default container image.
+
+The Gemini profile (`agent/profiles/archive/gemini.yaml`)
+remains in the codebase and is fully functional —
+the daemon will detect and offer Gemini CLI if the
+binary is present. Enterprise API key users who
+still need it can install manually:
+
+```bash
+npm install -g @google/gemini-cli
+```
+
+Or restore the provisioning section via a local
+profile override (`agent/profiles/gemini.local.yaml`).
+
+## Antigravity CLI (agy)
 
 The Antigravity profile requires **agy >= 1.0.12**,
 which added `--add-dir` (workspace directory targeting)
 and `--continue` (session resume from the command line).
 
-### Automatic migration
+### Migrating from Gemini CLI
 
 On first launch, `agy` auto-migrates Gemini CLI config
 (MCP servers, permissions, keybindings). Since both
@@ -421,8 +436,7 @@ recommended for dashboard use:
 
 ```json
 {
-  "allowNonWorkspaceAccess": false,
-  "enableTelemetry": true
+  "allowNonWorkspaceAccess": false
 }
 ```
 
@@ -431,15 +445,17 @@ recommended for dashboard use:
   If you explicitly ask agy to access an external
   path, it will prompt for permission instead of
   silently exploring.
-- **`enableTelemetry: true`** — required for OTLP
-  telemetry export. Without this, `settings.json`
-  overrides the profile’s `GEMINI_CLI_TELEMETRY_ENABLED`
-  env var and telemetry is silently disabled.
 
-The profile provisions these as defaults for fresh
+The profile provisions this as a default for fresh
 installs, but the host `~/.gemini` volume mount
-overlays them at runtime — set them on your host
-machine to ensure they take effect.
+overlays it at runtime — set it on your host
+machine to ensure it takes effect.
+
+> **Note:** Antigravity CLI does not currently support
+> OTLP telemetry export. Token and cost data are not
+> available in the dashboard for agy sessions. This
+> is tracked upstream at
+> [google-antigravity/antigravity-cli#366](https://github.com/google-antigravity/antigravity-cli/issues/366).
 
 ### Session resume
 
@@ -449,20 +465,6 @@ it falls back to starting a new conversation. The
 `--conversation <id>` flag is also available for
 resuming a specific conversation, but the profile
 defaults to the simpler `--continue` behavior.
-
-### Coexistence
-
-Both profiles can be active simultaneously during the
-transition period — Gemini and Antigravity appear as
-separate spawn buttons in the dashboard. This allows
-testing `agy` while keeping Gemini sessions running.
-
-### Post-sunset cleanup
-
-After June 18, 2026, free/personal users can remove
-`agent/profiles/gemini.yaml` and regenerate the
-Containerfile to drop Gemini CLI from the container
-image.
 
 ## Recommended Pi Extensions
 

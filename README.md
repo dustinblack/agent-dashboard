@@ -5,7 +5,7 @@
 <h1 align="center">Agent Dashboard</h1>
 
 <p align="center">
-A multi-host orchestration platform for AI coding agents — spawn, monitor, and interact with Claude Code, Pi, Antigravity, Gemini, and Bash sessions across multiple machines from a single web dashboard.
+A multi-host orchestration platform for AI coding agents — spawn, monitor, and interact with Claude Code, Pi, Antigravity, and Bash sessions across multiple machines from a single web dashboard.
 </p>
 
 <p align="center">
@@ -28,8 +28,8 @@ AI coding agents. It remotely spawns, monitors, and provides
 interactive terminal access to AI coding agent sessions
 running across multiple development machines — all from a
 single web interface. Supports Claude Code, Pi, Antigravity
-(agy), Gemini CLI, and Bash out of the box, with new agents
-added via YAML profiles.
+(agy), and Bash out of the box, with new agents added via
+YAML profiles.
 
 > [!TIP]
 > **How it works:** Install the hub (backend + frontend) on any
@@ -57,7 +57,7 @@ usage, model info, and session cost.
 ### Core Architecture
 - **Multi-host orchestration** — Deploy containerized daemons on
   any number of development machines. Spawn and manage Claude,
-  Pi, Antigravity, Gemini, and Bash sessions across all hosts
+  Pi, Antigravity, and Bash sessions across all hosts
   from a single dashboard.
 - **Extensible agent profiles** — Agent tools are defined by
   YAML/JSON [profile configs](docs/agent-profiles.md) rather
@@ -280,7 +280,7 @@ podman run -d --name host-daemon --network=host \
 1. Open `http://your-server-ip:8080`
 2. Your registered hosts appear on the dashboard
 3. Click **Spawn Claude**, **Spawn Pi**, **Spawn Antigravity**,
-   **Spawn Gemini**, or **Spawn Bash**
+   or **Spawn Bash**
 4. Select a project directory from the dropdown
 5. Click a running session to attach in a terminal popup
 6. Delete retired hosts via the trash icon

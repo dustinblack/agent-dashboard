@@ -558,20 +558,12 @@ class TestDetectMcpServers:
         assert "proj-only" in servers
         assert "user-only" in servers
 
-    def test_gemini_settings(self, daemon):
-        """Detects MCP servers from Gemini settings.json."""
-        settings_data = json.dumps({"mcpServers": {"gemini-mcp": {}}})
-        with patch("os.path.isfile", return_value=True):
-            with patch(
-                "builtins.open",
-                mock_open(read_data=settings_data),
-            ):
-                servers = daemon._detect_mcp_servers("/proj", "gemini")
-        assert "gemini-mcp" in servers
-
     def test_unknown_tool(self, daemon):
-        """Unknown tool type returns empty list."""
+        """Unknown or profileless tool returns empty list."""
         servers = daemon._detect_mcp_servers("/proj", "bash")
+        assert servers == []
+        # Gemini profile archived — no longer loaded
+        servers = daemon._detect_mcp_servers("/proj", "gemini")
         assert servers == []
 
     def test_missing_files(self, daemon):
@@ -593,8 +585,9 @@ class TestAgentProfiles:
 
         profiles = load_profiles()
         assert "claude" in profiles
-        assert "gemini" in profiles
         assert "bash" in profiles
+        # Gemini profile moved to archive/ — not loaded by default
+        assert "gemini" not in profiles
 
     def test_claude_profile_fields(self):
         """Claude profile has expected configuration."""
@@ -614,21 +607,6 @@ class TestAgentProfiles:
         assert claude.telemetry.cost_metric is not None
         assert len(claude.permission_patterns) > 0
         assert not claude.always_available
-
-    def test_gemini_profile_fields(self):
-        """Gemini profile has expected configuration."""
-        from agent.profiles import load_profiles
-
-        profiles = load_profiles()
-        gemini = profiles["gemini"]
-        assert gemini.binary == "gemini"
-        assert gemini.auth.env_vars == []
-        assert gemini.mcp is not None
-        assert len(gemini.telemetry.token_metrics) > 0
-        assert gemini.telemetry.runtime_metric is not None
-        assert gemini.telemetry.runtime_metric.unit == "milliseconds"
-        assert len(gemini.telemetry.excluded_metrics) > 0
-        assert not gemini.always_available
 
     def test_bash_profile_fields(self):
         """Bash profile has sidecar config and always_available."""
@@ -656,11 +634,10 @@ class TestAgentProfiles:
     def test_otlp_lookup_tables_built(self, daemon):
         """OTLP metric lookup tables are populated from profiles."""
         assert "claude_code.token.usage" in daemon._token_metrics
-        assert "gemini_cli.token.usage" in daemon._token_metrics
         assert "claude_code.cost.usage" in daemon._cost_metrics
         assert "claude_code.active_time.total" in daemon._runtime_metrics
-        assert "gemini_cli.agent.duration" in daemon._runtime_metrics
-        assert "gen_ai.client.token.usage" in daemon._excluded_metrics
+        # Gemini metrics no longer present (profile archived)
+        assert "gemini_cli.token.usage" not in daemon._token_metrics
 
     def test_supports_resume_property(self):
         """supports_resume is True when resume differs from
@@ -668,9 +645,8 @@ class TestAgentProfiles:
         from agent.profiles import load_profiles
 
         profiles = load_profiles()
-        # Claude and Gemini have distinct resume commands
+        # Claude has distinct resume command
         assert profiles["claude"].supports_resume is True
-        assert profiles["gemini"].supports_resume is True
         # Bash has resume == new == ["bash"]
         assert profiles["bash"].supports_resume is False
 
@@ -680,7 +656,6 @@ class TestAgentProfiles:
 
         profiles = load_profiles()
         assert profiles["claude"].color == "purple"
-        assert profiles["gemini"].color == "blue"
         assert profiles["bash"].color == "slate"
 
     def test_make_tool_info(self, daemon):
@@ -712,13 +687,6 @@ class TestAgentProfiles:
         assert len(claude_prov.mounts) >= 1
         assert any(m.host == "~/.claude" for m in claude_prov.mounts)
         assert "ANTHROPIC_API_KEY" in claude_prov.passthrough_env
-
-        # Gemini has provisioning with config seeding
-        gemini_prov = profiles["gemini"].provisioning
-        assert gemini_prov is not None
-        assert "@google/gemini-cli" in gemini_prov.install.npm
-        assert len(gemini_prov.config_files) >= 1
-        assert any("settings.json" in cf.path for cf in gemini_prov.config_files)
 
         # Bash has no provisioning
         assert profiles["bash"].provisioning is None

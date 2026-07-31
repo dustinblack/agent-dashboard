@@ -1,11 +1,22 @@
 # Gemini CLI agent profile
-# SUNSET: Gemini CLI stopped serving requests for free/
-# personal users on June 18, 2026. Enterprise API key
-# users (Gemini Code Assist Standard/Enterprise) retain
-# access. Google's replacement is Antigravity CLI (agy).
-# See agy.yaml and issue #65 for agy integration status.
+#
+# RETIRED from default installation.
+#
+# Gemini CLI stopped serving requests for free/personal
+# users on June 18, 2026. Google's replacement is
+# Antigravity CLI (agy) — see agy.yaml.
+#
+# Enterprise API key users (Gemini Code Assist
+# Standard/Enterprise) can still use Gemini CLI by
+# installing it manually inside the container:
+#
+#   npm install -g @google/gemini-cli
+#
+# The profile configuration below remains functional —
+# the daemon will detect and offer Gemini CLI if the
+# binary is present on the host or in the container.
 name: gemini
-display_name: Gemini
+display_name: Gemini (retired)
 color: blue
 binary: gemini
 
@@ -26,9 +37,6 @@ env:
 
 # No auth gate — Gemini CLI supports both API key
 # (GEMINI_API_KEY) and Google OAuth (gemini auth login).
-# The daemon can't detect OAuth credentials, so we let
-# the binary's presence be sufficient. If the user isn't
-# authenticated, Gemini itself will prompt.
 
 mcp:
   user_files:
@@ -43,8 +51,6 @@ telemetry:
   runtime_metric:
     name: gemini_cli.agent.duration
     unit: milliseconds
-  # Gemini also emits gen_ai.client.token.usage with
-  # identical values — excluded to avoid double-counting.
   excluded_metrics:
     - gen_ai.client.token.usage
 
@@ -52,19 +58,7 @@ permission_patterns:
   - "Allow .+ to run"
   - "Do you want to allow"
 
-# Build-time provisioning metadata
-provisioning:
-  install:
-    npm:
-      - "@google/gemini-cli"
-  config_files:
-    - path: "/root/.gemini/settings.json"
-      content: >-
-        {"security":{"auth":{"selectedType":"gemini-api"}}}
-  verify: "gemini --version"
-  mounts:
-    - host: "~/.gemini"
-      container: "/root/.gemini"
-      mode: rw
-  passthrough_env:
-    - GEMINI_API_KEY
+# No provisioning section — Gemini CLI is no longer
+# installed in the default container build. To use it,
+# install manually or add provisioning back via a
+# gemini.local.yaml override.
