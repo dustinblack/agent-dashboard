@@ -74,10 +74,25 @@ def _is_dev_build(version: str) -> bool:
 
 fastapi_app = FastAPI(title="AI Coding Agent Dashboard API")
 
-# Add Session Middleware for OIDC
-fastapi_app.add_middleware(
-    SessionMiddleware, secret_key=os.getenv("SECRET_KEY", "super-secret-default-key")
-)
+# Add Session Middleware for OIDC.
+# SECRET_KEY is required when authentication is enabled.
+# In BYPASS_AUTH mode a placeholder is acceptable since
+# sessions are not used for access control.
+_bypass_auth = os.getenv("BYPASS_AUTH", "false").lower() == "true"
+_secret_key = os.getenv("SECRET_KEY", "")
+if not _secret_key and not _bypass_auth:
+    import secrets as _secrets
+
+    _secret_key = _secrets.token_hex(32)
+    print(
+        "WARNING: SECRET_KEY not set — generated an ephemeral key. "
+        "Sessions will not survive restarts. Set SECRET_KEY in the "
+        "environment for production use."
+    )
+elif not _secret_key:
+    _secret_key = "bypass-auth-placeholder"
+
+fastapi_app.add_middleware(SessionMiddleware, secret_key=_secret_key)
 
 # Add CORS Middleware
 # In lab environments (BYPASS_AUTH=true), we allow any HTTP/HTTPS origin.
@@ -89,7 +104,7 @@ allowed_origins = [
     origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()
 ]
 
-if os.getenv("BYPASS_AUTH", "false").lower() == "true":
+if _bypass_auth:
     fastapi_app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
