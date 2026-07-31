@@ -16,7 +16,7 @@ Four profiles are included out of the box:
 | Antigravity | `agent/profiles/agy.yaml` | Antigravity CLI (`agy`) — Google's replacement for Gemini CLI |
 | Pi | `agent/profiles/pi.yaml` | Pi coding agent — provider-agnostic, supports Claude/GPT/Gemini/local models |
 | Bash | `agent/profiles/bash.yaml` | Bash shell with PROMPT_COMMAND sidecar telemetry |
-| Gemini | `agent/profiles/gemini.yaml` | Gemini CLI — **retired** from default install (see below) |
+| Gemini | `agent/profiles/archive/gemini.yaml` | Gemini CLI — **retired** from default install (see below) |
 
 ## Creating a Custom Profile
 
@@ -390,7 +390,7 @@ personal users. Google's replacement is Antigravity
 CLI (`agy`). Starting with this release, Gemini CLI
 is no longer installed in the default container image.
 
-The Gemini profile (`agent/profiles/gemini.yaml`)
+The Gemini profile (`agent/profiles/archive/gemini.yaml`)
 remains in the codebase and is fully functional —
 the daemon will detect and offer Gemini CLI if the
 binary is present. Enterprise API key users who
