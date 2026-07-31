@@ -909,6 +909,18 @@ class HostDaemon:
             env["TERM"] = "xterm-256color"
             env["COLORTERM"] = "truecolor"
 
+            # Remove stale OTEL env vars inherited from
+            # the daemon's own process environment. The
+            # daemon may run inside a tmux session that
+            # was spawned with a previous agent's OTEL
+            # config (e.g. OTEL_SERVICE_NAME from a Pi
+            # profile). Without this cleanup, agents
+            # whose profiles don't explicitly set these
+            # vars inherit incorrect values.
+            for key in list(env):
+                if key.startswith("OTEL_") or key.startswith("PI_OTEL"):
+                    del env[key]
+
             # Inject OpenTelemetry standard configuration
             env["OTEL_EXPORTER_OTLP_ENDPOINT"] = f"http://127.0.0.1:{self.otlp_port}"
             env["OTEL_RESOURCE_ATTRIBUTES"] = f"service.name={agent_id}"
