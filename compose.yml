@@ -11,7 +11,14 @@ services:
       - dashboard_data:/app/data
     environment:
       - DATABASE_URL=sqlite:////app/data/agent_dashboard.db
-      - BYPASS_AUTH=true
+      # Authentication is enforced by default. To disable
+      # for local development, uncomment the next line:
+      # - BYPASS_AUTH=true
+      # Required when auth is enabled (BYPASS_AUTH unset):
+      # - SECRET_KEY=<generate-a-random-secret>
+      # - OIDC_CLIENT_ID=<your-oidc-client-id>
+      # - OIDC_CLIENT_SECRET=<your-oidc-client-secret>
+      # - OIDC_DISCOVERY_URL=<your-oidc-discovery-url>
     restart: unless-stopped
 
   frontend:

@@ -122,28 +122,37 @@ class AgentDashboardApp(App):
             parts.append(branch)
         window_name = ":".join(parts)
 
-        # Build the terminal client command. Ensure the
-        # tmux subprocess uses the same working directory,
-        # venv, and PYTHONPATH as the TUI.
+        # Build the terminal client command as an
+        # argument list to avoid shell injection via
+        # server-supplied values (agent_id, base_url).
         cwd = os.getcwd()
         venv = os.environ.get("VIRTUAL_ENV", "")
-        activate = f"source {venv}/bin/activate && " if venv else ""
-        client_cmd = (
-            f"cd {cwd} && {activate}"
-            f"PYTHONPATH={cwd}:$PYTHONPATH "
-            f"{sys.executable} -m tui.terminal_client "
-            f"{agent_id} --url {self.base_url}"
-        )
+        env = os.environ.copy()
+        env["PYTHONPATH"] = f"{cwd}:{env.get('PYTHONPATH', '')}"
+        if venv:
+            venv_bin = os.path.join(venv, "bin")
+            env["PATH"] = f"{venv_bin}:{env.get('PATH', '')}"
+            env["VIRTUAL_ENV"] = venv
+        client_argv = [
+            sys.executable,
+            "-m",
+            "tui.terminal_client",
+            agent_id,
+            "--url",
+            self.base_url,
+        ]
 
         if self._in_tmux:
-            # Open a new tmux window with the terminal client
+            # Open a new tmux window with the terminal
+            # client. tmux new-window accepts a command
+            # with arguments as separate tokens.
             subprocess.run(
                 [
                     "tmux",
                     "new-window",
                     "-n",
                     window_name,
-                    client_cmd,
+                    *client_argv,
                 ],
                 check=False,
             )
@@ -152,7 +161,7 @@ class AgentDashboardApp(App):
             # Not in tmux — exit the TUI and run the
             # terminal client directly. The user can
             # relaunch the TUI after disconnecting.
-            self._attach_cmd = client_cmd
+            self._attach_cmd = (client_argv, env, cwd)
             self.exit()
 
     async def on_unmount(self) -> None:
@@ -176,9 +185,11 @@ def main():
     # If the user pressed attach without tmux, the TUI
     # exits and we run the terminal client directly.
     if app._attach_cmd:  # pylint: disable=protected-access
+        argv, env, cwd = app._attach_cmd  # pylint: disable=protected-access
         subprocess.run(
-            app._attach_cmd,  # pylint: disable=protected-access
-            shell=True,
+            argv,
+            env=env,
+            cwd=cwd,
             check=False,
         )
 
