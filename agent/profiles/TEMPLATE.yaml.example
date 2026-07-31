@@ -145,6 +145,16 @@ auth:
 #   - "Do you want to proceed"
 #   - "Allow .+ to run"
 
+# ── Spawn Settings ──────────────────────────────────
+# Dict of file paths to JSON key/value pairs. At spawn
+# time, missing keys are added to the target file without
+# overwriting existing values. Used to ensure required
+# settings are present for fresh installs.
+
+# spawn_settings:
+#   "~/.myagent/settings.json":
+#     allowNonWorkspaceAccess: false
+
 # ── Provisioning ─────────────────────────────────────
 # Build-time metadata used by generate_containerfile.py
 # to produce the Containerfile, and as documentation for
