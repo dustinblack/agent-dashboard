@@ -22,17 +22,22 @@ export const CONTEXT_TIERS = [
  * at the first hit, so more-specific keys must precede
  * less-specific ones within each model family.
  *
- * Claude models with a `[1m]` suffix (e.g.
- * "claude-opus-4-6[1m]") use 1M context; without the
- * suffix they default to 200k. The suffix is parsed in
+ * Claude models 4-6 and newer have 1M context natively.
+ * Older models (4-5 and below) default to 200k, with 1M
+ * available via a `[1m]` suffix (e.g.
+ * "claude-opus-4-5[1m]"). The suffix is parsed in
  * `getContextWindow()` before consulting this map.
  *
- * Last verified: 2026-05-28
+ * Last verified: 2026-07-31
  */
 export const CONTEXT_WINDOWS: Record<string, number> = {
-  // Claude — all default to 200k; 1M via [1m] suffix
-  'claude-opus-4-6': 200000,
-  'claude-sonnet-4-6': 200000,
+  // Claude — 4-6+ have native 1M context
+  'claude-fable-5': 1000000,
+  'claude-opus-4-8': 1000000,
+  'claude-opus-4-7': 1000000,
+  'claude-opus-4-6': 1000000,
+  'claude-sonnet-4-6': 1000000,
+  // Claude — 4-5 and older default to 200k; 1M via [1m] suffix
   'claude-opus-4-5': 200000,
   'claude-opus-4-1': 200000,
   'claude-opus-4': 200000,
