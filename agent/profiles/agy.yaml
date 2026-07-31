@@ -3,6 +3,13 @@
 # June 18, 2026 for free/personal users.
 #
 # Requires agy >= 1.0.12 for --add-dir and --continue.
+#
+# OTLP telemetry: NOT SUPPORTED as of agy v1.0.15.
+# agy sends telemetry only to Google's internal
+# BusinessAI gRPC endpoints — it does not read
+# OTEL_* or GEMINI_TELEMETRY_* env vars and does
+# not export OTLP traces, metrics, or logs.
+# Tracked upstream: google-antigravity/antigravity-cli#366
 name: agy
 display_name: Antigravity
 color: cyan
@@ -19,18 +26,7 @@ commands:
   # Falls back to a new project if no history exists.
   resume: ["bash", "-c", "agy --continue --add-dir . || agy --new-project --add-dir ."]
 
-# Telemetry env vars — agy is built on the Gemini CLI
-# codebase and still honors the GEMINI_TELEMETRY_*
-# env vars for OTLP export (verified via binary
-# analysis of v1.0.15). The standard OTEL_* vars are
-# injected by the daemon automatically.
 env:
-  GEMINI_CLI_TELEMETRY_ENABLED: "true"
-  GEMINI_TELEMETRY_ENABLED: "true"
-  GEMINI_TELEMETRY_OTLP_ENDPOINT: "http://127.0.0.1:{otlp_port}"
-  GEMINI_TELEMETRY_OTLP_PROTOCOL: "http"
-  GEMINI_TELEMETRY_USE_COLLECTOR: "true"
-  GEMINI_TELEMETRY_TARGET: "local"
   AGY_CLI_HIDE_ACCOUNT_INFO: "1"
 
 # No auth gate — agy supports Google OAuth and API
@@ -38,34 +34,20 @@ env:
 
 # Spawn-time settings — patch the host-mounted
 # settings.json to ensure required keys are present.
-# agy reads enableTelemetry from settings.json and
-# ignores the GEMINI_CLI_TELEMETRY_ENABLED env var.
 # allowNonWorkspaceAccess=false keeps agents scoped
 # to the project directory.  Only missing keys are
 # added — existing user values are preserved.
 spawn_settings:
   ~/.gemini/antigravity-cli/settings.json:
-    enableTelemetry: true
     allowNonWorkspaceAccess: false
 
 mcp:
   user_files:
     - ~/.gemini/antigravity-cli/settings.json
 
-# Telemetry mappings — agy shares Gemini CLI's OTLP
-# metric namespace (devtools.cider.agent.* internally,
-# exported as gemini_cli.* via the OTLP bridge).
-telemetry:
-  token_metrics:
-    - gemini_cli.token.usage
-  activity_metrics:
-    - gemini_cli.tool.call.count
-    - gemini_cli.tool.call.latency
-  runtime_metric:
-    name: gemini_cli.agent.duration
-    unit: milliseconds
-  excluded_metrics:
-    - gen_ai.client.token.usage
+# No telemetry section — agy does not support OTLP.
+# Token/cost/model data is unavailable until
+# google-antigravity/antigravity-cli#366 is resolved.
 
 permission_patterns:
   - "Allow .+ to run"
@@ -80,15 +62,11 @@ provisioning:
     # - allowNonWorkspaceAccess=false: keeps agy scoped
     #   to the project workspace; prompts before
     #   accessing external paths.
-    # - enableTelemetry=true: required for OTLP export.
-    #   Without this, settings.json overrides the
-    #   GEMINI_CLI_TELEMETRY_ENABLED env var and
-    #   telemetry is silently disabled.
     # The host volume mount overlays this at runtime,
     # so users must also set these in their host-side
     # ~/.gemini/antigravity-cli/settings.json.
     - path: "/root/.gemini/antigravity-cli/settings.json"
-      content: '{"allowNonWorkspaceAccess": false, "enableTelemetry": true}'
+      content: '{"allowNonWorkspaceAccess": false}'
   verify: "agy --version"
   mounts:
     - host: "~/.gemini"

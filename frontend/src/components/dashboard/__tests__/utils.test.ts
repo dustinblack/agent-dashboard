@@ -29,20 +29,24 @@ describe('getContextWindow', () => {
     expect(getContextWindow('claude-opus-4-20250514')).toBe(200000);
   });
 
-  it('returns 200k for claude-opus-4-6 without suffix', () => {
-    expect(getContextWindow('claude-opus-4-6')).toBe(200000);
+  it('returns 1M for claude-opus-4-6 (native 1M context)', () => {
+    expect(getContextWindow('claude-opus-4-6')).toBe(1000000);
+  });
+
+  it('returns 1M for claude-sonnet-4-6 (native 1M context)', () => {
+    expect(getContextWindow('claude-sonnet-4-6')).toBe(1000000);
   });
 
   it('returns 200k for claude-haiku-4', () => {
     expect(getContextWindow('claude-haiku-4-5')).toBe(200000);
   });
 
-  it('returns 1M when model has [1m] suffix', () => {
-    expect(getContextWindow('claude-opus-4-6[1m]')).toBe(1000000);
+  it('returns 1M when older model has [1m] suffix', () => {
+    expect(getContextWindow('claude-opus-4-5[1m]')).toBe(1000000);
   });
 
-  it('returns 1M for sonnet with [1m] suffix', () => {
-    expect(getContextWindow('claude-sonnet-4-6[1m]')).toBe(1000000);
+  it('returns 1M for sonnet 4-5 with [1m] suffix', () => {
+    expect(getContextWindow('claude-sonnet-4-5[1m]')).toBe(1000000);
   });
 
   it('returns 1048576 for gemini-2.5-pro model', () => {
