@@ -209,9 +209,13 @@ Then rebuild: `podman-compose build --no-cache && podman-compose up -d`
 > sudo firewall-cmd --reload
 > ```
 
-> [!NOTE]
-> For internal or private lab networks, keep `BYPASS_AUTH=true`
-> in `compose.yml` to skip OIDC authentication.
+> [!IMPORTANT]
+> **Authentication is enforced by default.** `BYPASS_AUTH` is
+> commented out in `compose.yml`. For local development or
+> private lab networks without OIDC, uncomment it or add
+> `BYPASS_AUTH=true` to the backend environment in
+> `compose.yml`. For production, configure OIDC — see the
+> [Host Daemon Reference](docs/host-daemon.md).
 
 ### 3. Register a Host
 
@@ -457,7 +461,7 @@ each have their own isolated worktree with a separate branch.
 | Terminal popup shows nginx 404 | Fedora base image update added a conflicting default server block | Rebuild frontend container (fixed in v0.4.0) |
 | `netavark: setns: Operation not permitted` when running podman inside daemon | Nested container networking blocked | Daemon Containerfile configures `slirp4netns` automatically |
 | Agent card reappears after clicking Stop | Terminal popup auto-reconnects the session | Close the terminal window before stopping, or upgrade to v0.3.1+ |
-| `1;2c` appears in Gemini input | Terminal DA response leaks into stdin | Upgrade to v0.3.1+ (filtered automatically) |
+| `1;2c` appears in agent input | Terminal DA response leaks into stdin | Upgrade to v0.3.1+ (filtered automatically) |
 | Token counts grow unrealistically | OTLP cumulative counters were double-counted | Upgrade to v0.3.1+ |
 
 ## Similar Tools
@@ -472,7 +476,7 @@ strengths and trade-offs:
   - A web-based platform that provides multi-host orchestration and remote pseudo-terminal (PTY) access to AI agent sessions with live OpenTelemetry metrics. Supports optional git worktree isolation for running multiple agents on the same repository, real-time cost tracking, and companion session chaining.
   - **Ideal for:** Remote, web-based interaction with isolated AI agent sessions across multiple host machines via full PTY emulation.
   - **Not ideal for:** Users who prefer to work exclusively within a local, native terminal multiplexer.
-  - **Restrictions:** Only supports Gemini CLI, Claude Code, and Bash sessions. Does not orchestrate GUI-based agents, arbitrary scripts, or non-interactive processes.
+  - **Restrictions:** Only supports Claude Code, Pi, Antigravity, and Bash sessions. Does not orchestrate GUI-based agents, arbitrary scripts, or non-interactive processes.
 
 - **[Agent Commander](https://github.com/cvsloane/agent-commander)**
   - A mission-control dashboard and tmux-first manager for AI agent sessions across multiple hosts. Built with Next.js, Fastify, and a Go-based agent daemon. Features approval queues for agent governance, scoped memory systems, and scheduling with runtime reuse.
@@ -529,7 +533,7 @@ cd frontend && npm install && cd ..
 
 > [!IMPORTANT]
 > **AI agent development:** If you are using an AI coding agent
-> (Claude Code, Gemini CLI, etc.) to develop on this project,
+> (Claude Code, Pi, etc.) to develop on this project,
 > always install the pre-commit hook first. AI agents can
 > introduce formatting, linting, and type errors that slip past
 > review. The hook catches these automatically on every commit.

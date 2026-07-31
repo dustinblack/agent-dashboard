@@ -84,7 +84,8 @@ podman run -d --name host-daemon --network=host \
 | `PROJECTS_ROOT` | Root directory (or colon-separated list) for project scanning | `/git` |
 | `OTLP_PORT` | OTLP telemetry receiver port | `4318` |
 | `PROJECTS_DEPTH` | Max scan depth below each `PROJECTS_ROOT` entry | `6` |
-| `GEMINI_API_KEY` | API key for Gemini CLI | — |
+| `OTLP_DEBUG` | Set to any value to log raw OTLP payloads for troubleshooting | — |
+| `GEMINI_API_KEY` | API key for Gemini CLI (if installed) | — |
 | `CLAUDE_CODE_USE_VERTEX` | Set to `1` to use Vertex AI for Claude | — |
 | `CLOUD_ML_REGION` | GCP region (e.g., `us-east5`) | — |
 | `ANTHROPIC_VERTEX_PROJECT_ID` | GCP project ID for Vertex AI | — |
@@ -98,7 +99,7 @@ podman run -d --name host-daemon --network=host \
 | `/path/to/your/git` | `/git` | rw | Project source code |
 | `~/.ssh` | `/root/.ssh` | ro | SSH keys for git operations |
 | `~/.gitconfig` | `/root/.gitconfig` | ro | Git configuration |
-| `~/.gemini/` | `/root/.gemini` | rw | Gemini CLI / Antigravity CLI settings |
+| `~/.gemini/` | `/root/.gemini` | rw | Antigravity CLI settings (also used by Gemini CLI if installed) |
 | `~/.claude/` | `/root/.claude` | rw | Claude Code settings |
 | `~/.claude.json` | `/root/.claude.json` | ro | Claude Code MCP server config |
 | `~/.pi/` | `/root/.pi` | rw | Pi coding agent settings and extensions |
@@ -185,7 +186,7 @@ services:
 | Setting | Description |
 |---------|-------------|
 | `VITE_API_URL` | Backend URL for remote access (build arg via `.env`) |
-| `BYPASS_AUTH` | Set to `true` to skip OIDC auth (default in compose) |
+| `BYPASS_AUTH` | Set to `true` to skip OIDC auth (commented out by default) |
 | `DATABASE_URL` | SQLite path inside the backend container |
 | `dashboard_data` | Named volume for database persistence |
 
@@ -237,8 +238,9 @@ The daemon container bundles the following tools:
 
 | Tool | Purpose |
 |------|---------|
-| **Gemini CLI** (`@google/gemini-cli`) | Google Gemini AI coding agent |
 | **Claude Code** (`@anthropic-ai/claude-code`) | Anthropic Claude AI coding agent |
+| **Pi** (`@earendil-works/pi-coding-agent`) | Pi coding agent — provider-agnostic |
+| **Antigravity CLI** (`agy`) | Google Antigravity AI coding agent |
 | **Google Cloud CLI** (`gcloud`) | GCP authentication for Claude via Vertex AI |
 | **GitHub CLI** (`gh`) | GitHub interaction (PRs, issues, etc.) |
 | **GitLab CLI** (`glab`) | GitLab interaction (MRs, issues, etc.) |

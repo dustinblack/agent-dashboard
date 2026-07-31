@@ -141,3 +141,14 @@ matching Claude Code's native sub-agent behavior.
 
 No manual patching is needed — the env var is injected
 automatically by the daemon at spawn time.
+
+## Known Limitations
+
+### pi-otel telemetry
+
+pi-otel telemetry requires the upstream pi-vertex fix
+([ssweens/pi-packages#7](https://github.com/ssweens/pi-packages/issues/7))
+for `onPayload`/`onResponse` callbacks. Without this fix,
+token usage, cost, and model data are not reported to the
+dashboard when using Pi with the pi-vertex provider.
+Telemetry works correctly with other Pi providers.

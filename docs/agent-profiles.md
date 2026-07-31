@@ -18,6 +18,11 @@ Four profiles are included out of the box:
 | Bash | `agent/profiles/bash.yaml` | Bash shell with PROMPT_COMMAND sidecar telemetry |
 | Gemini | `agent/profiles/archive/gemini.yaml` | Gemini CLI — **retired** from default install (see below) |
 
+Retired profiles are moved to `agent/profiles/archive/` where
+they remain available for reference but are not loaded by the
+daemon. To restore an archived profile, copy it back to
+`agent/profiles/` or use a `.local.yaml` override.
+
 ## Creating a Custom Profile
 
 To add support for a new agent tool, create a YAML or JSON
@@ -110,6 +115,7 @@ and as documentation for manual container setup.
 | `provisioning.verify` | string | no | `null` | Command to verify the installation succeeded (e.g., `"claude --version"`). Run as a `RUN` step in the Containerfile. |
 | `provisioning.mounts` | list | no | `[]` | Host volume mounts. Each entry has `host` (string, `~` expanded), `container` (string), and `mode` (`"rw"` or `"ro"`). |
 | `provisioning.passthrough_env` | list | no | `[]` | Environment variables to pass from the host to the container at runtime (via `podman run -e` or quadlet `Environment=`). Distinct from `env` which the daemon injects at agent spawn time. |
+| `spawn_settings` | map | no | `{}` | Dict of file paths to JSON key/value pairs. At spawn time, missing keys are added to the target file without overwriting existing values. Used to ensure required settings (e.g. `allowNonWorkspaceAccess`) are present. |
 
 ### Full Example
 
@@ -284,7 +290,7 @@ automatically** from the `commands` configuration — no
 separate flag is needed:
 
 - **Supports resume**: `commands.resume` is defined AND
-  differs from `commands.new` (e.g. Claude, Gemini).
+  differs from `commands.new` (e.g. Claude, Antigravity).
 - **No resume**: `commands.resume` is empty, undefined, or
   identical to `commands.new` (e.g. Bash where both are
   `["bash"]`).
