@@ -4,9 +4,14 @@ Manages real-time communication between the frontend UI, the
 backend hub, and remote host daemons over the /terminal namespace.
 """
 
+import json
+import os
+from base64 import b64decode
 from datetime import datetime, timezone
+from http.cookies import SimpleCookie
 
 import socketio
+from itsdangerous import TimestampSigner, BadSignature
 
 from . import database, models
 
@@ -14,11 +19,50 @@ from . import database, models
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 
 
+def _validate_session_cookie(environ):
+    """Validate the Starlette session cookie from the ASGI scope.
+
+    Parses the Cookie header, extracts the 'session' cookie,
+    and verifies its signature using the same SECRET_KEY that
+    SessionMiddleware uses. Returns the decoded session dict
+    on success, or None on failure.
+    """
+    secret_key = os.getenv("SECRET_KEY", "")
+    if not secret_key:
+        return None
+
+    headers = dict(environ.get("asgi.scope", {}).get("headers", []))
+    cookie_header = None
+    for k, v in headers.items():
+        if k == b"cookie":
+            cookie_header = v.decode("utf-8")
+            break
+    if not cookie_header:
+        return None
+
+    cookies = SimpleCookie()
+    cookies.load(cookie_header)
+    session_morsel = cookies.get("session")
+    if not session_morsel:
+        return None
+
+    signer = TimestampSigner(secret_key)
+    try:
+        data = signer.unsign(session_morsel.value.encode("utf-8"))
+        return json.loads(b64decode(data))
+    except (BadSignature, Exception):
+        return None
+
+
 @sio.on("connect", namespace="/terminal")
 async def connect(sid, environ, auth):
     """
     Handles new Socket.IO connections on the /terminal namespace.
     Identifies if the connection is from a Host Daemon or a UI Client.
+
+    Host daemons authenticate via X-Host-Token header or auth.token.
+    UI clients are validated against the OIDC session cookie when
+    authentication is enabled (BYPASS_AUTH is not set).
     """
     headers = dict(environ.get("asgi.scope", {}).get("headers", []))
     headers_str = {
@@ -28,7 +72,12 @@ async def connect(sid, environ, auth):
     host_token = headers_str.get("x-host-token") or (auth and auth.get("token"))
 
     if not host_token:
-        # UI client connected
+        # UI client — enforce auth unless bypassed
+        bypass = os.getenv("BYPASS_AUTH", "false").lower() == "true"
+        if not bypass:
+            session = _validate_session_cookie(environ)
+            if not session or "user" not in session:
+                return False
         return True
 
     db = next(database.get_db())
