@@ -241,6 +241,15 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     fitAddon.fit();
     term.focus();
 
+    // Enable bracketed paste mode so multi-line pastes
+    // are wrapped in ESC[200~ / ESC[201~ sequences.
+    // Applications (e.g. Pi) request this via ESC[?2004h,
+    // but tmux intercepts that sequence and doesn't
+    // forward it to the daemon's PTY. Without this,
+    // each pasted newline is treated as Enter and
+    // submitted as a separate prompt.
+    term.write('\x1b[?2004h');
+
     // --- Scroll position tracking ---
     // Track whether the viewport is scrolled to the bottom
     // so we can restore position after fitAddon.fit()
