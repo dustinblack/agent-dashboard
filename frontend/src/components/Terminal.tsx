@@ -217,10 +217,12 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
       // sessions. Agent output with heavy escape sequences
       // (cursor movement, progress bars, color codes) can
       // consume orders of magnitude more memory per line
-      // than plain text. The daemon's history deque holds
-      // 1000 chunks, so reconnecting replays far less than
-      // this limit regardless.
-      scrollback: 2000,
+      // than plain text. Scrolling uses tmux's 10k-line
+      // server-side buffer (mouse wheel events are relayed
+      // as SGR sequences), so xterm.js scrollback only
+      // needs to hold enough for reconnection replay and
+      // current screen content.
+      scrollback: 500,
       theme: {
         background: '#000000',
         foreground: '#f1f5f9',
