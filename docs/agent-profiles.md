@@ -8,13 +8,14 @@ startup.
 
 ## Bundled Profiles
 
-Four profiles are included out of the box:
+Five profiles are included out of the box:
 
 | Profile | File | Description |
 |---------|------|-------------|
 | Claude | `agent/profiles/claude.yaml` | Claude Code CLI with OTLP telemetry and MCP detection |
 | Antigravity | `agent/profiles/agy.yaml` | Antigravity CLI (`agy`) — Google's replacement for Gemini CLI |
 | Pi | `agent/profiles/pi.yaml` | Pi coding agent — provider-agnostic, supports Claude/GPT/Gemini/local models |
+| OpenCode | `agent/profiles/opencode.yaml` | OpenCode — open-source multi-provider agent (partial OTLP, see below) |
 | Bash | `agent/profiles/bash.yaml` | Bash shell with PROMPT_COMMAND sidecar telemetry |
 | Gemini | `agent/profiles/archive/gemini.yaml` | Gemini CLI — **retired** from default install (see below) |
 
@@ -471,6 +472,47 @@ it falls back to starting a new conversation. The
 `--conversation <id>` flag is also available for
 resuming a specific conversation, but the profile
 defaults to the simpler `--continue` behavior.
+
+## OpenCode
+
+[OpenCode](https://github.com/anomalyco/opencode) is an
+open-source, multi-provider AI coding agent (TypeScript,
+npm package `opencode-ai`). It supports Anthropic, OpenAI,
+Gemini, GitHub Copilot, AWS Bedrock, and many other
+providers.
+
+### Telemetry
+
+OpenCode has partial OTLP support — traces and logs are
+exported when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, but
+**no metrics** (token usage, cost, activity counters) are
+exported. Dashboard cards show model name and current
+activity from span attributes but no token/cost data.
+
+> **Note:** `OTEL_SERVICE_NAME` is currently ignored by
+> OpenCode — it hardcodes `service.name` to `"opencode"`.
+> Multi-instance tracking relies on the daemon's fallback
+> agent ID resolution. Multiple simultaneous OpenCode
+> sessions may have telemetry routing issues. Tracked
+> upstream at
+> [anomalyco/opencode#25839](https://github.com/anomalyco/opencode/issues/25839).
+
+The profile enables `experimental.openTelemetry` in
+OpenCode's config via `spawn_settings` for richer trace
+data from the Vercel AI SDK integration.
+
+### Session resume
+
+The resume command uses `--continue` to pick up the
+most recent session. If no prior session exists, it
+falls back to starting a new session.
+
+### Configuration
+
+OpenCode stores config in `~/.opencode/config.json`
+(global) and `.opencode/config.json` (project-level).
+MCP servers are configured under the `mcp` key in
+these files.
 
 ## Recommended Pi Extensions
 
