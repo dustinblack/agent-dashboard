@@ -456,6 +456,16 @@ class TestResolveAgentId:
         # Falls back to single-agent last resort
         assert result == "g-1"
 
+    def test_opencode_fallback_service_name(self, daemon):
+        """OpenCode hardcodes service.name to 'opencode'.
+        The fallback matches it to opencode agents."""
+        daemon.agents["oc-1"] = {
+            "tool": "opencode",
+            "last_output_time": 1.0,
+        }
+        result = daemon._resolve_agent_id({"service.name": "opencode"})
+        assert result == "oc-1"
+
 
 # ── E. get_git_info ──────────────────────────────────────────
 
@@ -1075,6 +1085,57 @@ class TestLocalProfileOverrides:
 
 
 # ── I. Multi-Root Projects ─────────────────────────────
+
+
+# ── J. _merge_missing_keys ─────────────────────────────
+
+
+class TestMergeMissingKeys:
+    """Tests for _merge_missing_keys deep merge."""
+
+    def test_flat_keys_added(self, daemon):
+        """Missing flat keys are added."""
+        target = {"a": 1}
+        changed = daemon._merge_missing_keys(target, {"b": 2})
+        assert changed is True
+        assert target == {"a": 1, "b": 2}
+
+    def test_existing_keys_preserved(self, daemon):
+        """Existing keys are not overwritten."""
+        target = {"a": 1}
+        changed = daemon._merge_missing_keys(target, {"a": 99})
+        assert changed is False
+        assert target == {"a": 1}
+
+    def test_nested_keys_added(self, daemon):
+        """Missing nested keys are added without
+        overwriting sibling keys."""
+        target = {"experimental": {"existingKey": True}}
+        defaults = {"experimental": {"openTelemetry": True}}
+        changed = daemon._merge_missing_keys(target, defaults)
+        assert changed is True
+        assert target == {
+            "experimental": {
+                "existingKey": True,
+                "openTelemetry": True,
+            }
+        }
+
+    def test_nested_existing_preserved(self, daemon):
+        """Existing nested keys are not overwritten."""
+        target = {"experimental": {"openTelemetry": False}}
+        defaults = {"experimental": {"openTelemetry": True}}
+        changed = daemon._merge_missing_keys(target, defaults)
+        assert changed is False
+        assert target["experimental"]["openTelemetry"] is False
+
+    def test_new_nested_dict_added(self, daemon):
+        """Entirely missing nested dict is added."""
+        target = {}
+        defaults = {"experimental": {"openTelemetry": True}}
+        changed = daemon._merge_missing_keys(target, defaults)
+        assert changed is True
+        assert target == {"experimental": {"openTelemetry": True}}
 
 
 class TestMultiRoot:

@@ -637,6 +637,31 @@ class HostDaemon:
 
         return branch, project, remote_url
 
+    @staticmethod
+    def _merge_missing_keys(target, defaults):
+        """Deep-merge default keys into target dict.
+
+        Only adds keys that are missing in the target.
+        For nested dicts, recurses so that sub-keys can
+        be added without overwriting sibling keys.
+
+        Args:
+            target: Dict to update in place.
+            defaults: Dict of keys/values to add if missing.
+
+        Returns:
+            True if any key was added, False otherwise.
+        """
+        changed = False
+        for key, value in defaults.items():
+            if key not in target:
+                target[key] = value
+                changed = True
+            elif isinstance(value, dict) and isinstance(target[key], dict):
+                if HostDaemon._merge_missing_keys(target[key], value):
+                    changed = True
+        return changed
+
     def _detect_mcp_servers(self, project_dir, tool):
         """Detects MCP servers configured for the given tool.
 
@@ -883,11 +908,7 @@ class HostDaemon:
                     if os.path.exists(filepath):
                         with open(filepath, "r", encoding="utf-8") as f:
                             existing = json.load(f)
-                    changed = False
-                    for key, value in required_keys.items():
-                        if key not in existing:
-                            existing[key] = value
-                            changed = True
+                    changed = self._merge_missing_keys(existing, required_keys)
                     if changed:
                         os.makedirs(
                             os.path.dirname(filepath),
@@ -1492,6 +1513,8 @@ class HostDaemon:
             tool_hint = "claude"
         elif "pi" == svc.lower() or "pi-otel" in all_vals:
             tool_hint = "pi"
+        elif "opencode" in svc.lower() or "opencode" in all_vals:
+            tool_hint = "opencode"
 
         if tool_hint:
             # Build candidate list.  When the hint is

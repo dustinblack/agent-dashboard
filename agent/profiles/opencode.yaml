@@ -1,0 +1,85 @@
+# OpenCode agent profile (anomalyco/opencode)
+# Open-source AI coding agent with multi-provider
+# support. TypeScript/Node.js, distributed as the
+# opencode-ai npm package.
+#
+# OTLP telemetry: Partial. Traces and logs are
+# exported when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+# Metrics (token usage, cost) are NOT exported.
+# OTEL_SERVICE_NAME is currently ignored (hardcoded
+# to "opencode") — multi-instance tracking relies
+# on the daemon's fallback agent ID resolution.
+# Tracked upstream:
+#   - Service name: anomalyco/opencode#25839
+name: opencode
+display_name: OpenCode
+color: amber
+binary: opencode
+
+commands:
+  new: ["opencode"]
+  resume: ["bash", "-c", "opencode --continue || opencode"]
+
+# OTEL_EXPORTER_OTLP_ENDPOINT is the master switch
+# for OpenCode's OTLP export. Setting it enables
+# trace and log export to the daemon's receiver.
+# OTEL_EXPORTER_OTLP_PROTOCOL is not needed —
+# OpenCode uses http/json by default.
+env:
+  OTEL_EXPORTER_OTLP_PROTOCOL: "http/json"
+
+# No auth gate — OpenCode supports many providers
+# (Anthropic, OpenAI, Gemini, Copilot, Bedrock,
+# etc.) with their own API key env vars. Binary
+# presence is sufficient. If no provider is
+# configured, OpenCode prompts at startup.
+
+# Spawn-time settings — ensure experimental OTLP
+# span generation is enabled for richer traces.
+spawn_settings:
+  ~/.opencode/config.json:
+    experimental:
+      openTelemetry: true
+
+mcp:
+  user_files:
+    - ~/.opencode/config.json
+
+# No telemetry metrics section — OpenCode does not
+# export OTLP metrics (token usage, cost, activity).
+# Traces provide model name and current activity
+# via span attributes, which the daemon extracts
+# in _update_telemetry_from_attrs().
+
+permission_patterns:
+  - "Allow"
+  - "Grant"
+  - "approve"
+
+# Build-time provisioning metadata
+provisioning:
+  install:
+    npm:
+      - "opencode-ai"
+  config_files:
+    - path: "/root/.opencode"
+      mkdir: true
+    - path: "/root/.opencode/config.json"
+      content: '{"experimental": {"openTelemetry": true}}'
+  verify: "opencode --version"
+  mounts:
+    - host: "~/.opencode"
+      container: "/root/.opencode"
+      mode: rw
+  passthrough_env:
+    - ANTHROPIC_API_KEY
+    - OPENAI_API_KEY
+    - GEMINI_API_KEY
+    - GITHUB_TOKEN
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_REGION
+    - AZURE_OPENAI_API_KEY
+    - AZURE_OPENAI_BASE_URL
+    - XAI_API_KEY
+    - OPENROUTER_API_KEY
