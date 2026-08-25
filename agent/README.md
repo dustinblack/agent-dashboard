@@ -10,7 +10,8 @@ The Host Daemon runs on remote development machines and manages AI agent session
 
 The daemon uses YAML/JSON profile files to define how each
 agent tool is spawned, detected, and monitored. Bundled
-profiles for Claude, Pi, Antigravity, OpenCode, and Bash are in
+profiles for Claude, Pi, Antigravity, OpenCode, Codex, and
+Bash are in
 `agent/profiles/`.
 Custom profiles can be added by dropping a YAML file into the
 same directory. See [Agent Profiles](../docs/agent-profiles.md)
@@ -26,6 +27,7 @@ The container image bundles the following tools so spawned agents have everythin
 | **Pi** (`@earendil-works/pi-coding-agent`) | Pi coding agent — provider-agnostic |
 | **Antigravity CLI** (`agy`) | Google Antigravity AI coding agent |
 | **OpenCode** (`opencode-ai`) | Open-source multi-provider AI coding agent |
+| **Codex CLI** (`@openai/codex`) | OpenAI Codex terminal coding agent |
 | **Google Cloud CLI** (`gcloud`) | GCP authentication for Claude Code via Vertex AI |
 | **GitHub CLI** (`gh`) | GitHub interaction (PRs, issues, etc.) |
 | **GitLab CLI** (`glab`) | GitLab interaction (MRs, issues, etc.) |

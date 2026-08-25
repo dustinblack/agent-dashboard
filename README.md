@@ -5,7 +5,7 @@
 <h1 align="center">Agent Dashboard</h1>
 
 <p align="center">
-A multi-host orchestration platform for AI coding agents — spawn, monitor, and interact with Claude Code, Pi, Antigravity, OpenCode, and Bash sessions across multiple machines from a single web dashboard.
+A multi-host orchestration platform for AI coding agents — spawn, monitor, and interact with Claude Code, Pi, Antigravity, OpenCode, Codex, and Bash sessions across multiple machines from a single web dashboard.
 </p>
 
 <p align="center">
@@ -28,8 +28,8 @@ AI coding agents. It remotely spawns, monitors, and provides
 interactive terminal access to AI coding agent sessions
 running across multiple development machines — all from a
 single web interface. Supports Claude Code, Pi, Antigravity
-(agy), OpenCode, and Bash out of the box, with new agents
-added via YAML profiles.
+(agy), OpenCode, Codex, and Bash out of the box, with new
+agents added via YAML profiles.
 
 > [!TIP]
 > **How it works:** Install the hub (backend + frontend) on any
@@ -254,6 +254,7 @@ podman run -d --name host-daemon --network=host \
   -v $HOME/.gemini/:/root/.gemini \
   -v $HOME/.pi:/root/.pi \
   -v $HOME/.opencode:/root/.opencode \
+  -v $HOME/.codex:/root/.codex \
   localhost/agent-dashboard-daemon:latest
 ```
 
@@ -262,7 +263,7 @@ podman run -d --name host-daemon --network=host \
 > expect agent config directories to exist on the host.
 > If you haven't used these tools locally, create them first:
 > ```bash
-> mkdir -p ~/.claude ~/.gemini ~/.pi/agent ~/.opencode
+> mkdir -p ~/.claude ~/.gemini ~/.pi/agent ~/.opencode ~/.codex
 > ```
 
 > [!TIP]
@@ -285,7 +286,7 @@ podman run -d --name host-daemon --network=host \
 1. Open `http://your-server-ip:8080`
 2. Your registered hosts appear on the dashboard
 3. Click **Spawn Claude**, **Spawn Pi**, **Spawn Antigravity**,
-   **Spawn OpenCode**, or **Spawn Bash**
+   **Spawn OpenCode**, **Spawn Codex**, or **Spawn Bash**
 4. Select a project directory from the dropdown
 5. Click a running session to attach in a terminal popup
 6. Delete retired hosts via the trash icon
@@ -477,7 +478,7 @@ strengths and trade-offs:
   - A web-based platform that provides multi-host orchestration and remote pseudo-terminal (PTY) access to AI agent sessions with live OpenTelemetry metrics. Supports optional git worktree isolation for running multiple agents on the same repository, real-time cost tracking, and companion session chaining.
   - **Ideal for:** Remote, web-based interaction with isolated AI agent sessions across multiple host machines via full PTY emulation.
   - **Not ideal for:** Users who prefer to work exclusively within a local, native terminal multiplexer.
-  - **Restrictions:** Only supports Claude Code, Pi, Antigravity, OpenCode, and Bash sessions. Does not orchestrate GUI-based agents, arbitrary scripts, or non-interactive processes.
+  - **Restrictions:** Only supports Claude Code, Pi, Antigravity, OpenCode, Codex, and Bash sessions. Does not orchestrate GUI-based agents, arbitrary scripts, or non-interactive processes.
 
 - **[Agent Commander](https://github.com/cvsloane/agent-commander)**
   - A mission-control dashboard and tmux-first manager for AI agent sessions across multiple hosts. Built with Next.js, Fastify, and a Go-based agent daemon. Features approval queues for agent governance, scoped memory systems, and scheduling with runtime reuse.

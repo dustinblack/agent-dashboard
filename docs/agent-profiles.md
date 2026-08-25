@@ -8,7 +8,7 @@ startup.
 
 ## Bundled Profiles
 
-Five profiles are included out of the box:
+Six profiles are included out of the box:
 
 | Profile | File | Description |
 |---------|------|-------------|
@@ -16,6 +16,7 @@ Five profiles are included out of the box:
 | Antigravity | `agent/profiles/agy.yaml` | Antigravity CLI (`agy`) — Google's replacement for Gemini CLI |
 | Pi | `agent/profiles/pi.yaml` | Pi coding agent — provider-agnostic, supports Claude/GPT/Gemini/local models |
 | OpenCode | `agent/profiles/opencode.yaml` | OpenCode — open-source multi-provider agent (partial OTLP, see below) |
+| Codex | `agent/profiles/codex.yaml` | OpenAI Codex CLI — Rust-based agent (OTLP via config.toml, see below) |
 | Bash | `agent/profiles/bash.yaml` | Bash shell with PROMPT_COMMAND sidecar telemetry |
 | Gemini | `agent/profiles/archive/gemini.yaml` | Gemini CLI — **retired** from default install (see below) |
 
@@ -513,6 +514,53 @@ OpenCode stores config in `~/.opencode/config.json`
 (global) and `.opencode/config.json` (project-level).
 MCP servers are configured under the `mcp` key in
 these files.
+
+## Codex CLI
+
+[Codex CLI](https://github.com/openai/codex) is OpenAI's
+open-source terminal coding agent, written in Rust and
+distributed as `@openai/codex` via npm.
+
+### Telemetry
+
+Codex has full OTLP support (traces, logs, metrics) but
+configuration is via `~/.codex/config.toml`, **not**
+standard `OTEL_*` environment variables. To route
+telemetry to the dashboard's OTLP receiver, add to
+`~/.codex/config.toml`:
+
+```toml
+[otel.exporter]
+type = "otlp-http"
+endpoint = "http://127.0.0.1:4318/v1/logs"
+protocol = "json"
+
+[otel.trace_exporter]
+type = "otlp-http"
+endpoint = "http://127.0.0.1:4318/v1/traces"
+protocol = "json"
+```
+
+> **Note:** The `spawn_settings` mechanism currently only
+> supports JSON files. Automated TOML patching for Codex
+> telemetry is not yet implemented — configure manually.
+
+### Session resume
+
+The resume command uses `codex resume --last` to pick up
+the most recent session. Specific sessions can be resumed
+by ID: `codex resume <session-id>`.
+
+### Sandbox and permissions
+
+Codex runs tools in a sandbox by default. Sandbox modes:
+- `read-only` — no writes outside sandbox
+- `workspace-write` — write within workspace only
+- `danger-full-access` — no restrictions
+
+For fully automated use in the dashboard, consider
+`--dangerously-bypass-approvals-and-sandbox` (alias
+`--yolo`) if the container provides external sandboxing.
 
 ## Recommended Pi Extensions
 

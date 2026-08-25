@@ -466,6 +466,15 @@ class TestResolveAgentId:
         result = daemon._resolve_agent_id({"service.name": "opencode"})
         assert result == "oc-1"
 
+    def test_codex_fallback_service_name(self, daemon):
+        """Codex CLI telemetry matched via service.name hint."""
+        daemon.agents["cx-1"] = {
+            "tool": "codex",
+            "last_output_time": 1.0,
+        }
+        result = daemon._resolve_agent_id({"service.name": "codex"})
+        assert result == "cx-1"
+
 
 # ── E. get_git_info ──────────────────────────────────────────
 
