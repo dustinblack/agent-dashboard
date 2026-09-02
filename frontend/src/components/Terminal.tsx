@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
 import { io, Socket } from 'socket.io-client';
 import {
   XCircle,
@@ -238,6 +239,23 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(terminalRef.current);
+
+    // Use WebGL-accelerated rendering for significantly
+    // better performance during resize, scrolling, and
+    // continuous output (agent spinners, progress bars).
+    // Falls back to the default DOM renderer if WebGL
+    // is not available (e.g. headless browsers, some
+    // mobile devices).
+    try {
+      const webglAddon = new WebglAddon();
+      webglAddon.onContextLoss(() => {
+        webglAddon.dispose();
+      });
+      term.loadAddon(webglAddon);
+    } catch {
+      // WebGL not available — DOM renderer is fine
+    }
+
     fitAddon.fit();
     term.focus();
 
