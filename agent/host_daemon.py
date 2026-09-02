@@ -90,6 +90,12 @@ _MOUSE_TRACKING = re.compile(
 # eliminates visible terminal jitter on connect.
 _STARTUP_BUFFER_SECS = 0.5
 
+# Seconds to pause output relay after a resize event.
+# Gives xterm.js time to reflow its buffer without
+# competing with incoming writes from the agent's
+# SIGWINCH redraw and tmux's reflow output.
+_RESIZE_PAUSE_SECS = 0.3
+
 
 def _split_utf8(data: bytes) -> tuple:
     """Splits a byte string at the last complete UTF-8 character boundary.
@@ -254,6 +260,22 @@ class HostDaemon:
                     fcntl.ioctl(master_fd, termios.TIOCSWINSZ, size)
                 except Exception as e:
                     log.info(f"Failed to resize PTY {agent_id}: {e}")
+
+                # Pause output relay so xterm.js can handle
+                # the resize reflow without competing
+                # writes.  The agent TUI and tmux both
+                # redraw after SIGWINCH, producing bursts
+                # of escape sequences.  Without the pause,
+                # xterm.js must process reflow AND incoming
+                # writes simultaneously, which overwhelms
+                # the DOM renderer in long sessions.
+                # tmux buffers the output naturally —
+                # nothing is lost.  After the pause, the
+                # daemon reads the latest output which is
+                # already rendered at the correct size.
+                self.agents[agent_id]["resize_pause_until"] = (
+                    time.monotonic() + _RESIZE_PAUSE_SECS
+                )
 
         @self.sio.on("spawn_agent", namespace="/terminal")
         async def on_spawn_agent(data):
@@ -1192,21 +1214,32 @@ class HostDaemon:
             if not self.agents or not self.sio.connected:
                 await asyncio.sleep(0.05)
                 continue
+            now = time.monotonic()
             for agent_id, info in list(self.agents.items()):
                 buf = info.get("output_buf", "")
-                if buf:
-                    info["output_buf"] = ""
-                    try:
-                        await self.sio.emit(
-                            "terminal_output",
-                            {
-                                "sid": agent_id,
-                                "output": buf,
-                            },
-                            namespace="/terminal",
-                        )
-                    except Exception:
-                        pass
+                if not buf:
+                    continue
+                # During resize pause, keep accumulating
+                # output in the buffer instead of emitting.
+                # tmux and the agent continue producing
+                # output which the read loop appends to
+                # output_buf.  Once the pause expires, the
+                # next flush cycle sends everything at once.
+                pause_until = info.get("resize_pause_until", 0)
+                if now < pause_until:
+                    continue
+                info["output_buf"] = ""
+                try:
+                    await self.sio.emit(
+                        "terminal_output",
+                        {
+                            "sid": agent_id,
+                            "output": buf,
+                        },
+                        namespace="/terminal",
+                    )
+                except Exception:
+                    pass
             await asyncio.sleep(0.015)
 
     def close_agent(self, agent_id: str):
