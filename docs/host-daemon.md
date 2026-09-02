@@ -63,7 +63,7 @@ podman run -d --name host-daemon --network=host \
 > **Missing config directories:** Volume mounts will fail
 > if the directories don't exist on the host. If you
 > haven't used these tools locally, create them first:
-> `mkdir -p ~/.claude ~/.gemini ~/.pi/agent ~/.opencode`
+> `mkdir -p ~/.claude ~/.gemini ~/.pi/agent ~/.opencode ~/.codex`
 
 > [!TIP]
 > **Reconfiguring the daemon:** Environment variables and
@@ -104,6 +104,7 @@ podman run -d --name host-daemon --network=host \
 | `~/.claude.json` | `/root/.claude.json` | ro | Claude Code MCP server config |
 | `~/.pi/` | `/root/.pi` | rw | Pi coding agent settings and extensions |
 | `~/.opencode/` | `/root/.opencode` | rw | OpenCode settings and config |
+| `~/.codex/` | `/root/.codex` | rw | Codex CLI settings and config |
 | `~/.config/gcloud` | `/root/.config/gcloud` | ro | GCP credentials (Vertex AI) |
 | `~/.config/gh` | `/root/.config/gh` | ro | GitHub CLI config |
 | `~/.config/glab-cli` | `/root/.config/glab-cli` | ro | GitLab CLI config |
@@ -243,6 +244,7 @@ The daemon container bundles the following tools:
 | **Pi** (`@earendil-works/pi-coding-agent`) | Pi coding agent — provider-agnostic |
 | **Antigravity CLI** (`agy`) | Google Antigravity AI coding agent |
 | **OpenCode** (`opencode-ai`) | Open-source multi-provider AI coding agent |
+| **Codex CLI** (`@openai/codex`) | OpenAI Codex terminal coding agent |
 | **Google Cloud CLI** (`gcloud`) | GCP authentication for Claude via Vertex AI |
 | **GitHub CLI** (`gh`) | GitHub interaction (PRs, issues, etc.) |
 | **GitLab CLI** (`glab`) | GitLab interaction (MRs, issues, etc.) |

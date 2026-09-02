@@ -1515,6 +1515,8 @@ class HostDaemon:
             tool_hint = "pi"
         elif "opencode" in svc.lower() or "opencode" in all_vals:
             tool_hint = "opencode"
+        elif "codex" in svc.lower() or "codex" in all_vals:
+            tool_hint = "codex"
 
         if tool_hint:
             # Build candidate list.  When the hint is

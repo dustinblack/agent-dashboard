@@ -1,0 +1,88 @@
+# OpenAI Codex CLI agent profile
+# Open-source terminal coding agent by OpenAI.
+# Rust binary with TUI, distributed as @openai/codex
+# npm package or via installer script.
+#
+# OTLP telemetry: Supported but configured via
+# config.toml, NOT standard OTEL_* env vars. The
+# daemon patches ~/.codex/config.toml at spawn time
+# via spawn_settings to route traces and logs to the
+# local OTLP receiver. Metrics are available but
+# default to OpenAI's internal Statsig endpoint.
+name: codex
+display_name: Codex
+color: green
+binary: codex
+
+commands:
+  new: ["codex"]
+  resume: ["bash", "-c", "codex resume --last || codex"]
+
+# Codex does not read standard OTEL_* env vars for
+# endpoint configuration. Telemetry is configured
+# entirely via config.toml [otel] section, which
+# spawn_settings patches below.
+env: {}
+
+# No auth gate — Codex supports OpenAI API key,
+# ChatGPT OAuth, and local providers (Ollama,
+# LM Studio). Binary presence is sufficient.
+
+# Spawn-time settings — patch config.toml to route
+# OTLP traces and logs to the daemon's receiver.
+# The {otlp_port} placeholder is expanded by the
+# daemon at spawn time.
+#
+# Note: spawn_settings currently supports JSON files
+# only. Codex uses TOML config. Until TOML support
+# is added to spawn_settings, telemetry must be
+# configured manually in ~/.codex/config.toml:
+#
+#   [otel.exporter]
+#   type = "otlp-http"
+#   endpoint = "http://127.0.0.1:4318/v1/logs"
+#   protocol = "json"
+#
+#   [otel.trace_exporter]
+#   type = "otlp-http"
+#   endpoint = "http://127.0.0.1:4318/v1/traces"
+#   protocol = "json"
+
+mcp:
+  user_files:
+    - ~/.codex/config.toml
+
+# No telemetry metrics section — while Codex supports
+# OTLP metrics, they default to OpenAI's Statsig
+# endpoint. Redirecting to the local receiver requires
+# config.toml patching (TOML, not JSON).
+# Model and activity data may be available from trace
+# span attributes once OTLP is configured.
+
+permission_patterns:
+  - "approve"
+  - "Allow"
+  - "deny"
+
+# Build-time provisioning metadata
+provisioning:
+  install:
+    npm:
+      - "@openai/codex"
+  config_files:
+    - path: "/root/.codex"
+      mkdir: true
+  verify: "codex --version"
+  mounts:
+    - host: "~/.codex"
+      container: "/root/.codex"
+      mode: rw
+  passthrough_env:
+    - OPENAI_API_KEY
+    - CODEX_API_KEY
+    - CODEX_ACCESS_TOKEN
+    # AWS Bedrock support
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_REGION
+    - AWS_PROFILE
