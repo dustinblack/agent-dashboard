@@ -261,16 +261,17 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     });
 
     // --- Resize handling ---
-    // Debounce fitAddon.fit() to prevent rapid-fire calls
-    // during layout transitions. The fit runs immediately
-    // after the debounce settles — no streaming deferral,
-    // which could block fits indefinitely under high
-    // latency and cause black screens.
+    // Leading-edge debounce for resize: fire immediately
+    // on the first resize event, then suppress further
+    // calls until the trailing edge settles. This ensures
+    // tmux starts redrawing as soon as the user begins
+    // resizing (no 500ms wait), while still coalescing
+    // rapid intermediate events during a window drag.
+    //
     // Track last-sent dimensions to deduplicate resize
-    // events.  When the browser pauses JS during a window
-    // drag, debounce timers freeze and all fire at once on
-    // resume — sending many identical resize events that
-    // each trigger a full tmux redraw.
+    // events. The dedup check in performFit prevents
+    // redundant socket emits even if the debounce fires
+    // multiple times at the same dimensions.
     let lastSentCols = 0;
     let lastSentRows = 0;
 
@@ -300,10 +301,21 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
     };
 
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-    const RESIZE_DEBOUNCE_MS = 500;
+    let resizeCooldown = false;
+    const RESIZE_DEBOUNCE_MS = 150;
     const debouncedFit = () => {
+      // Leading edge: fire immediately on first event
+      if (!resizeCooldown) {
+        resizeCooldown = true;
+        performFit();
+      }
+      // Trailing edge: reset timer on each event,
+      // fire once after events stop
       if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(performFit, RESIZE_DEBOUNCE_MS);
+      resizeTimer = setTimeout(() => {
+        resizeCooldown = false;
+        performFit();
+      }, RESIZE_DEBOUNCE_MS);
     };
 
     window.addEventListener('resize', debouncedFit);
