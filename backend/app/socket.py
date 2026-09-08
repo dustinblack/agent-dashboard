@@ -228,24 +228,45 @@ async def handle_agent_telemetry(sid, data):
             db_agent = (
                 db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
             )
-            if db_agent:
-                # Merge new telemetry into existing
-                current_tel = db_agent.telemetry_json or {}
-                # Create a new dict to trigger SQLAlchemy's
-                # change detection on JSON columns
-                new_tel = dict(current_tel)
-                new_tel.update(telemetry)
-                db_agent.telemetry_json = new_tel
-                db.commit()
+            if not db_agent:
+                # Agent not in DB — create it on the fly.
+                # This handles daemon reconnections, backend
+                # restarts, and any case where the agent
+                # record was lost. The daemon continues
+                # tracking agents across connection drops,
+                # so telemetry updates arrive for agents
+                # the backend doesn't know about.
+                session = await sio.get_session(sid, namespace="/terminal")
+                host_id = session.get("host_id") if session else None
+                if host_id:
+                    db_agent = models.Agent(
+                        host_id=host_id,
+                        agent_id=agent_id,
+                        tool_name=telemetry.get("tool_name"),
+                        status="active",
+                        telemetry_json=telemetry,
+                    )
+                    db.add(db_agent)
+                    db.commit()
+                    db.refresh(db_agent)
+                    print(f"Auto-created agent {agent_id}" f" for host {host_id}")
+                else:
+                    print(f"Cannot create agent {agent_id}" f" — no host_id in session")
+                    return
 
-                # Broadcast update to all UI clients for real-time card refresh
-                await sio.emit(
-                    "agent_telemetry_update",
-                    {"agent_id": agent_id, "telemetry": new_tel},
-                    namespace="/terminal",
-                )
-            else:
-                print(f"DEBUG: agent_id {agent_id} not found in DB")
+            # Merge new telemetry into existing
+            current_tel = db_agent.telemetry_json or {}
+            new_tel = dict(current_tel)
+            new_tel.update(telemetry)
+            db_agent.telemetry_json = new_tel
+            db.commit()
+
+            # Broadcast update to all UI clients
+            await sio.emit(
+                "agent_telemetry_update",
+                {"agent_id": agent_id, "telemetry": new_tel},
+                namespace="/terminal",
+            )
         finally:
             db.close()
 
