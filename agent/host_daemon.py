@@ -883,6 +883,7 @@ class HostDaemon:
         branch, project, remote_url = self.get_git_info(git_info_path)
         mcp_servers = self._detect_mcp_servers(original_project_dir, tool)
         telemetry = {
+            "tool_name": tool,
             "project_dir": original_project_dir,
             "task_description": task,
             "git_branch": branch,
