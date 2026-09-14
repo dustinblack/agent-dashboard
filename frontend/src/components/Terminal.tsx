@@ -213,16 +213,24 @@ const Terminal: React.FC<TerminalProps> = ({ agentId, onClose }) => {
 
     const term = new XTerm({
       cursorBlink: true,
-      // Cap scrollback to limit memory growth in long
-      // sessions. Agent output with heavy escape sequences
-      // (cursor movement, progress bars, color codes) can
-      // consume orders of magnitude more memory per line
-      // than plain text. Scrolling uses tmux's 10k-line
-      // server-side buffer (mouse wheel events are relayed
-      // as SGR sequences), so xterm.js scrollback only
-      // needs to hold enough for reconnection replay and
-      // current screen content.
-      scrollback: 500,
+      // Scrollback set to zero because scrolling is
+      // handled by tmux's 10k-line server-side buffer.
+      // Mouse wheel events are relayed as SGR sequences
+      // to tmux, which redraws the visible portion.
+      // xterm.js scrollback is never directly scrolled
+      // by the user.
+      //
+      // Setting this to 0 eliminates the DOM reflow cost
+      // on resize — xterm.js only reflows the visible
+      // screen (~47 rows) instead of 500+ lines of
+      // escape-heavy agent TUI output. This reduces
+      // resize latency from 20+ seconds to near-instant
+      // in long sessions.
+      //
+      // Reconnection replay still works: history is
+      // replayed into the visible area by the daemon,
+      // and tmux maintains the full scrollback.
+      scrollback: 0,
       theme: {
         background: '#000000',
         foreground: '#f1f5f9',
