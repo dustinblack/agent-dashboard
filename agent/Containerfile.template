@@ -12,7 +12,7 @@ FROM registry.fedoraproject.org/fedora:42
 WORKDIR /app
 
 # Add GitHub CLI repository configuration
-RUN printf '[gh-cli]\nname=GitHub CLI\nbaseurl=https://cli.github.com/packages/rpm\nenabled=1\ngpgcheck=1\ngpgkey=https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x23F3D4EA75716059\n' \
+RUN printf '[gh-cli]\nname=GitHub CLI\nbaseurl=https://cli.github.com/packages/rpm\nenabled=1\ngpgcheck=1\ngpgkey=https://cli.github.com/packages/githubcli-archive-keyring.asc\n' \
     > /etc/yum.repos.d/gh-cli.repo
 
 # Install base system packages and development tools in a single DNF transaction.
