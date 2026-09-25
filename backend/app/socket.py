@@ -2,8 +2,14 @@
 
 Manages real-time communication between the frontend UI, the
 backend hub, and remote host daemons over the /terminal namespace.
+
+All database operations are offloaded to a thread pool via
+asyncio.to_thread() so they never block the async event loop.
+This is critical because the event loop also relays terminal
+I/O — a blocked loop adds latency to every keystroke.
 """
 
+import asyncio
 import json
 import os
 from base64 import b64decode
@@ -54,6 +60,107 @@ def _validate_session_cookie(environ):
         return None
 
 
+# ── Synchronous DB helpers (run via asyncio.to_thread) ────
+
+
+def _db_authenticate_host(host_token):
+    """Look up host by token. Returns (host_id, host_name) or None."""
+    db = database.SessionLocal()
+    try:
+        host = (
+            db.query(models.Host).filter(models.Host.host_token == host_token).first()
+        )
+        if not host:
+            return None
+        host.status = "online"
+        db.commit()
+        return (host.id, host.name)
+    finally:
+        db.close()
+
+
+def _db_mark_host_offline(host_id):
+    """Mark a host as offline."""
+    db = database.SessionLocal()
+    try:
+        host = db.query(models.Host).filter(models.Host.id == host_id).first()
+        if host:
+            host.status = "offline"
+            db.commit()
+            return host.name
+        return None
+    finally:
+        db.close()
+
+
+def _db_upsert_agent_telemetry(agent_id, telemetry, host_id=None):
+    """Update agent telemetry, creating the record if needed.
+
+    Returns the merged telemetry dict, or None if the agent
+    could not be created (no host_id).
+    """
+    db = database.SessionLocal()
+    try:
+        db_agent = (
+            db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
+        )
+        if not db_agent:
+            if not host_id:
+                return None
+            db_agent = models.Agent(
+                host_id=host_id,
+                agent_id=agent_id,
+                tool_name=telemetry.get("tool_name"),
+                status="active",
+                telemetry_json=telemetry,
+            )
+            db.add(db_agent)
+            db.commit()
+            db.refresh(db_agent)
+            print(f"Auto-created agent {agent_id}" f" for host {host_id}")
+
+        current_tel = db_agent.telemetry_json or {}
+        new_tel = dict(current_tel)
+        new_tel.update(telemetry)
+        db_agent.telemetry_json = new_tel
+        db.commit()
+        return new_tel
+    finally:
+        db.close()
+
+
+def _db_update_host_telemetry(host_id, data):
+    """Update host's cached project/tool list."""
+    db = database.SessionLocal()
+    try:
+        host = db.query(models.Host).filter(models.Host.id == host_id).first()
+        if host:
+            host.last_projects_json = data
+            db.commit()
+    finally:
+        db.close()
+
+
+def _db_close_agent(agent_id):
+    """Mark an agent as closed."""
+    db = database.SessionLocal()
+    try:
+        db_agent = (
+            db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
+        )
+        if db_agent:
+            db_agent.status = "closed"
+            db_agent.ended_at = datetime.now(timezone.utc)
+            db.commit()
+            return True
+        return False
+    finally:
+        db.close()
+
+
+# ── Socket.IO event handlers ─────────────────────────────
+
+
 @sio.on("connect", namespace="/terminal")
 async def connect(sid, environ, auth):
     """
@@ -80,32 +187,21 @@ async def connect(sid, environ, auth):
                 return False
         return True
 
-    db = next(database.get_db())
-    try:
-        host = (
-            db.query(models.Host).filter(models.Host.host_token == host_token).first()
-        )
-        if not host:
-            return False
+    result = await asyncio.to_thread(_db_authenticate_host, host_token)
+    if not result:
+        return False
 
-        # Store host info in the session
-        async with sio.session(sid, namespace="/terminal") as session:
-            session["host_id"] = host.id
-            session["is_host"] = True
+    host_id, host_name = result
 
-        # Update host status in database
-        host.status = "online"
-        db.commit()
+    async with sio.session(sid, namespace="/terminal") as session:
+        session["host_id"] = host_id
+        session["is_host"] = True
 
-        # Join a room specific to this host's ID so we can send spawn commands to it
-        room_name = f"host_{host.id}"
-        await sio.enter_room(sid, room_name, namespace="/terminal")
-        print(
-            f"Host Daemon connected: {host.name} (SID: {sid}) joined room: {room_name}"
-        )
-
-    finally:
-        db.close()
+    room_name = f"host_{host_id}"
+    await sio.enter_room(sid, room_name, namespace="/terminal")
+    print(
+        f"Host Daemon connected: {host_name}" f" (SID: {sid}) joined room: {room_name}"
+    )
 
 
 @sio.on("disconnect", namespace="/terminal")
@@ -116,19 +212,13 @@ async def disconnect(sid):
     async with sio.session(sid, namespace="/terminal") as session:
         if session.get("is_host"):
             host_id = session.get("host_id")
-            db = next(database.get_db())
-            try:
-                host = db.query(models.Host).filter(models.Host.id == host_id).first()
-                if host:
-                    host.status = "offline"
-                    db.commit()
-                    print(
-                        f"Host Daemon {host.name}"
-                        f" (ID: {host_id}) disconnected"
-                        f" and marked offline."
-                    )
-            finally:
-                db.close()
+            host_name = await asyncio.to_thread(_db_mark_host_offline, host_id)
+            if host_name:
+                print(
+                    f"Host Daemon {host_name}"
+                    f" (ID: {host_id}) disconnected"
+                    f" and marked offline."
+                )
 
 
 @sio.on("terminal_output", namespace="/terminal")
@@ -141,12 +231,19 @@ async def handle_terminal_output(sid, data):
     output = data.get("output", "")
 
     if agent_id and output:
-        # Broadcast to the room dedicated to this agent's ID
+        # skip_sid prevents echoing the output back to
+        # the daemon that sent it. Without this, every
+        # output frame is broadcast to the room (which
+        # includes the daemon), deserialized, dispatched
+        # through the catch-all handler, and discarded.
+        # At ~7fps spinner output, this wastes ~2.5KB/s
+        # of unnecessary WebSocket traffic per agent.
         await sio.emit(
             "terminal_output",
             {"sid": agent_id, "output": output},
             room=agent_id,
             namespace="/terminal",
+            skip_sid=sid,
         )
 
 
@@ -160,16 +257,11 @@ async def handle_join_room(sid, data):
     agent_id = data.get("room")
     if agent_id:
         await sio.enter_room(sid, agent_id, namespace="/terminal")
-        # Identify whether this is a daemon or UI client
         session = await sio.get_session(sid, namespace="/terminal")
         is_host = session.get("is_host", False) if session else False
         client_type = "Host Daemon" if is_host else "UI Client"
         print(f"{client_type} {sid} joined Agent room: {agent_id}")
 
-        # Request history replay only for UI clients.
-        # Daemons join rooms for input routing, not for
-        # history — replaying history on daemon reconnect
-        # floods the connection and causes a reconnect loop.
         if not is_host:
             await sio.emit(
                 "request_history",
@@ -194,7 +286,12 @@ async def handle_history_complete(sid, data):
     """
     agent_id = data.get("agent_id")
     if agent_id:
-        await sio.emit("history_complete", data, room=agent_id, namespace="/terminal")
+        await sio.emit(
+            "history_complete",
+            data,
+            room=agent_id,
+            namespace="/terminal",
+        )
 
 
 @sio.on("terminal_resize", namespace="/terminal")
@@ -210,65 +307,38 @@ async def handle_terminal_resize(sid, data):
             data,
             room=agent_id,
             namespace="/terminal",
+            skip_sid=sid,
         )
 
 
 @sio.on("agent_telemetry", namespace="/terminal")
 async def handle_agent_telemetry(sid, data):
     """
-    Receives live telemetry updates from host daemons and broadcasts them to UI clients.
-    Also persists the latest telemetry state in the database.
+    Receives live telemetry updates from host daemons and
+    broadcasts them to UI clients. Persists the latest
+    telemetry state in the database via a thread pool.
     data: {'agent_id': '...', 'telemetry': {...}}
     """
     agent_id = data.get("agent_id")
     telemetry = data.get("telemetry")
-    if agent_id and telemetry:
-        db = next(database.get_db())
-        try:
-            db_agent = (
-                db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
-            )
-            if not db_agent:
-                # Agent not in DB — create it on the fly.
-                # This handles daemon reconnections, backend
-                # restarts, and any case where the agent
-                # record was lost. The daemon continues
-                # tracking agents across connection drops,
-                # so telemetry updates arrive for agents
-                # the backend doesn't know about.
-                session = await sio.get_session(sid, namespace="/terminal")
-                host_id = session.get("host_id") if session else None
-                if host_id:
-                    db_agent = models.Agent(
-                        host_id=host_id,
-                        agent_id=agent_id,
-                        tool_name=telemetry.get("tool_name"),
-                        status="active",
-                        telemetry_json=telemetry,
-                    )
-                    db.add(db_agent)
-                    db.commit()
-                    db.refresh(db_agent)
-                    print(f"Auto-created agent {agent_id}" f" for host {host_id}")
-                else:
-                    print(f"Cannot create agent {agent_id}" f" — no host_id in session")
-                    return
+    if not agent_id or not telemetry:
+        return
 
-            # Merge new telemetry into existing
-            current_tel = db_agent.telemetry_json or {}
-            new_tel = dict(current_tel)
-            new_tel.update(telemetry)
-            db_agent.telemetry_json = new_tel
-            db.commit()
+    session = await sio.get_session(sid, namespace="/terminal")
+    host_id = session.get("host_id") if session else None
 
-            # Broadcast update to all UI clients
-            await sio.emit(
-                "agent_telemetry_update",
-                {"agent_id": agent_id, "telemetry": new_tel},
-                namespace="/terminal",
-            )
-        finally:
-            db.close()
+    new_tel = await asyncio.to_thread(
+        _db_upsert_agent_telemetry, agent_id, telemetry, host_id
+    )
+
+    if new_tel is not None:
+        await sio.emit(
+            "agent_telemetry_update",
+            {"agent_id": agent_id, "telemetry": new_tel},
+            namespace="/terminal",
+        )
+    else:
+        print(f"Cannot create agent {agent_id}" f" — no host_id in session")
 
 
 @sio.on("host_telemetry", namespace="/terminal")
@@ -288,16 +358,7 @@ async def handle_host_telemetry(sid, data):
             f" {n_tools} tools)"
         )
         if host_id:
-            db = next(database.get_db())
-            try:
-                host = db.query(models.Host).filter(models.Host.id == host_id).first()
-                if host:
-                    host.last_projects_json = data
-                    db.commit()
-            finally:
-                db.close()
-
-            # Broadcast to UI clients so they can update pickers
+            await asyncio.to_thread(_db_update_host_telemetry, host_id, data)
             await sio.emit(
                 "host_telemetry_update",
                 {"host_id": host_id, "telemetry": data},
@@ -313,25 +374,14 @@ async def handle_agent_exit(sid, data):
     """
     agent_id = data.get("agent_id")
     if agent_id:
-        db = next(database.get_db())
-        try:
-            db_agent = (
-                db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
+        closed = await asyncio.to_thread(_db_close_agent, agent_id)
+        if closed:
+            print(f"Agent {agent_id} exited" f" and marked as closed in DB.")
+            await sio.emit(
+                "agent_status_update",
+                {"agent_id": agent_id, "status": "closed"},
+                namespace="/terminal",
             )
-            if db_agent:
-                db_agent.status = "closed"
-                db_agent.ended_at = datetime.now(timezone.utc)
-                db.commit()
-                print(f"Agent {agent_id} exited and marked as closed in DB.")
-
-                # Notify UI clients that the agent is gone
-                await sio.emit(
-                    "agent_status_update",
-                    {"agent_id": agent_id, "status": "closed"},
-                    namespace="/terminal",
-                )
-        finally:
-            db.close()
 
 
 @sio.on("terminal_input", namespace="/terminal")
@@ -348,4 +398,5 @@ async def handle_terminal_input(sid, data):
             data,
             room=agent_id,
             namespace="/terminal",
+            skip_sid=sid,
         )
