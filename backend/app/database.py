@@ -1,12 +1,13 @@
 """Database engine and session configuration for Agent Dashboard.
 
-Uses SQLite via SQLAlchemy. The database URL is configured through
-the DATABASE_URL environment variable.
+Uses SQLite via SQLAlchemy with WAL mode for concurrent read/write
+performance. The database URL is configured through the
+DATABASE_URL environment variable.
 """
 
 import os
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 SQLALCHEMY_DATABASE_URL = os.environ.get(
@@ -16,6 +17,24 @@ SQLALCHEMY_DATABASE_URL = os.environ.get(
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
+
+
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    """Enable WAL mode and tuning pragmas on each new connection.
+
+    WAL (Write-Ahead Logging) allows concurrent reads during
+    writes, preventing the full-database locks that block the
+    async event loop when telemetry updates and terminal I/O
+    relay compete for the same connection.
+    """
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.close()
+
+
 SessionLocal = sessionmaker(  # pylint: disable=invalid-name
     autocommit=False, autoflush=False, bind=engine
 )
