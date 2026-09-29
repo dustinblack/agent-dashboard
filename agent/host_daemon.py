@@ -21,7 +21,7 @@ import sys
 import tempfile
 import termios
 import time
-from collections import deque
+
 from typing import Dict, Optional
 
 import socketio
@@ -344,31 +344,49 @@ class HostDaemon:
             agent_id = data.get("agent_id")
             if agent_id in self.agents and self.sio.connected:
                 log.info(f"Replaying history for agent: {agent_id}")
-                # Concatenate history into batches to reduce
-                # the number of Socket.IO emits.  Sending
-                # 1000 individual chunks takes several seconds
-                # due to per-emit async overhead; batching
-                # into ~64 KB payloads cuts the replay to a
-                # handful of emits.
-                batch = ""
-                batch_limit = 65536
-                for chunk in self.agents[agent_id]["history"]:
-                    batch += chunk
-                    if len(batch) >= batch_limit:
+                # Use tmux capture-pane to get the current
+                # visible screen plus recent scrollback.
+                # This replaces the in-memory deque, which
+                # accumulated escape-heavy chunks over the
+                # entire session lifetime and caused slow
+                # reconnects and high browser CPU.
+                # capture-pane always returns a clean,
+                # bounded snapshot regardless of session age.
+                loop = asyncio.get_running_loop()
+                try:
+                    result = await loop.run_in_executor(
+                        None,
+                        lambda: subprocess.run(
+                            [
+                                "tmux",
+                                "capture-pane",
+                                "-t",
+                                agent_id,
+                                "-p",  # print to stdout
+                                "-e",  # include escape sequences
+                                "-S",
+                                "-200",  # 200 lines of scrollback
+                            ],
+                            capture_output=True,
+                            text=True,
+                            timeout=5,
+                        ),
+                    )
+                    if result.stdout:
                         await self.sio.emit(
                             "terminal_output",
-                            {"sid": agent_id, "output": batch},
+                            {
+                                "sid": agent_id,
+                                "output": result.stdout,
+                            },
                             namespace="/terminal",
                         )
-                        batch = ""
-                if batch:
-                    await self.sio.emit(
-                        "terminal_output",
-                        {"sid": agent_id, "output": batch},
-                        namespace="/terminal",
-                    )
+                except Exception as e:
+                    log.info(f"capture-pane failed for " f"{agent_id}: {e}")
                 await self.sio.emit(
-                    "history_complete", {"agent_id": agent_id}, namespace="/terminal"
+                    "history_complete",
+                    {"agent_id": agent_id},
+                    namespace="/terminal",
                 )
 
         @self.sio.on("terminal_input", namespace="/terminal")
@@ -1048,7 +1066,8 @@ class HostDaemon:
                 "master_fd": fd,
                 "pid": pid,
                 "tool": tool,
-                "history": deque(maxlen=1000),
+                # History replay uses tmux capture-pane
+                # on demand — no in-memory accumulation.
                 "telemetry": telemetry,
                 "last_otlp_time": 0.0,
                 "last_output_time": time.monotonic(),
@@ -1161,7 +1180,6 @@ class HostDaemon:
                         if not complete:
                             continue
                         decoded_data = complete.decode("utf-8", errors="replace")
-                        self.agents[agent_id]["history"].append(decoded_data)
                         self.agents[agent_id]["last_output_time"] = time.monotonic()
 
                         # Check for permission prompts.
