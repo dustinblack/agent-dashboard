@@ -370,6 +370,7 @@ class HostDaemon:
                             capture_output=True,
                             text=True,
                             timeout=5,
+                            check=False,
                         ),
                     )
                     if result.stdout:
