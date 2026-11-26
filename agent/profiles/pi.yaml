@@ -42,6 +42,13 @@ env:
   # sub-agent delegation in Claude-based models.
   # See: heyhuynhgiabuu/pi-task#11
   PI_TASK_TOOL_NAME: "Agent"
+  # pi-task >= 0.3.6 reads this env var to select
+  # the tmux pane split target. "largest" splits the
+  # largest pane in the parent window instead of the
+  # parent pane, keeping sub-agent panes usable in
+  # densely-split windows.
+  # See: heyhuynhgiabuu/pi-task
+  PI_TASK_TMUX_TARGET: "largest"
 
 # No auth gate — Pi is provider-agnostic and
 # handles its own provider selection and auth.
