@@ -148,7 +148,7 @@ pi-task splits a tmux pane to run each sub-agent. By
 default it splits the parent pane, which gets cramped
 in densely-split windows. The Pi profile sets
 `PI_TASK_TMUX_TARGET=largest`, which makes pi-task
-(>= 0.3.6) split the largest pane in the parent
+(>= 0.17) split the largest pane in the parent
 window instead, keeping new sub-agent panes usable.
 
 The env var is injected at spawn time by the daemon,
