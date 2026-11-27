@@ -108,6 +108,12 @@ Volume=%h/.config/gcloud:/root/.config/gcloud:ro
 Volume=%h/.config/gh:/root/.config/gh:ro
 Volume=%h/.config/glab-cli:/root/.config/glab-cli:ro
 
+# Host CA trust store (internal/self-signed CAs for MCP servers,
+# internal registries, etc.). Do NOT mount all of /etc/pki —
+# /etc/pki/tls/private holds host private keys.
+Volume=/etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+Volume=/etc/pki/tls/certs:/etc/pki/tls/certs:ro
+
 # Nested container support (optional)
 # Uncomment these lines if agents need to run podman-in-podman
 # for container builds. Do NOT use --privileged — it causes
