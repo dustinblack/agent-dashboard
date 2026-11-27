@@ -30,8 +30,24 @@ podman run -d --name host-daemon --network=host \
   -v $HOME/.config/gcloud:/root/.config/gcloud:ro \
   -v $HOME/.config/gh:/root/.config/gh:ro \
   -v $HOME/.config/glab-cli:/root/.config/glab-cli:ro \
+  -v /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro \
+  -v /etc/pki/tls/certs:/etc/pki/tls/certs:ro \
   localhost/agent-dashboard-daemon:latest
 ```
+
+> [!TIP]
+> **Internal CA / self-signed TLS (MCP servers, internal
+> registries):** The container image only ships public CAs.
+> If agents need to reach services signed by an internal or
+> corporate CA (e.g. an MCP server on an OpenShift cluster
+> with `*.intlab` certs), mount the host's processed trust
+> store as shown in the command above. Fedora's Node.js,
+> curl, and git all read `/etc/pki/tls/certs/ca-bundle.crt`,
+> so no `NODE_EXTRA_CA_CERTS` is needed.
+>
+> **Do not mount all of `/etc/pki`** — `/etc/pki/tls/private`
+> contains the host's private keys. Only the two read-only
+> trust directories listed above are safe to share.
 
 > [!WARNING]
 > **Do not use `--privileged` with rootless Podman.** In
@@ -108,6 +124,8 @@ podman run -d --name host-daemon --network=host \
 | `~/.config/gcloud` | `/root/.config/gcloud` | ro | GCP credentials (Vertex AI) |
 | `~/.config/gh` | `/root/.config/gh` | ro | GitHub CLI config |
 | `~/.config/glab-cli` | `/root/.config/glab-cli` | ro | GitLab CLI config |
+| `/etc/pki/ca-trust/extracted` | `/etc/pki/ca-trust/extracted` | ro | Host CA trust store (processed bundles) |
+| `/etc/pki/tls/certs` | `/etc/pki/tls/certs` | ro | Host CA trust store (`ca-bundle.crt`, read by Node/curl/git) |
 
 ## Authentication
 
